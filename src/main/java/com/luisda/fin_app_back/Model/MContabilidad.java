@@ -24,10 +24,7 @@ public class MContabilidad {
     private String idContabilidad;
 
     @Column(length = 36, nullable = false)
-    private String idGrupo;
-
-    @Column(length = 36)
-    private String idContacto;
+    private String idUsuario;
 
     @Column(length = 100, nullable = false)
     private String nombre;
@@ -41,14 +38,20 @@ public class MContabilidad {
     @Column(nullable = false)
     private LocalDate fechaCreacion;
 
+    // Relación entre clase MContabilidad y MUsuario
+    /*
+    @ManyToOne
+    @JoinColumn(name = "idUsuario")
+    @JsonManagedReference
+    private MUsuario MUsuario;
+*/
+
     public MContabilidad() {
     }
 
-    public MContabilidad(String idContabilidad, String idGrupo, String idContacto,
-                         String nombre, double valor, boolean estado, LocalDate fechaCreacion) {
+    public MContabilidad(String idContabilidad, String idUsuario, String nombre, double valor, boolean estado, LocalDate fechaCreacion) {
         this.idContabilidad = idContabilidad;
-        this.idGrupo = idGrupo;
-        this.idContacto = idContacto;
+        this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.valor = valor;
         this.estado = estado;
@@ -63,21 +66,15 @@ public class MContabilidad {
         this.idContabilidad = idContabilidad;
     }
 
-    public String getIdGrupo() {
-        return idGrupo;
+
+    public String getIdUsuario() {
+        return idUsuario;
     }
 
-    public void setIdGrupo(String idGrupo) {
-        this.idGrupo = idGrupo;
+    public void setIdUsuario(String idUsuario) {
+        this.idUsuario = idUsuario;
     }
 
-    public String getIdContacto() {
-        return idContacto;
-    }
-
-    public void setIdContacto(String idContacto) {
-        this.idContacto = idContacto;
-    }
 
     public String getNombre() {
         return nombre;

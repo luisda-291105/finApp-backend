@@ -1,8 +1,5 @@
 package com.luisda.fin_app_back.Model;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.time.LocalDate;
 
@@ -30,6 +27,15 @@ public class MGrupo {
     private boolean estado;
     @Column(nullable = false)
     private LocalDate fechaCreacion;
+
+    // Relación entre clase MGrupo y MUsuario
+    /*
+    @ManyToOne
+    @JoinColumn(name = "idUsuario")
+    //@JoinManagedReference
+    private MUsuario MUsuario;
+
+     */
 
     public MGrupo(String idGrupo, String idUsuario, String nombre, String descripcion, boolean estado, LocalDate fechaCreacion) {
         this.idGrupo = idGrupo;

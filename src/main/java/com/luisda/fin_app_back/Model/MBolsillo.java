@@ -1,11 +1,6 @@
 package com.luisda.fin_app_back.Model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.time.LocalDate;
 
@@ -35,6 +30,14 @@ public class MBolsillo {
 
     @Column(nullable = false)
     private LocalDate fechaCreacion;
+
+    // Relación entre clase MBolsillo y MContabilidad
+    /*
+    @ManyToOne
+    @JoinColumn(name = "idContabilidad")
+    //@JsonManagedReference
+    private MContabilidad MContabilidad;
+    */
 
     public MBolsillo() {
     }

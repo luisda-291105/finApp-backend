@@ -35,6 +35,14 @@ public class MFuente {
     @Column(nullable = false)
     private LocalDate fechaCreacion;
 
+    // Relación entre clase MFuentes y MUsuario
+    /*
+    @ManyToOne
+    @JoinColumn(name = "idUsuario")
+    @JsonManagedReference
+    private MUsuario MUsuario;
+*/
+
     public MFuente(String idFuente, String idUsuario, String identificador, boolean estado, LocalDate fechaCreacion) {
         this.idFuente = idFuente;
         this.idUsuario = idUsuario;

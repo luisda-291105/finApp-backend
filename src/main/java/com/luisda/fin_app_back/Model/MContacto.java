@@ -39,15 +39,6 @@ public class MContacto {
     @Column(length = 500)
     private String notas;
 
-
-    // Relación entre clase contacto y grupo
-    /*
-    @ManyToOne
-    @JoinColumn(name = "idGrupo")
-    @JsonManagedReference
-    private MGrupo grupo;
-    */
-
     public MContacto(String idContacto, String idUsuario, String nombre, String telefono, String correo, String notas) {
         this.idContacto = idContacto;
         this.idUsuario = idUsuario;

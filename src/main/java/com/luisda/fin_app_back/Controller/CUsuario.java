@@ -7,6 +7,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * @uso               dar puntos de coneccion con la api
+ * @capa              controlador
+ * @responsabilidades endpoind para la web
+ * @datos             usa SUsuario + MUsuario
+ * @dependencias      SUsuario, Spring Data JPA
+ * @usadoPor          web
+ */
+
 @RestController
 @RequestMapping("/usuario")
 @CrossOrigin(origins = "*")

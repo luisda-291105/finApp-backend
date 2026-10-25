@@ -73,13 +73,33 @@ public class SFuente {
         try {
             Optional<MFuente> fuenteEncontrada = this.IFuentes.findById(idFuente);
             if (fuenteEncontrada.isPresent()){
-                this.IFuentes.delete(fuenteEncontrada);
+                this.IFuentes.deleteById(idFuente);
                 return true;
             }else {
                 throw new Exception("No se puede eliminar porque la fuente no registrado");
             }
         }catch (Exception error) {
             throw new Exception(error.getMessage());
+        }
+    }
+
+    /** Actualiza un usuario existente y comprueba que exista */
+    public MFuente modificar(MFuente MFuente , String idFuente) throws Exception{
+        try {
+            Optional<MFuente> fuenteEncontrada = this.IFuentes.findById(idFuente);
+            if (fuenteEncontrada.isPresent()){
+                MFuente nuevaFuente = fuenteEncontrada.get();
+                nuevaFuente.setIdFuente(idFuente);
+                nuevaFuente.setIdUsuario(MFuente.getIdUsuario());
+                nuevaFuente.setTipo(MFuente.getTipo());
+                nuevaFuente.setIdentificador(MFuente.getIdentificador());
+                nuevaFuente.setEstado(MFuente.isEstado());
+                return this.IFuentes.save(nuevaFuente);
+            }else {
+                throw new Exception("No se puede modificar porque la fuente no esta registrada");
+            }
+        }catch (Exception error) {
+            throw new RuntimeException(error.getMessage());
         }
     }
 

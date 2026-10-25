@@ -1,4 +1,5 @@
 package com.luisda.fin_app_back.Services;
+
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
@@ -16,7 +17,7 @@ import java.util.Optional;
  * @usadoPor          Capas consumidoras de servicios
  */
 @Service
-public abstract class SUsuario {
+public  class SUsuario {
     private final IUsuario IUsuario;
 
     // Constructor
@@ -74,7 +75,7 @@ public abstract class SUsuario {
         try {
             Optional<MUsuario> usuarioEncontrado = this.IUsuario.findById(idUsuario);
             if (usuarioEncontrado.isPresent()){
-                this.IUsuario.delete(usuarioEncontrado);
+                this.IUsuario.deleteById(idUsuario);
                 return true;
             }else {
                 throw new Exception("No se puede eliminar porque usuario no registrado");

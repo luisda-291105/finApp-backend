@@ -27,7 +27,7 @@ public class SContacto  {
     }
 
     /** Agrega un contacto. */
-    public  MContacto agregarContacto (MContacto MContacto) throws Exception{
+    public  MContacto crear (MContacto MContacto) throws Exception{
         try {
             return this.IContacto.save(MContacto);
         }catch (Exception error){
@@ -36,7 +36,7 @@ public class SContacto  {
     }
 
     /** Consulta todos los contactos. */
-    public List<MContacto> buscarTodosContactos()throws Exception{
+    public List<MContacto> buscarTodos()throws Exception{
         try {
             return this.IContacto.findAll();
         } catch (Exception error) {
@@ -85,7 +85,7 @@ public class SContacto  {
         try {
             Optional<MContacto> contactoEncontrado = this.IContacto.findById(idContacto);
             if (contactoEncontrado.isPresent()){
-                this.IContacto.delete(contactoEncontrado);
+                this.IContacto.deleteById(idContacto);
                 return true;
             }else {
                 throw new Exception("No se puede eliminar porque contacto no registrado");

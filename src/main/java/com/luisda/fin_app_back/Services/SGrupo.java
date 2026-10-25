@@ -85,7 +85,7 @@ public class SGrupo {
         try {
             Optional<MGrupo> grupoEncontrado = this.IGrupo.findById(idGrupo);
             if (grupoEncontrado.isPresent()) {
-                this.IGrupo.delete(grupoEncontrado);
+                this.IGrupo.deleteById(idGrupo);
                 return true;
             } else {
                 throw new Exception("No se puede eliminar porque el grupo no esta registrado");

@@ -1,0 +1,117 @@
+package com.luisda.fin_app_back.Services;
+
+import com.luisda.fin_app_back.Model.MGrupo;
+import com.luisda.fin_app_back.Repository.IGrupo;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * @uso Gestiona las operaciones disponibles de grupos
+ * @capa Servicio
+ * @responsabilidades CRUD y consulta por identificador del usuario creador
+ * @datos Recibe y devuelve entidades MGrupo
+ * @dependencias GrupoRepository, SValidadorOperaciones
+ * @usadoPor Capas consumidoras de servicios
+ */
+@Service
+public class SGrupo {
+    private final IGrupo IGrupo;
+
+    public SGrupo(IGrupo iGrupo) {
+        IGrupo = iGrupo;
+    }
+
+    /**
+     * Agrega un grupo
+     */
+    public MGrupo crear(MGrupo MGrupo) throws Exception {
+        try {
+            return this.IGrupo.save(MGrupo);
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+    /**
+     * Consultar grupo por usuario.
+     */
+    public List<MGrupo> buscarPorUsuario(String idUsuario) throws Exception {
+        try {
+            return this.IGrupo.buscarPorUsuario(idUsuario);
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+    /**
+     * Consulta todos los grupos.
+     */
+    public List<MGrupo> buscarTodos() throws Exception {
+        try {
+            return this.IGrupo.findAll();
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+    /**
+     * Consulta un grupo por nombre
+     */
+    public List<MGrupo> buscarPorNombre(String nombre) throws Exception {
+        try {
+            return this.IGrupo.buscarPorNombre(nombre);
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+    /**
+     * Consulta un grupo por identificador.
+     */
+    public Optional<MGrupo> buscarPorId(String idGrupo) throws Exception {
+        try {
+            return this.IGrupo.findById(idGrupo);
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+    /**
+     * Elimina el grupo identificado
+     */
+    public Boolean eliminar(String idGrupo) throws Exception {
+        try {
+            Optional<MGrupo> grupoEncontrado = this.IGrupo.findById(idGrupo);
+            if (grupoEncontrado.isPresent()) {
+                this.IGrupo.delete(grupoEncontrado);
+                return true;
+            } else {
+                throw new Exception("No se puede eliminar porque el grupo no esta registrado");
+            }
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+
+    /** Actualiza un usuario existente y comprueba que exista */
+    public MGrupo modificar(MGrupo MGrupo, String idGrupo) throws Exception{
+        try {
+            Optional<MGrupo> grupoEncontrado = this.IGrupo.findById(idGrupo);
+            if (grupoEncontrado.isPresent()){
+                MGrupo nuevoGrupo = grupoEncontrado.get();
+                nuevoGrupo.setIdGrupo(idGrupo);
+                nuevoGrupo.setNombre(MGrupo.getNombre());
+                nuevoGrupo.setDescripcion(MGrupo.getDescripcion());
+                return  this.IGrupo.save(nuevoGrupo);
+            }else {
+                throw new Exception("No se puede modificar porque el grupo no registrado");
+            }
+        } catch (Exception error) {
+            throw new Exception(error.getMessage());
+        }
+    }
+
+}

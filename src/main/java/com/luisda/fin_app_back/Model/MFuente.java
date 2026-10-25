@@ -26,6 +26,9 @@ public class MFuente {
     @Column(length = 36, nullable = false)
     private String idUsuario;
 
+    @Column(length = 36, nullable = false)
+    private String tipo;
+
     @Column(length = 255, nullable = false)
     private String identificador;
 
@@ -43,15 +46,24 @@ public class MFuente {
     private MUsuario MUsuario;
 */
 
-    public MFuente(String idFuente, String idUsuario, String identificador, boolean estado, LocalDate fechaCreacion) {
+    public MFuente(String idFuente, String idUsuario, String tipo, String identificador, boolean estado, LocalDate fechaCreacion) {
         this.idFuente = idFuente;
         this.idUsuario = idUsuario;
+        this.tipo = tipo;
         this.identificador = identificador;
         this.estado = estado;
         this.fechaCreacion = fechaCreacion;
     }
 
     public MFuente() {
+    }
+
+    public String getTipo() {
+        return tipo;
+    }
+
+    public void setTipo(String tipo) {
+        this.tipo = tipo;
     }
 
     public String getIdFuente() {

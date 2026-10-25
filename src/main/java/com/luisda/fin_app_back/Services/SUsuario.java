@@ -16,7 +16,7 @@ import java.util.Optional;
  * @usadoPor          Capas consumidoras de servicios
  */
 @Service
-public abstract class SUsuario implements IUsuario{
+public abstract class SUsuario {
     private final IUsuario IUsuario;
 
     // Constructor
@@ -24,8 +24,8 @@ public abstract class SUsuario implements IUsuario{
         IUsuario = iUsuario;
     }
 
-    /** Agrega un usuario y comprueba que su contacto no esté registrado. */
-    public MUsuario crearUsuario(MUsuario MUsuario) throws Exception{
+    /** Agrega un usuario  */
+    public MUsuario crear(MUsuario MUsuario) throws Exception{
         try {
             return this.IUsuario.save(MUsuario);
         }catch (Exception error) {
@@ -43,7 +43,6 @@ public abstract class SUsuario implements IUsuario{
     }
 
     /** Consulta un usuario por nombre */
-    @Override
     public List<MUsuario> buscarPorNombre(String nombreUsuario) throws Exception{
         try {
             return this.IUsuario.buscarPorNombre(nombreUsuario);
@@ -53,7 +52,7 @@ public abstract class SUsuario implements IUsuario{
     }
 
     /** Consulta un usuario por identificador. */
-    public Optional<MUsuario> buscarPorIdUsuario(String idUsuario) throws Exception{
+    public Optional<MUsuario> buscarPorId(String idUsuario) throws Exception{
         try {
             return this.IUsuario.findById(idUsuario);
         }catch (Exception error) {
@@ -62,7 +61,6 @@ public abstract class SUsuario implements IUsuario{
     }
 
     /** Consulta un usuario por contacto */
-    @Override
     public List<MUsuario> buscarPorContacto(String contacto) throws Exception{
         try {
             return this.IUsuario.buscarPorContacto(contacto);
@@ -72,8 +70,7 @@ public abstract class SUsuario implements IUsuario{
     }
 
     /** Elimina el usuario identificado */
-    @Override
-    public Boolean eliminarUsuario(String idUsuario) throws Exception{
+    public Boolean eliminar(String idUsuario) throws Exception{
         try {
             Optional<MUsuario> usuarioEncontrado = this.IUsuario.findById(idUsuario);
             if (usuarioEncontrado.isPresent()){
@@ -88,8 +85,8 @@ public abstract class SUsuario implements IUsuario{
     }
 
     /** Actualiza un usuario existente y comprueba que exista */
-    @Override
-    public MUsuario modificarUsuario(MUsuario MUsuario , String idUsuario ) throws Exception{
+
+    public MUsuario modificar(MUsuario MUsuario , String idUsuario ) throws Exception{
         try {
             Optional<MUsuario> usuarioEncontrado = this.IUsuario.findById(idUsuario);
             if (usuarioEncontrado.isPresent()){

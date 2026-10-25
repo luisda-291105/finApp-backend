@@ -22,10 +22,6 @@ public interface IUsuario extends JpaRepository<MUsuario , String> {
     // consultas
     List<MUsuario> buscarPorNombre (String nombreUsuario)throws Exception;
     List<MUsuario> buscarPorContacto (String contacto)throws Exception;
-    // eliminar
-     Boolean eliminarUsuario(String idUsuario)throws Exception;
-    // actualizar
-     MUsuario modificarUsuario(MUsuario MUsuario , String idUsuario )throws Exception;
 
 
     void delete(Optional<MUsuario> usuarioEncontrado);

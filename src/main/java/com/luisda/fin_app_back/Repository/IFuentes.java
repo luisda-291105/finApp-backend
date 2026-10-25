@@ -2,10 +2,12 @@ package com.luisda.fin_app_back.Repository;
 
 import com.luisda.fin_app_back.Model.MFuente;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
+
 
 /**
  * @uso               Persiste y consulta fuentes de usuarios
@@ -17,8 +19,15 @@ import java.util.Optional;
  */
 @Repository
 public interface IFuentes extends JpaRepository<MFuente , String> {
-    List<MFuente> buscarPorTipo (String tipoFuente)throws Exception;
-    List<MFuente> buscarPorUsuario(String usuario) throws Exception;
 
-    void delete(Optional<MFuente> fuenteEncontrada);
+    @Query("SELECT f FROM MFuente f WHERE f.tipo = :tipo")
+    List<MFuente> buscarPorTipo (
+           @Param("tipo") String tipoFuente
+    );
+
+    @Query("SELECT f FROM MFuente f WHERE f.idUsuario = :usuario")
+    List<MFuente> buscarPorUsuario(
+           @Param("usuario") String usuario
+    ) ;
+
 }

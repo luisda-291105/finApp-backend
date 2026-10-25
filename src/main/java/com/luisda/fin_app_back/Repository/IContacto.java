@@ -1,10 +1,13 @@
 package com.luisda.fin_app_back.Repository;
 import com.luisda.fin_app_back.Model.MContacto;
+import com.luisda.fin_app_back.Model.MUsuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
+
 
 
 /**
@@ -17,8 +20,20 @@ import java.util.Optional;
  */
 @Repository
 public interface IContacto extends JpaRepository<MContacto ,String> {
-    List<MContacto> buscarPorNombre (String nombreContacto)throws Exception;
-    List<MContacto> buscarPorNota  (String notaContacto)throws Exception;
-    List<MContacto> buscarPorTelefono(String telefono)throws Exception;
-    void delete(Optional<MContacto> usuarioEncontrado);
+    // consultas
+    @Query("SELECT c FROM MContacto c WHERE c.nombre = :nombre")
+    List<MContacto> buscarPorNombre(
+            @Param("nombre") String nombreContacto
+    );
+
+    @Query("SELECT c FROM MContacto c WHERE c.notas = :nota")
+    List<MContacto> buscarPorNota(
+            @Param("nota") String notaContacto
+    );
+
+    @Query("SELECT c FROM MContacto c WHERE c.telefono = :telefono")
+    List<MContacto> buscarPorTelefono(
+            @Param("telefono") String telefono
+    );
+
 }

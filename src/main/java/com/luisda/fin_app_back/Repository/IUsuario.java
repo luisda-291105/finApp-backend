@@ -2,10 +2,12 @@ package com.luisda.fin_app_back.Repository;
 
 import com.luisda.fin_app_back.Model.MUsuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
+
 
 /**
  * @uso               crud usuario
@@ -20,9 +22,14 @@ import java.util.Optional;
 public interface IUsuario extends JpaRepository<MUsuario , String> {
 
     // consultas
-    List<MUsuario> buscarPorNombre (String nombreUsuario)throws Exception;
-    List<MUsuario> buscarPorContacto (String contacto)throws Exception;
+    @Query("SELECT u FROM MUsuario u WHERE u.nombre = :nombre")
+    List<MUsuario> buscarPorNombre(
+            @Param("nombre") String nombreUsuario
+    );
 
+    @Query("SELECT u FROM MUsuario u WHERE u.contacto = :contacto")
+    List<MUsuario> buscarPorContacto(
+            @Param("contacto") String contacto
+    );
 
-    void delete(Optional<MUsuario> usuarioEncontrado);
 }

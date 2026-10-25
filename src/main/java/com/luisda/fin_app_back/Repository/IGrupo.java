@@ -2,10 +2,12 @@ package com.luisda.fin_app_back.Repository;
 
 import com.luisda.fin_app_back.Model.MGrupo;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
+
 
 /**
  * @uso               Consulta grupos creados por usuario
@@ -18,8 +20,13 @@ import java.util.Optional;
 
 @Repository
 public interface IGrupo extends JpaRepository<MGrupo, String>{
-    List<MGrupo> buscarPorUsuario(String idUsuario) throws Exception;
-    List<MGrupo> buscarPorNombre(String nombre) throws Exception;
+    @Query("SELECT g FROM MGrupo g where g.idUsuario = :usuario")
+    List<MGrupo> buscarPorUsuario(
+           @Param("usuario") String idUsuario
+    );
+    @Query("SELECT g FROM MGrupo g where g.nombre = :nombre")
+    List<MGrupo> buscarPorNombre(
+          @Param("nombre")  String nombre
+    );
 
-    void delete(Optional<MGrupo> grupoEncontrado);
 }

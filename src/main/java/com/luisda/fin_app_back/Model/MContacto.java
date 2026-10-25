@@ -32,19 +32,14 @@ public class MContacto {
     @Column(length = 20, nullable = false)
     private String telefono;
 
-    @Column(length = 150)
-    private String correo;
-
-
     @Column(length = 500)
     private String notas;
 
-    public MContacto(String idContacto, String idUsuario, String nombre, String telefono, String correo, String notas) {
+    public MContacto(String idContacto, String idUsuario, String nombre, String telefono, String notas) {
         this.idContacto = idContacto;
         this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.telefono = telefono;
-        this.correo = correo;
         this.notas = notas;
     }
 
@@ -81,14 +76,6 @@ public class MContacto {
 
     public void setTelefono(String telefono) {
         this.telefono = telefono;
-    }
-
-    public String getCorreo() {
-        return correo;
-    }
-
-    public void setCorreo(String correo) {
-        this.correo = correo;
     }
 
     public String getNotas() {

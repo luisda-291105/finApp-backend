@@ -52,7 +52,7 @@ public class CUsuario {
     }
 
     /** consulta individual por id */
-    @GetMapping("/usuario/{idUsuario}")
+    @GetMapping("/id/{idUsuario}")
     public ResponseEntity<?> consultaPorId(@PathVariable String idUsuario) throws Exception{
         try {
             return ResponseEntity
@@ -95,7 +95,7 @@ public class CUsuario {
 
     /** eliminar por id */
     @DeleteMapping("/{idUsuario}")
-    public ResponseEntity<?> eliminarPorId(@PathVariable String idUsuario) throws Exception{
+    public ResponseEntity<?> eliminar(@PathVariable String idUsuario) throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
@@ -110,7 +110,7 @@ public class CUsuario {
     /** modificar usuario por id */
 
     @PutMapping("/{idUsuario}")
-    public ResponseEntity<?> modificarPorId(@PathVariable  String idUsuario , @RequestBody  MUsuario MUsuario) throws Exception{
+    public ResponseEntity<?> modificar(@PathVariable  String idUsuario , @RequestBody  MUsuario MUsuario) throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)

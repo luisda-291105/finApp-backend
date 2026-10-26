@@ -12,7 +12,7 @@ import java.time.LocalDate;
  * @usadoPor          GrupoRepository
  */
 @Entity
-@Table(name = "MGrupo")
+@Table(name = "grupo")
 public class MGrupo {
     @Id
     @Column(length = 36 , nullable = false)
@@ -29,13 +29,13 @@ public class MGrupo {
     private LocalDate fechaCreacion;
 
     // Relación entre clase MGrupo y MUsuario
-    /*
+
     @ManyToOne
     @JoinColumn(name = "idUsuario")
     //@JoinManagedReference
     private MUsuario MUsuario;
 
-     */
+
 
     public MGrupo(String idGrupo, String idUsuario, String nombre, String descripcion, boolean estado, LocalDate fechaCreacion) {
         this.idGrupo = idGrupo;

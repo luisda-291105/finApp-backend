@@ -25,9 +25,9 @@ public class CGrupo {
     @Autowired
     SGrupo SGrupo;
 
-    /** crear un registro usuario */
+    /** crear un registro  */
     @PostMapping
-    public ResponseEntity<?> adicionarUsuario(@RequestBody MGrupo MGrupo)throws Exception{
+    public ResponseEntity<?> adicionar(@RequestBody MGrupo MGrupo)throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.CREATED)

@@ -25,9 +25,9 @@ public class CFuente {
     @Autowired
     SFuente SFuente;
 
-    /** crear un registro usuario */
+    /** crear un registro  */
     @PostMapping
-    public ResponseEntity<?> adicionarUsuario(@RequestBody MFuente MFuente)throws Exception{
+    public ResponseEntity<?> adicionar(@RequestBody MFuente MFuente)throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.CREATED)

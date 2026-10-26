@@ -1,9 +1,6 @@
 package com.luisda.fin_app_back.Model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.time.LocalDate;
 
@@ -16,7 +13,7 @@ import java.time.LocalDate;
  * @usadoPor          Modelo y persistencia de fuentes
  */
 @Entity
-@Table(name = "MFuente")
+@Table(name = "fuente")
 public class MFuente {
 
     @Id
@@ -39,12 +36,12 @@ public class MFuente {
     private LocalDate fechaCreacion;
 
     // Relación entre clase MFuentes y MUsuario
-    /*
+
     @ManyToOne
     @JoinColumn(name = "idUsuario")
-    @JsonManagedReference
+    //@JsonManagedReference
     private MUsuario MUsuario;
-*/
+
 
     public MFuente(String idFuente, String idUsuario, String tipo, String identificador, boolean estado, LocalDate fechaCreacion) {
         this.idFuente = idFuente;

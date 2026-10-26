@@ -103,6 +103,7 @@ public class SContacto  {
                  MContacto contactoNuevo = contactoEncontrado.get();
                  contactoNuevo.setIdContacto(idContacto);
                  contactoNuevo.setNombre(MContacto.getNombre());
+                 contactoNuevo.setIdUsuario(MContacto.getIdUsuario());
                  contactoNuevo.setTelefono(MContacto.getTelefono());
                  contactoNuevo.setNotas(MContacto.getNotas());
                  return this.IContacto.save(contactoNuevo);

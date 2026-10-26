@@ -23,9 +23,9 @@ import org.springframework.web.bind.annotation.*;
 public class CContacto {
     @Autowired
     SContacto SContacto;
-    /** crear un registro usuario */
+    /** crear un registro  */
     @PostMapping
-    public ResponseEntity<?> adicionarUsuario(@RequestBody MContacto MContacto)throws Exception{
+    public ResponseEntity<?> adicionar(@RequestBody MContacto MContacto)throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.CREATED)
@@ -95,7 +95,7 @@ public class CContacto {
 
 
     /** consultar por contacto */
-    @GetMapping("/contacto/{telefono}")
+    @GetMapping("/telefono/{telefono}")
     public ResponseEntity<?> buscarPorTelefono(@PathVariable String telefono) throws Exception{
         try {
             return ResponseEntity

@@ -1,10 +1,7 @@
 package com.luisda.fin_app_back.Model;
 
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 /**
  * @uso               Representa un contacto asociado a un usuario
@@ -15,7 +12,7 @@ import jakarta.persistence.Table;
  * @usadoPor          ContactoRepository
  */
 @Entity
-@Table(name = "MContacto")
+@Table(name = "contacto")
 public class MContacto {
 
     // Atributos
@@ -34,6 +31,13 @@ public class MContacto {
 
     @Column(length = 500)
     private String notas;
+
+    @ManyToOne
+    @JoinColumn(name = "idUsuario")
+    //@JoinManagedReference
+    private MUsuario MUsuario;
+
+
 
     public MContacto(String idContacto, String idUsuario, String nombre, String telefono, String notas) {
         this.idContacto = idContacto;

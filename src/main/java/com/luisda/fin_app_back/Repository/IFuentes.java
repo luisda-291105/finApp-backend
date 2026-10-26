@@ -25,9 +25,6 @@ public interface IFuentes extends JpaRepository<MFuente , String> {
            @Param("tipo") String tipoFuente
     );
 
-    @Query("SELECT f FROM MFuente f WHERE f.idUsuario = :usuario")
-    List<MFuente> buscarPorUsuario(
-           @Param("usuario") String usuario
-    ) ;
+
 
 }

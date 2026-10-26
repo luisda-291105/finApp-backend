@@ -21,9 +21,6 @@ public class MTarjeta {
     @Column(length = 36, nullable = false)
     private String idTarjeta;
 
-    @Column(length = 36, nullable = false)
-    private String idUsuario;
-
     @Column(length = 100, nullable = false)
     private String titular;
 

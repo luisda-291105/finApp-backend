@@ -53,19 +53,7 @@ public class CFuente {
         }
     }
 
-    /** Consulta por usuario. */
-    @GetMapping("/usuario/{usuario}")
-    public ResponseEntity<?> buscarPorUsuario(@PathVariable String usuario)throws Exception{
-        try {
-            return ResponseEntity
-                    .status(HttpStatus.OK)
-                    .body(this.SFuente.buscarPorUsuario(usuario));
-        } catch (Exception error){
-            return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
-        }
-    }
+    
 
     /** Consulta por tipo. */
     @GetMapping("/tipo/{tipo}")

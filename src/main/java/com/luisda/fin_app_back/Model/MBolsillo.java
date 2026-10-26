@@ -32,12 +32,12 @@ public class MBolsillo {
     private LocalDate fechaCreacion;
 
     // Relación entre clase MBolsillo y MContabilidad
-    /*
+/*
     @ManyToOne
     @JoinColumn(name = "idContabilidad")
     //@JsonManagedReference
     private MContabilidad MContabilidad;
-    */
+*/
 
     public MBolsillo() {
     }

@@ -17,8 +17,7 @@ public class MGrupo {
     @Id
     @Column(length = 36 , nullable = false)
     private String idGrupo;
-    @Column(length = 36, nullable = false)
-    private String idUsuario;
+
     @Column(length = 100 , nullable = false)
     private String nombre;
     @Column(length = 255 , nullable = false)
@@ -36,14 +35,13 @@ public class MGrupo {
     private MUsuario MUsuario;
 
 
-
-    public MGrupo(String idGrupo, String idUsuario, String nombre, String descripcion, boolean estado, LocalDate fechaCreacion) {
+    public MGrupo(String idGrupo, String nombre, String descripcion, boolean estado, LocalDate fechaCreacion, MUsuario MUsuario) {
         this.idGrupo = idGrupo;
-        this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.descripcion = descripcion;
         this.estado = estado;
         this.fechaCreacion = fechaCreacion;
+        this.MUsuario = MUsuario;
     }
 
     public MGrupo() {
@@ -55,14 +53,6 @@ public class MGrupo {
 
     public void setIdGrupo(String idGrupo) {
         this.idGrupo = idGrupo;
-    }
-
-    public String getIdUsuario() {
-        return idUsuario;
-    }
-
-    public void setIdUsuario(String idUsuario) {
-        this.idUsuario = idUsuario;
     }
 
     public String getNombre() {

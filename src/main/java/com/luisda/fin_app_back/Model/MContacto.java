@@ -20,9 +20,6 @@ public class MContacto {
     @Column(length = 36, nullable = false)
     private String idContacto;
 
-    @Column(length = 36, nullable = false)
-    private String idUsuario;
-
     @Column(length = 100, nullable = false)
     private String nombre;
 
@@ -38,10 +35,8 @@ public class MContacto {
     private MUsuario MUsuario;
 
 
-
-    public MContacto(String idContacto, String idUsuario, String nombre, String telefono, String notas) {
+    public MContacto(String idContacto, String nombre, String telefono, String notas) {
         this.idContacto = idContacto;
-        this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.telefono = telefono;
         this.notas = notas;
@@ -56,14 +51,6 @@ public class MContacto {
 
     public void setIdContacto(String idContacto) {
         this.idContacto = idContacto;
-    }
-
-    public String getIdUsuario() {
-        return idUsuario;
-    }
-
-    public void setIdUsuario(String idUsuario) {
-        this.idUsuario = idUsuario;
     }
 
     public String getNombre() {

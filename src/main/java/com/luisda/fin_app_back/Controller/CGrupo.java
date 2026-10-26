@@ -55,7 +55,7 @@ public class CGrupo {
 
     /**
      * Consultar grupo por usuario.
-     */
+
     @GetMapping("/usuario/{idUsuario}")
     public ResponseEntity<?> buscarPorUsuario(@PathVariable String idUsuario) throws Exception{
         try {
@@ -67,7 +67,7 @@ public class CGrupo {
                     .status(HttpStatus.BAD_REQUEST)
                     .body(error.getMessage());
         }
-    }
+    } */
 
     /**
      * Consultar grupo por nombre.

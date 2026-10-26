@@ -41,14 +41,14 @@ public class SFuente {
         }
     }
 
-    /** Consulta una fuente por usuario */
+    /** Consulta una fuente por usuario
     public List<MFuente> buscarPorUsuario(String usuario) throws Exception{
         try {
             return this.IFuentes.buscarPorUsuario(usuario);
         }catch (Exception error) {
             throw new RuntimeException(error);
         }
-    }
+    }*/
 
     /** Consulta una fuente por tipo */
     public List<MFuente> buscarPorTipo(String tipo) throws Exception{
@@ -90,7 +90,6 @@ public class SFuente {
             if (fuenteEncontrada.isPresent()){
                 MFuente nuevaFuente = fuenteEncontrada.get();
                 nuevaFuente.setIdFuente(idFuente);
-                nuevaFuente.setIdUsuario(MFuente.getIdUsuario());
                 nuevaFuente.setTipo(MFuente.getTipo());
                 nuevaFuente.setIdentificador(MFuente.getIdentificador());
                 nuevaFuente.setEstado(MFuente.isEstado());

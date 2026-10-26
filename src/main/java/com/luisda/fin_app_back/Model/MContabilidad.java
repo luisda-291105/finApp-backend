@@ -1,9 +1,6 @@
 package com.luisda.fin_app_back.Model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.time.LocalDate;
 
@@ -39,12 +36,12 @@ public class MContabilidad {
     private LocalDate fechaCreacion;
 
     // Relación entre clase MContabilidad y MUsuario
-    /*
+/*
     @ManyToOne
     @JoinColumn(name = "idUsuario")
-    @JsonManagedReference
-    private MUsuario MUsuario;
-*/
+   // @JsonManagedReference
+    private MUsuario MUsuario;*/
+
 
     public MContabilidad() {
     }

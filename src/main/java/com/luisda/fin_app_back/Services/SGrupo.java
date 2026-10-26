@@ -34,16 +34,15 @@ public class SGrupo {
         }
     }
 
-    /**
-     * Consultar grupo por usuario.
-     */
+    /** Consultar grupo por usuario.
+
     public List<MGrupo> buscarPorUsuario(String idUsuario) throws Exception {
         try {
             return this.IGrupo.buscarPorUsuario(idUsuario);
         } catch (Exception error) {
             throw new Exception(error.getMessage());
         }
-    }
+    }*/
 
     /**
      * Consulta todos los grupos.

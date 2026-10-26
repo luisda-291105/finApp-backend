@@ -20,10 +20,7 @@ import java.util.List;
 
 @Repository
 public interface IGrupo extends JpaRepository<MGrupo, String>{
-    @Query("SELECT g FROM MGrupo g where g.idUsuario = :usuario")
-    List<MGrupo> buscarPorUsuario(
-           @Param("usuario") String idUsuario
-    );
+
     @Query("SELECT g FROM MGrupo g where g.nombre = :nombre")
     List<MGrupo> buscarPorNombre(
           @Param("nombre")  String nombre

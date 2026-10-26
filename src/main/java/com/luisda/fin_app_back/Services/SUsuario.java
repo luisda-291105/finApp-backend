@@ -61,15 +61,6 @@ public  class SUsuario {
         }
     }
 
-    /** Consulta un usuario por contacto */
-    public List<MUsuario> buscarPorContacto(String contacto) throws Exception{
-        try {
-            return this.IUsuario.buscarPorContacto(contacto);
-        }catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
     /** Elimina el usuario identificado */
     public Boolean eliminar(String idUsuario) throws Exception{
         try {
@@ -94,9 +85,7 @@ public  class SUsuario {
                 MUsuario usuarioNuevo=usuarioEncontrado.get();
                 usuarioNuevo.setIdUsuario(idUsuario);
                 usuarioNuevo.setNombre(MUsuario.getNombre());
-                usuarioNuevo.setContacto(MUsuario.getContacto());
                 usuarioNuevo.setContrasena(MUsuario.getContrasena());
-                usuarioNuevo.setPropiedad(MUsuario.getPropiedad());
                 return this.IUsuario.save(usuarioNuevo);
             }else {
                 throw new Exception("No se puede modificar porque usuario no registrado");

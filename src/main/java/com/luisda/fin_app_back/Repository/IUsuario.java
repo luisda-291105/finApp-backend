@@ -27,9 +27,4 @@ public interface IUsuario extends JpaRepository<MUsuario , String> {
             @Param("nombre") String nombreUsuario
     );
 
-    @Query("SELECT u FROM MUsuario u WHERE u.contacto = :contacto")
-    List<MUsuario> buscarPorContacto(
-            @Param("contacto") String contacto
-    );
-
 }

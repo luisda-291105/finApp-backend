@@ -23,9 +23,9 @@ public class CUsuario {
     @Autowired
     SUsuario SUsuario;
 
-    /** crear un registro usuario */
+    /** crear un registro  */
     @PostMapping
-    public ResponseEntity<?> adicionarUsuario(@RequestBody MUsuario MUsuario)throws Exception{
+    public ResponseEntity<?> adicionar(@RequestBody MUsuario MUsuario)throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.CREATED)
@@ -72,20 +72,6 @@ public class CUsuario {
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SUsuario.buscarPorNombre(nombre));
-        } catch (Exception error){
-            return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
-        }
-    }
-
-    /** consultar por contacto */
-    @GetMapping("/contacto/{contacto}")
-    public ResponseEntity<?> consultarPorContacto(@PathVariable String contacto) throws Exception{
-        try {
-            return ResponseEntity
-                    .status(HttpStatus.OK)
-                    .body(this.SUsuario.buscarPorContacto(contacto));
         } catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)

@@ -20,6 +20,11 @@ import java.util.List;
 @Repository
 public interface IFuentes extends JpaRepository<MFuente , String> {
 
+    List<MFuente> findByUsuario_IdUsuario(String idUsuario);
+
+    @Query("SELECT COUNT(f) FROM MFuente f WHERE f.usuario.idUsuario = :idUsuario AND UPPER(f.tipo) = UPPER(:tipo) AND LOWER(TRIM(f.contenido)) = LOWER(TRIM(:contenido))")
+    long contarDuplicadas(@Param("idUsuario") String idUsuario, @Param("tipo") String tipo, @Param("contenido") String contenido);
+
     @Query("SELECT f FROM MFuente f WHERE f.tipo = :tipo")
     List<MFuente> buscarPorTipo (
            @Param("tipo") String tipoFuente

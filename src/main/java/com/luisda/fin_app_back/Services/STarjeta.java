@@ -49,6 +49,10 @@ public class STarjeta {
         }
     }
 
+    public List<MTarjeta> buscarPorUsuario(String idUsuario) throws Exception {
+        return this.ITarjeta.findByUsuario_IdUsuario(idUsuario);
+    }
+
     /** Consulta por titular. */
     public List<MTarjeta> buscarPorTitular(String titular) throws Exception{
         try {

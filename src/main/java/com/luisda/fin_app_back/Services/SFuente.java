@@ -6,6 +6,7 @@ import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -34,9 +35,23 @@ public class SFuente {
             }
             MFuente.setUsuario(this.IUsuario.findById(MFuente.getUsuario().getIdUsuario())
                     .orElseThrow(() -> new Exception("El usuario asociado no existe")));
+            String tipo = MFuente.getTipo() == null ? "" : MFuente.getTipo().trim().toUpperCase(Locale.ROOT);
+            String contenido = MFuente.getContenido() == null ? "" : MFuente.getContenido().trim();
+            if (tipo.isEmpty() || contenido.isEmpty()) {
+                throw new IllegalArgumentException("El tipo y el contenido de la fuente son obligatorios");
+            }
+            MFuente.setTipo(tipo);
+            MFuente.setContenido(contenido);
+            if (this.IFuentes.contarDuplicadas(MFuente.getUsuario().getIdUsuario(), tipo, contenido) > 0) {
+                throw new IllegalArgumentException(tipo.equals("CORREO")
+                        ? "Este correo ya está registrado en tu cuenta"
+                        : "Esta fuente ya está registrada en tu cuenta");
+            }
             return this.IFuentes.save(MFuente);
+        } catch (IllegalArgumentException error) {
+            throw error;
         } catch (Exception error) {
-            throw new RuntimeException(error);
+            throw new RuntimeException(error.getMessage(), error);
         }
     }
 
@@ -49,15 +64,14 @@ public class SFuente {
         }
     }
 
-    /** Consulta una fuente por usuario
-    public List<MFuente> buscarPorUsuario(String usuario) throws Exception{
-        try {
-            return this.IFuentes.buscarPorUsuario(usuario);
-        }catch (Exception error) {
-            throw new RuntimeException(error);
-        }
-    }*/
+    /** Consulta las fuentes del usuario indicado. */
+    public List<MFuente> buscarPorUsuario(String idUsuario) {
+        return this.IFuentes.findByUsuario_IdUsuario(idUsuario);
+    }
 
+    /**
+     * Consulta todas las fuentes (uso administrativo).
+     */
     /** Consulta una fuente por tipo */
     public List<MFuente> buscarPorTipo(String tipo) throws Exception{
         try {

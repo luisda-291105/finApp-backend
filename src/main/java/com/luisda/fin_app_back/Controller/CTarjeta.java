@@ -55,6 +55,15 @@ public class CTarjeta {
         }
     }
 
+    @GetMapping("/usuario/{idUsuario}")
+    public ResponseEntity<?> buscarPorUsuario(@PathVariable String idUsuario) throws Exception {
+        try {
+            return ResponseEntity.ok(this.STarjeta.buscarPorUsuario(idUsuario));
+        } catch (Exception error) {
+            return ResponseEntity.badRequest().body(error.getMessage());
+        }
+    }
+
     /** consulta individual por titular */
     @GetMapping("/titular/{titular}")
     public ResponseEntity<?> consultaPorId(@PathVariable String titular) throws Exception{

@@ -52,6 +52,10 @@ public class SContacto  {
         }
     }
 
+    public List<MContacto> buscarPorUsuario(String idUsuario) throws Exception {
+        return this.IContacto.findByUsuario_IdUsuario(idUsuario);
+    }
+
     /** Consulta un contacto por identificador. */
     public Optional<MContacto> buscarPorId(String idContacto)throws Exception{
         try {

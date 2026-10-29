@@ -18,6 +18,8 @@ import java.util.List;
  */
 @Repository
 public interface ITarjeta extends JpaRepository<MTarjeta,String> {
+    List<MTarjeta> findByUsuario_IdUsuario(String idUsuario);
+
     @Query("SELECT t FROM MTarjeta t WHERE t.titular = :titular ")
     List<MTarjeta> buscarPorTitular(
             @Param("titular") String titular

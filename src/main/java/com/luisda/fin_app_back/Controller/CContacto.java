@@ -51,6 +51,15 @@ public class CContacto {
         }
     }
 
+    @GetMapping("/usuario/{idUsuario}")
+    public ResponseEntity<?> buscarPorUsuario(@PathVariable String idUsuario) throws Exception {
+        try {
+            return ResponseEntity.ok(this.SContacto.buscarPorUsuario(idUsuario));
+        } catch (Exception error) {
+            return ResponseEntity.badRequest().body(error.getMessage());
+        }
+    }
+
     /** consulta individual por id */
     @GetMapping("/id/{idContacto}")
     public ResponseEntity<?> consultaPorId(@PathVariable String idContacto) throws Exception{

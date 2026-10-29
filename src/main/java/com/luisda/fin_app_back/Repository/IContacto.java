@@ -20,6 +20,7 @@ import java.util.List;
  */
 @Repository
 public interface IContacto extends JpaRepository<MContacto ,String> {
+    List<MContacto> findByUsuario_IdUsuario(String idUsuario);
     // consultas
     @Query("SELECT c FROM MContacto c WHERE c.nombre = :nombre")
     List<MContacto> buscarPorNombre(

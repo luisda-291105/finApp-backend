@@ -29,10 +29,10 @@ public class MContacto {
     @Column(length = 500)
     private String notas;
 
-    @ManyToOne
-    @JoinColumn(name = "idUsuario")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "idUsuario", nullable = false)
     //@JoinManagedReference
-    private MUsuario MUsuario;
+    private MUsuario usuario;
 
 
     public MContacto(String idContacto, String nombre, String telefono, String notas) {
@@ -76,4 +76,8 @@ public class MContacto {
     public void setNotas(String notas) {
         this.notas = notas;
     }
+
+    public MUsuario getUsuario() { return usuario; }
+
+    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
 }

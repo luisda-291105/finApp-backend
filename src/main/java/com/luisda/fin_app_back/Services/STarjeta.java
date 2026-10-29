@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.Model.MTarjeta;
 import com.luisda.fin_app_back.Repository.ITarjeta;
+import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,14 +19,21 @@ import java.util.Optional;
 @Service
 public class STarjeta {
     private final ITarjeta ITarjeta;
+    private final IUsuario IUsuario;
 
-    public STarjeta(ITarjeta ITarjeta) {
+    public STarjeta(ITarjeta ITarjeta, IUsuario IUsuario) {
         this.ITarjeta = ITarjeta;
+        this.IUsuario = IUsuario;
     }
 
     /** Agrega un usuario  */
     public MTarjeta crear(MTarjeta MTarjeta) throws Exception{
         try {
+            if (MTarjeta.getUsuario() == null || MTarjeta.getUsuario().getIdUsuario() == null) {
+                throw new Exception("La tarjeta debe estar asociada a un usuario");
+            }
+            MTarjeta.setUsuario(this.IUsuario.findById(MTarjeta.getUsuario().getIdUsuario())
+                    .orElseThrow(() -> new Exception("El usuario asociado no existe")));
             return this.ITarjeta.save(MTarjeta);
         }catch (Exception error) {
             throw new Exception(error.getMessage());

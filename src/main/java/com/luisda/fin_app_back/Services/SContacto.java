@@ -3,6 +3,7 @@ package com.luisda.fin_app_back.Services;
 import com.luisda.fin_app_back.Model.MContacto;
 
 import com.luisda.fin_app_back.Repository.IContacto;
+import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,14 +22,21 @@ import java.util.Optional;
 public class SContacto  {
 
     private  final  IContacto IContacto;
+    private final IUsuario IUsuario;
 
-    public SContacto(IContacto iContacto) {
+    public SContacto(IContacto iContacto, IUsuario iUsuario) {
         IContacto = iContacto;
+        IUsuario = iUsuario;
     }
 
     /** Agrega un contacto. */
     public  MContacto crear (MContacto MContacto) throws Exception{
         try {
+            if (MContacto.getUsuario() == null || MContacto.getUsuario().getIdUsuario() == null) {
+                throw new Exception("El contacto debe estar asociado a un usuario");
+            }
+            MContacto.setUsuario(this.IUsuario.findById(MContacto.getUsuario().getIdUsuario())
+                    .orElseThrow(() -> new Exception("El usuario asociado no existe")));
             return this.IContacto.save(MContacto);
         }catch (Exception error){
             throw new Exception(error.getMessage());

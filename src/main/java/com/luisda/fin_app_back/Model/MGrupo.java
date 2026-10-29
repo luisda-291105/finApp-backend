@@ -29,10 +29,10 @@ public class MGrupo {
 
     // Relación entre clase MGrupo y MUsuario
 
-    @ManyToOne
-    @JoinColumn(name = "idUsuario")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "idUsuario", nullable = false)
     //@JoinManagedReference
-    private MUsuario MUsuario;
+    private MUsuario usuario;
 
 
     public MGrupo(String idGrupo, String nombre, String descripcion, boolean estado, LocalDate fechaCreacion, MUsuario MUsuario) {
@@ -41,7 +41,7 @@ public class MGrupo {
         this.descripcion = descripcion;
         this.estado = estado;
         this.fechaCreacion = fechaCreacion;
-        this.MUsuario = MUsuario;
+        this.usuario = MUsuario;
     }
 
     public MGrupo() {
@@ -86,4 +86,8 @@ public class MGrupo {
     public void setFechaCreacion(LocalDate fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
     }
+
+    public MUsuario getUsuario() { return usuario; }
+
+    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
 }

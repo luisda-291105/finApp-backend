@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.Model.MGrupo;
 import com.luisda.fin_app_back.Repository.IGrupo;
+import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,9 +19,11 @@ import java.util.Optional;
 @Service
 public class SGrupo {
     private final IGrupo IGrupo;
+    private final IUsuario IUsuario;
 
-    public SGrupo(IGrupo iGrupo) {
+    public SGrupo(IGrupo iGrupo, IUsuario iUsuario) {
         IGrupo = iGrupo;
+        IUsuario = iUsuario;
     }
 
     /**
@@ -28,6 +31,11 @@ public class SGrupo {
      */
     public MGrupo crear(MGrupo MGrupo) throws Exception {
         try {
+            if (MGrupo.getUsuario() == null || MGrupo.getUsuario().getIdUsuario() == null) {
+                throw new Exception("El grupo debe estar asociado a un usuario");
+            }
+            MGrupo.setUsuario(this.IUsuario.findById(MGrupo.getUsuario().getIdUsuario())
+                    .orElseThrow(() -> new Exception("El usuario asociado no existe")));
             return this.IGrupo.save(MGrupo);
         } catch (Exception error) {
             throw new Exception(error.getMessage());

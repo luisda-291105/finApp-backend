@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Repository.IFuentes;
+import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,14 +19,21 @@ import java.util.Optional;
 @Service
 public class SFuente {
     private final IFuentes IFuentes;
+    private final IUsuario IUsuario;
 
-    public SFuente(IFuentes iFuentes) {
+    public SFuente(IFuentes iFuentes, IUsuario iUsuario) {
         IFuentes = iFuentes;
+        IUsuario = iUsuario;
     }
 
     /** Agrega una fuente  */
     public MFuente crear(MFuente MFuente)throws Exception{
         try{
+            if (MFuente.getUsuario() == null || MFuente.getUsuario().getIdUsuario() == null) {
+                throw new Exception("La fuente debe estar asociada a un usuario");
+            }
+            MFuente.setUsuario(this.IUsuario.findById(MFuente.getUsuario().getIdUsuario())
+                    .orElseThrow(() -> new Exception("El usuario asociado no existe")));
             return this.IFuentes.save(MFuente);
         } catch (Exception error) {
             throw new RuntimeException(error);
@@ -91,7 +99,7 @@ public class SFuente {
                 MFuente nuevaFuente = fuenteEncontrada.get();
                 nuevaFuente.setIdFuente(idFuente);
                 nuevaFuente.setTipo(MFuente.getTipo());
-                nuevaFuente.setIdentificador(MFuente.getIdentificador());
+                nuevaFuente.setContenido(MFuente.getContenido());
                 nuevaFuente.setEstado(MFuente.isEstado());
                 return this.IFuentes.save(nuevaFuente);
             }else {

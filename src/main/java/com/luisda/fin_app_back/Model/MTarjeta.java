@@ -41,10 +41,10 @@ public class MTarjeta {
 
 
     // Relaciones entre clase usuario y tarjeta
-    @ManyToOne
-    @JoinColumn(name = "idUsuario")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "idUsuario", nullable = false)
     // @JsonManagedReference
-    private MUsuario MUsuario;
+    private MUsuario usuario;
 
 
     public MTarjeta(String idTarjeta, String titular, String numero, LocalDate expiracion, String cvv, String entidad, String colorTema) {
@@ -115,5 +115,9 @@ public class MTarjeta {
     public void setColorTema(String colorTema) {
         this.colorTema = colorTema;
     }
+
+    public MUsuario getUsuario() { return usuario; }
+
+    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
 
 }

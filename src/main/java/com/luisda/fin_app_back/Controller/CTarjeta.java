@@ -2,7 +2,7 @@ package com.luisda.fin_app_back.Controller;
 
 
 import com.luisda.fin_app_back.Model.MTarjeta;
-import com.luisda.fin_app_back.Model.MUsuario;
+
 import com.luisda.fin_app_back.Services.STarjeta;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;

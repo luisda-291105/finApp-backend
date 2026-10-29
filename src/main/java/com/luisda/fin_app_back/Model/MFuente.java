@@ -24,7 +24,7 @@ public class MFuente {
     private String tipo;
 
     @Column(length = 255, nullable = false)
-    private String identificador;
+    private String contenido;
 
     @Column(nullable = false)
     private boolean estado;
@@ -34,16 +34,16 @@ public class MFuente {
 
     // Relación entre clase MFuentes y MUsuario
 
-    @ManyToOne
-    @JoinColumn(name = "idUsuario")
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "idUsuario", nullable = false)
     //@JsonManagedReference
-    private MUsuario MUsuario;
+    private MUsuario usuario;
 
 
-    public MFuente(String idFuente, String tipo, String identificador, boolean estado, LocalDate fechaCreacion) {
+    public MFuente(String idFuente, String tipo, String contenido, boolean estado, LocalDate fechaCreacion) {
         this.idFuente = idFuente;
         this.tipo = tipo;
-        this.identificador = identificador;
+        this.contenido = contenido;
         this.estado = estado;
         this.fechaCreacion = fechaCreacion;
     }
@@ -67,12 +67,12 @@ public class MFuente {
         this.idFuente = idFuente;
     }
 
-    public String getIdentificador() {
-        return identificador;
+    public String getContenido() {
+        return contenido;
     }
 
-    public void setIdentificador(String identificador) {
-        this.identificador = identificador;
+    public void setContenido(String identificador) {
+        this.contenido = identificador;
     }
 
     public boolean isEstado() {
@@ -90,4 +90,8 @@ public class MFuente {
     public void setFechaCreacion(LocalDate fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
     }
+
+    public MUsuario getUsuario() { return usuario; }
+
+    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
 }

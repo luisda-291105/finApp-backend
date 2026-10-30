@@ -20,8 +20,6 @@ public class MContabilidad {
     @Column(length = 36, nullable = false)
     private String idContabilidad;
 
-    @Column(length = 36, nullable = false)
-    private String idUsuario;
 
     @Column(length = 100, nullable = false)
     private String nombre;
@@ -40,15 +38,14 @@ public class MContabilidad {
     @ManyToOne
     @JoinColumn(name = "idUsuario")
    // @JsonManagedReference
-    private MUsuario MUsuario;*/
+    private MUsuario MUsuario; */
 
 
     public MContabilidad() {
     }
 
-    public MContabilidad(String idContabilidad, String idUsuario, String nombre, double valor, boolean estado, LocalDate fechaCreacion) {
+    public MContabilidad(String idContabilidad, String nombre, double valor, boolean estado, LocalDate fechaCreacion) {
         this.idContabilidad = idContabilidad;
-        this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.valor = valor;
         this.estado = estado;
@@ -61,15 +58,6 @@ public class MContabilidad {
 
     public void setIdContabilidad(String idContabilidad) {
         this.idContabilidad = idContabilidad;
-    }
-
-
-    public String getIdUsuario() {
-        return idUsuario;
-    }
-
-    public void setIdUsuario(String idUsuario) {
-        this.idUsuario = idUsuario;
     }
 
 

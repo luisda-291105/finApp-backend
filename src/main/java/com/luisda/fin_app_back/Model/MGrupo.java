@@ -2,6 +2,8 @@ package com.luisda.fin_app_back.Model;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @uso               Representa un grupo creado por un usuario
@@ -33,6 +35,14 @@ public class MGrupo {
     @JoinColumn(name = "idUsuario", nullable = false)
     //@JoinManagedReference
     private MUsuario usuario;
+
+    @ManyToMany
+    @JoinTable(
+            name = "grupo_fuente",
+            joinColumns = @JoinColumn(name = "idGrupo"),
+            inverseJoinColumns = @JoinColumn(name = "idFuente")
+    )
+    private List<MFuente> fuentes = new ArrayList<>();
 
 
     public MGrupo(String idGrupo, String nombre, String descripcion, boolean estado, LocalDate fechaCreacion, MUsuario MUsuario) {
@@ -90,4 +100,10 @@ public class MGrupo {
     public MUsuario getUsuario() { return usuario; }
 
     public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
+
+    public List<MFuente> getFuentes() { return fuentes; }
+
+    public void setFuentes(List<MFuente> fuentes) {
+        this.fuentes = fuentes == null ? new ArrayList<>() : new ArrayList<>(fuentes);
+    }
 }

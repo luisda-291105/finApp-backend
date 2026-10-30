@@ -1,0 +1,54 @@
+###
+POST http://localhost:8080/tarjeta
+Content-Type: application/json
+
+{
+  "idTarjeta": "",
+  "titular": "",
+  "numero": "",
+  "expiracion": "",
+  "cvv": "",
+  "entidad": "",
+  "colorTema": ""
+}
+
+###
+GET http://localhost:8080/tarjeta
+Content-Type: application/json
+
+{
+  "idTarjeta": "",
+  "titular": "",
+  "numero": "",
+  "expiracion": "",
+  "cvv": "",
+  "entidad": "",
+  "colorTema": ""
+}
+
+###
+GET http://localhost:8080/tarjeta/titular/{{titular}}
+
+###
+GET http://localhost:8080/tarjeta/entidad/{{entidad}}
+
+###
+GET http://localhost:8080/tarjeta/id/{{idTarjeta}}
+
+###
+DELETE http://localhost:8080/tarjeta/{{idTarjeta}}
+Content-Type: application/json
+
+{
+  "idTarjeta": "",
+  "titular": "",
+  "numero": "",
+  "expiracion": "",
+  "cvv": "",
+  "entidad": "",
+  "colorTema": ""
+}
+
+###
+PUT http://localhost:8080/tarjeta/{{idTarjeta}}
+Content-Type: application/json

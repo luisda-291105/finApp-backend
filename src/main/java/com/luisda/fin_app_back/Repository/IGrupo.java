@@ -23,6 +23,8 @@ public interface IGrupo extends JpaRepository<MGrupo, String>{
 
     List<MGrupo> findByUsuario_IdUsuario(String idUsuario);
 
+    List<MGrupo> findByFuentes_IdFuente(String idFuente);
+
     @Query("SELECT g FROM MGrupo g where g.nombre = :nombre")
     List<MGrupo> buscarPorNombre(
           @Param("nombre")  String nombre

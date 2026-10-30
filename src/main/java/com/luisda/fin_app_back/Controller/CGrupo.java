@@ -103,11 +103,11 @@ public class CGrupo {
      * eliminar grupo por id.
      */
     @DeleteMapping("/{idGrupo}")
-    public ResponseEntity<?> eliminar(@PathVariable String idGrupo) throws Exception{
+    public ResponseEntity<?> eliminar(@PathVariable String idGrupo, @RequestParam String idUsuario) throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SGrupo.eliminar(idGrupo));
+                    .body(this.SGrupo.eliminar(idGrupo, idUsuario));
         }catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
@@ -119,15 +119,43 @@ public class CGrupo {
      * modificar grupo por id.
      */
     @PutMapping("/{idGrupo}")
-    public ResponseEntity<?> modificar(@RequestBody MGrupo MGrupo ,@PathVariable String idGrupo ) throws Exception{
+    public ResponseEntity<?> modificar(@RequestBody MGrupo MGrupo ,@PathVariable String idGrupo, @RequestParam String idUsuario ) throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SGrupo.modificar(MGrupo , idGrupo));
+                    .body(this.SGrupo.modificar(MGrupo , idGrupo, idUsuario));
         }catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(error.getMessage());
+        }
+    }
+
+    /** Vincula una fuente del usuario al grupo. */
+    @PutMapping("/{idGrupo}/fuentes/{idFuente}")
+    public ResponseEntity<?> vincularFuente(
+            @PathVariable String idGrupo,
+            @PathVariable String idFuente,
+            @RequestParam String idUsuario
+    ) {
+        try {
+            return ResponseEntity.ok(this.SGrupo.vincularFuente(idGrupo, idFuente, idUsuario));
+        } catch (Exception error) {
+            return ResponseEntity.badRequest().body(error.getMessage());
+        }
+    }
+
+    /** Desvincula una fuente del grupo sin borrar la fuente. */
+    @DeleteMapping("/{idGrupo}/fuentes/{idFuente}")
+    public ResponseEntity<?> desvincularFuente(
+            @PathVariable String idGrupo,
+            @PathVariable String idFuente,
+            @RequestParam String idUsuario
+    ) {
+        try {
+            return ResponseEntity.ok(this.SGrupo.desvincularFuente(idGrupo, idFuente, idUsuario));
+        } catch (Exception error) {
+            return ResponseEntity.badRequest().body(error.getMessage());
         }
     }
 

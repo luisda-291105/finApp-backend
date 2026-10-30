@@ -1,0 +1,45 @@
+###
+POST http://localhost:8080/fuente
+Content-Type: application/json
+
+###
+GET http://localhost:8080/fuente
+Content-Type: application/json
+
+{
+  "idFuente": "",
+  "tipo": "",
+  "identificador": "",
+  "estado": false,
+  "fechaCreacion": ""
+}
+
+###
+GET http://localhost:8080/fuente/tipo/{{tipo}}
+
+###
+GET http://localhost:8080/fuente/id/{{idFuente}}
+
+###
+DELETE http://localhost:8080/fuente/{{idFuente}}?idUsuario={{idUsuario}}
+Content-Type: application/json
+
+{
+  "idFuente": "",
+  "tipo": "",
+  "identificador": "",
+  "estado": false,
+  "fechaCreacion": ""
+}
+
+###
+PUT http://localhost:8080/fuente/{{idFuente}}?idUsuario={{idUsuario}}
+Content-Type: application/json
+
+{
+  "idFuente": "",
+  "tipo": "",
+  "identificador": "",
+  "estado": false,
+  "fechaCreacion": ""
+}

@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDate;
 
@@ -58,6 +59,7 @@ public class MUsuario {
         this.nombre = nombre;
     }
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     public String getContrasena() {
         return contrasena;
     }

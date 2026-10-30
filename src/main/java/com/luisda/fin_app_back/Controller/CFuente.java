@@ -94,11 +94,11 @@ public class CFuente {
 
     /** eliminar por id. */
     @DeleteMapping("/{idFuente}")
-    public ResponseEntity<?> eliminar(@PathVariable String idFuente)throws Exception{
+    public ResponseEntity<?> eliminar(@PathVariable String idFuente, @RequestParam String idUsuario)throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SFuente.eliminar(idFuente));
+                    .body(this.SFuente.eliminar(idFuente, idUsuario));
         } catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
@@ -108,11 +108,11 @@ public class CFuente {
 
     /** modificar por id. */
     @PutMapping("/{idFuente}")
-    public ResponseEntity<?> modificar(@RequestBody MFuente MFuente,@PathVariable String idFuente)throws Exception{
+    public ResponseEntity<?> modificar(@RequestBody MFuente MFuente,@PathVariable String idFuente, @RequestParam String idUsuario)throws Exception{
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SFuente.modificar(MFuente , idFuente));
+                    .body(this.SFuente.modificar(MFuente , idFuente, idUsuario));
         } catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)

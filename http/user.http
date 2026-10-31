@@ -1,0 +1,42 @@
+### Create User
+POST http://localhost:8080/usuario
+Content-Type: application/json
+
+{
+  "idUsuario": "",
+  "nombre": "",
+  "contrasena": "",
+  "fechaCreacion": ""
+}
+
+### Get All Users
+GET http://localhost:8080/usuario
+Content-Type: application/json
+
+{
+  "idUsuario": "",
+  "nombre": "",
+  "contrasena": "",
+  "fechaCreacion": ""
+}
+
+### Get User by ID
+GET http://localhost:8080/usuario/id/{{idUsuario}}
+
+### Get User by Name
+GET http://localhost:8080/usuario/nombre/{{nombre}}
+
+### Delete User
+DELETE http://localhost:8080/usuario/{{idUsuario}}
+Content-Type: application/json
+
+{
+  "idUsuario": "",
+  "nombre": "",
+  "contrasena": "",
+  "fechaCreacion": ""
+}
+
+### Update User
+PUT http://localhost:8080/usuario/{{idUsuario}}
+Content-Type: application/json

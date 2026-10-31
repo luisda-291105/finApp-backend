@@ -1,0 +1,48 @@
+###
+POST http://localhost:8080/contacto
+Content-Type: application/json
+
+###
+GET http://localhost:8080/contacto
+Content-Type: application/json
+
+{
+  "idContacto": "",
+  "nombre": "",
+  "telefono": "",
+  "notas": ""
+}
+
+###
+GET http://localhost:8080/contacto/id/{{idContacto}}
+
+###
+GET http://localhost:8080/contacto/nombre/{{nombre}}
+
+###
+GET http://localhost:8080/contacto/nota/{{nota}}
+
+###
+GET http://localhost:8080/contacto/telefono/{{telefono}}
+
+###
+DELETE http://localhost:8080/contacto/{{idContacto}}
+Content-Type: application/json
+
+{
+  "idContacto": "",
+  "nombre": "",
+  "telefono": "",
+  "notas": ""
+}
+
+###
+PUT http://localhost:8080/contacto/{{idContacto}}
+Content-Type: application/json
+
+{
+  "idContacto": "",
+  "nombre": "",
+  "telefono": "",
+  "notas": ""
+}

@@ -36,10 +36,6 @@ public class MTarjeta {
     @Column(length = 100, nullable = false)
     private String entidad;
 
-    @Column(length = 36, nullable = false)
-    private String colorTema;
-
-
     // Relaciones entre clase usuario y tarjeta
     @ManyToOne(optional = false)
     @JoinColumn(name = "idUsuario", nullable = false)
@@ -47,14 +43,13 @@ public class MTarjeta {
     private MUsuario usuario;
 
 
-    public MTarjeta(String idTarjeta, String titular, String numero, LocalDate expiracion, String cvv, String entidad, String colorTema) {
+    public MTarjeta(String idTarjeta, String titular, String numero, LocalDate expiracion, String cvv, String entidad) {
         this.idTarjeta = idTarjeta;
         this.titular = titular;
         this.numero = numero;
         this.expiracion = expiracion;
         this.cvv = cvv;
         this.entidad = entidad;
-        this.colorTema = colorTema;
     }
 
     public MTarjeta() {
@@ -106,14 +101,6 @@ public class MTarjeta {
 
     public void setEntidad(String entidad) {
         this.entidad = entidad;
-    }
-
-    public String getColorTema() {
-        return colorTema;
-    }
-
-    public void setColorTema(String colorTema) {
-        this.colorTema = colorTema;
     }
 
     public MUsuario getUsuario() { return usuario; }

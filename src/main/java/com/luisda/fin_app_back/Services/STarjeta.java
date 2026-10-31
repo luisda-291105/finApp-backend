@@ -107,7 +107,6 @@ public class STarjeta {
                 tarjetaNueva.setExpiracion(MTarjeta.getExpiracion());
                 tarjetaNueva.setCvv(MTarjeta.getCvv());
                 tarjetaNueva.setEntidad(MTarjeta.getEntidad());
-                tarjetaNueva.setColorTema(MTarjeta.getColorTema());
                 return this.ITarjeta.save(tarjetaNueva);
 
             }else {

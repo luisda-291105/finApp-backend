@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Recibe las preguntas del asistente y aplica un límite básico por dirección de red. */
 @RestController
 @RequestMapping("/asistente")
-@CrossOrigin(origins = "*")
 public class CAsistente {
     private static final int MAX_SOLICITUDES_POR_MINUTO = 12;
     private static final ConcurrentHashMap<String, VentanaLimite> VENTANAS = new ConcurrentHashMap<>();

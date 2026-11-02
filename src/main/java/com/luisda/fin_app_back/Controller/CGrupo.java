@@ -20,7 +20,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/grupo")
-@CrossOrigin(origins = "*")
 public class CGrupo {
     @Autowired
     SGrupo SGrupo;

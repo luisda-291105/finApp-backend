@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/tarjeta")
-@CrossOrigin(origins = "*")
 public class CTarjeta {
 
     @Autowired

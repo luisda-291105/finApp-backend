@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/fuente")
-@CrossOrigin(origins = "*")
 public class CFuente {
 
     @Autowired

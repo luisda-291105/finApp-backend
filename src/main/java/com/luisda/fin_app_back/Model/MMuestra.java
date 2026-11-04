@@ -5,7 +5,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "muestras", indexes = @Index(name = "idx_muestras_usuario", columnList = "usuario_id"))
+@Table(name = "muestras", indexes = @Index(name = "idx_muestras_usuario", columnList = "usuario_id"), uniqueConstraints = @UniqueConstraint(name = "uk_muestras_usuario_tipo_titulo", columnNames = {"usuario_id", "tipo", "titulo"}))
 public class MMuestra {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "usuario_id", nullable = false, length = 36) private String usuarioId;

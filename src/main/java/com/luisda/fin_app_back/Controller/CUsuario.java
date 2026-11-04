@@ -10,6 +10,7 @@ import com.luisda.fin_app_back.DTO.UsuarioActivoDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -40,13 +41,13 @@ public class CUsuario {
     @PostMapping("/login")
     public ResponseEntity<?> iniciarSesion(@RequestBody UsuarioLoginDTO credenciales, HttpServletRequest solicitud) {
         if (credenciales == null || credenciales.idUsuario() == null || credenciales.contrasena() == null) {
-            return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa tu identificación y contraseña.", "credenciales"));
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa tu identificación o correo y contraseña.", "credenciales"));
         }
         try {
             MUsuario usuario = this.SUsuario.autenticar(credenciales.idUsuario(), credenciales.contrasena(), verificadorContrasena);
             if (usuario == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(RespuestaModalDTO.error("La identificación o contraseña no es correcta.", "credenciales"));
+                        .body(RespuestaModalDTO.error("La identificación, correo o contraseña no son correctos.", "credenciales"));
             }
             HttpSession sesionAnterior = solicitud.getSession(false);
             if (sesionAnterior != null) sesionAnterior.invalidate();
@@ -82,6 +83,15 @@ public class CUsuario {
             return ResponseEntity
                     .status(HttpStatus.CREATED)
                     .body(this.SUsuario.crear(MUsuario));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(RespuestaModalDTO.error(error.getMessage(), error.getMessage().toLowerCase().contains("correo") ? "correo" : "idUsuario"));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest()
+                    .body(RespuestaModalDTO.error(error.getMessage(), error.getMessage().toLowerCase().contains("correo") ? "correo" : "idUsuario"));
+        } catch (DataIntegrityViolationException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(RespuestaModalDTO.error("Ya existe una cuenta con esta identificación o correo.", "credenciales"));
         } catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
@@ -148,15 +158,26 @@ public class CUsuario {
     /** modificar usuario por id */
 
     @PutMapping("/{idUsuario}")
-    public ResponseEntity<?> modificar(@PathVariable  String idUsuario , @RequestBody  MUsuario MUsuario) throws Exception{
+    public ResponseEntity<?> modificar(@PathVariable String idUsuario, @RequestBody MUsuario cambios,
+                                       HttpServletRequest solicitud) throws Exception{
         try {
-            return ResponseEntity
-                    .status(HttpStatus.OK)
-                    .body(this.SUsuario.modificar(MUsuario , idUsuario));
+            MUsuario actualizado = this.SUsuario.modificar(cambios, idUsuario);
+            HttpSession sesion = solicitud.getSession(false);
+            if (sesion != null && idUsuario.equals(sesion.getAttribute(SUsuarioActivo.CLAVE_SESION))) {
+                sesion.setAttribute(SUsuarioActivo.CLAVE_SESION, actualizado.getIdUsuario());
+            }
+            return ResponseEntity.ok(RespuestaModalDTO.exito("Perfil actualizado.",
+                    new UsuarioActivoDTO(actualizado.getIdUsuario(), actualizado.getNombre(), actualizado.getFechaCreacion())));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(RespuestaModalDTO.error(error.getMessage(), "idUsuario"));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest()
+                    .body(RespuestaModalDTO.error(error.getMessage(), "perfil"));
         } catch (Exception error){
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudo guardar el perfil.", null));
         }
     }
 

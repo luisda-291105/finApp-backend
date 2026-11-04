@@ -2,10 +2,25 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IUsuario;
+import com.luisda.fin_app_back.Repository.IContacto;
+import com.luisda.fin_app_back.Repository.IFuentes;
+import com.luisda.fin_app_back.Repository.IGrupo;
+import com.luisda.fin_app_back.Repository.ITarjeta;
+import com.luisda.fin_app_back.Repository.IGmailConexion;
+import com.luisda.fin_app_back.Repository.IMuestraRepository;
+import com.luisda.fin_app_back.Model.MContacto;
+import com.luisda.fin_app_back.Model.MFuente;
+import com.luisda.fin_app_back.Model.MGrupo;
+import com.luisda.fin_app_back.Model.MTarjeta;
+import com.luisda.fin_app_back.Model.MGmailConexion;
+import com.luisda.fin_app_back.Model.MMuestra;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 
 /**
@@ -18,32 +33,66 @@ import java.util.Optional;
  */
 @Service
 public  class SUsuario {
+    private static final Pattern CORREO_VALIDO = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private final IUsuario IUsuario;
     private final SVerificadorContrasena verificador;
+    private final IContacto contactos;
+    private final IFuentes fuentes;
+    private final IGrupo grupos;
+    private final ITarjeta tarjetas;
+    private final IGmailConexion conexionesGmail;
+    private final IMuestraRepository muestras;
 
     // Constructor
-    public SUsuario(IUsuario iUsuario, SVerificadorContrasena verificador) {
+    public SUsuario(IUsuario iUsuario, SVerificadorContrasena verificador, IContacto contactos,
+                    IFuentes fuentes, IGrupo grupos, ITarjeta tarjetas,
+                    IGmailConexion conexionesGmail, IMuestraRepository muestras) {
         IUsuario = iUsuario;
         this.verificador = verificador;
+        this.contactos = contactos;
+        this.fuentes = fuentes;
+        this.grupos = grupos;
+        this.tarjetas = tarjetas;
+        this.conexionesGmail = conexionesGmail;
+        this.muestras = muestras;
     }
 
     /** Agrega un usuario  */
     public MUsuario crear(MUsuario MUsuario) throws Exception{
-        try {
-            if (MUsuario.getContrasena() == null || MUsuario.getContrasena().length() < 8) {
-                throw new Exception("La contraseña debe tener al menos 8 caracteres");
-            }
-            MUsuario.setContrasena(verificador.codificar(MUsuario.getContrasena()));
-            return this.IUsuario.save(MUsuario);
-        }catch (Exception error) {
-            throw new Exception(error.getMessage());
+        if (MUsuario == null || MUsuario.getIdUsuario() == null || MUsuario.getIdUsuario().isBlank()) {
+            throw new IllegalArgumentException("La identificación es obligatoria.");
         }
+        String identificacion = MUsuario.getIdUsuario().trim();
+        if (IUsuario.existsById(identificacion)) {
+            throw new IllegalStateException("Ya existe un usuario con esta identificación.");
+        }
+        if (MUsuario.getContrasena() == null || MUsuario.getContrasena().length() < 8) {
+            throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
+        }
+        String correo = MUsuario.getCorreo() == null ? "" : MUsuario.getCorreo().trim().toLowerCase(Locale.ROOT);
+        if (!CORREO_VALIDO.matcher(correo).matches()) {
+            throw new IllegalArgumentException("Ingresa un correo electrónico válido.");
+        }
+        if (IUsuario.findByCorreoIgnoreCase(correo).isPresent()
+                || IUsuario.findByCorreoGoogleIgnoreCase(correo).isPresent()) {
+            throw new IllegalStateException("Ya existe una cuenta con este correo.");
+        }
+        MUsuario.setIdUsuario(identificacion);
+        MUsuario.setCorreo(correo);
+        MUsuario.setContrasena(verificador.codificar(MUsuario.getContrasena()));
+        return IUsuario.save(MUsuario);
     }
 
-    /** Valida credenciales y migra a PBKDF2 las contraseñas heredadas en texto plano. */
-    public MUsuario autenticar(String idUsuario, String contrasena, SVerificadorContrasena codificador) {
-        if (idUsuario == null || contrasena == null) return null;
-        return IUsuario.findById(idUsuario.trim()).filter(usuario -> {
+    /** Valida por identificación o correo Google y migra contraseñas heredadas a PBKDF2. */
+    public MUsuario autenticar(String identificador, String contrasena, SVerificadorContrasena codificador) {
+        if (identificador == null || contrasena == null) return null;
+        String valor = identificador.trim();
+        Optional<MUsuario> usuarioEncontrado = IUsuario.findById(valor);
+        if (usuarioEncontrado.isEmpty() && valor.contains("@")) {
+            usuarioEncontrado = IUsuario.findByCorreoIgnoreCase(valor);
+            if (usuarioEncontrado.isEmpty()) usuarioEncontrado = IUsuario.findByCorreoGoogleIgnoreCase(valor);
+        }
+        return usuarioEncontrado.filter(usuario -> {
             String guardada = usuario.getContrasena();
             if (codificador.verificar(contrasena, guardada)) return true;
             if (guardada != null && !guardada.startsWith(SVerificadorContrasena.PREFIJO)
@@ -101,23 +150,66 @@ public  class SUsuario {
 
     /** Actualiza un usuario existente y comprueba que exista */
 
-    public MUsuario modificar(MUsuario MUsuario , String idUsuario ) throws Exception{
-        try {
-            Optional<MUsuario> usuarioEncontrado = this.IUsuario.findById(idUsuario);
-            if (usuarioEncontrado.isPresent()){
-                MUsuario usuarioNuevo=usuarioEncontrado.get();
-                usuarioNuevo.setIdUsuario(idUsuario);
-                usuarioNuevo.setNombre(MUsuario.getNombre());
-                if (MUsuario.getContrasena() != null && !MUsuario.getContrasena().isBlank()) {
-                    if (MUsuario.getContrasena().length() < 8) throw new Exception("La contraseña debe tener al menos 8 caracteres");
-                    usuarioNuevo.setContrasena(verificador.codificar(MUsuario.getContrasena()));
+    @Transactional
+    public MUsuario modificar(MUsuario cambios , String idUsuario ) throws Exception{
+            Optional<MUsuario> usuarioEncontrado = IUsuario.findById(idUsuario);
+            if (usuarioEncontrado.isPresent()) {
+                MUsuario anterior = usuarioEncontrado.get();
+                String nuevoId = cambios.getIdUsuario() == null ? idUsuario : cambios.getIdUsuario().trim();
+                if (nuevoId.isBlank()) throw new IllegalArgumentException("La identificación es obligatoria.");
+                if (!nuevoId.equals(idUsuario) && IUsuario.existsById(nuevoId)) {
+                    throw new IllegalStateException("Ya existe un usuario con esta identificación.");
                 }
-                return this.IUsuario.save(usuarioNuevo);
-            }else {
-                throw new Exception("No se puede modificar porque usuario no registrado");
+                if (cambios.getNombre() == null || cambios.getNombre().isBlank()) {
+                    throw new IllegalArgumentException("El nombre es obligatorio.");
+                }
+                if (cambios.getContrasena() == null || cambios.getContrasena().isBlank()
+                        || cambios.getContrasena().length() < 8) {
+                    throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
+                }
+
+                anterior.setNombre(cambios.getNombre().trim());
+                anterior.setContrasena(verificador.codificar(cambios.getContrasena()));
+                if (nuevoId.equals(idUsuario)) return IUsuario.save(anterior);
+
+                // Cambiar una PK requiere trasladar primero la cuenta y luego sus relaciones.
+                MUsuario actualizado = new MUsuario();
+                actualizado.setIdUsuario(nuevoId);
+                actualizado.setNombre(anterior.getNombre());
+                actualizado.setContrasena(anterior.getContrasena());
+                actualizado.setFechaCreacion(anterior.getFechaCreacion());
+                MUsuario nuevoUsuario = IUsuario.saveAndFlush(actualizado);
+
+                List<MContacto> listaContactos = contactos.findByUsuario_IdUsuario(idUsuario);
+                listaContactos.forEach(registro -> registro.setUsuario(nuevoUsuario));
+                contactos.saveAll(listaContactos);
+                List<MFuente> listaFuentes = fuentes.findByUsuario_IdUsuario(idUsuario);
+                listaFuentes.forEach(registro -> registro.setUsuario(nuevoUsuario));
+                fuentes.saveAll(listaFuentes);
+                List<MGrupo> listaGrupos = grupos.findByUsuario_IdUsuario(idUsuario);
+                listaGrupos.forEach(registro -> registro.setUsuario(nuevoUsuario));
+                grupos.saveAll(listaGrupos);
+                List<MTarjeta> listaTarjetas = tarjetas.findByUsuario_IdUsuario(idUsuario);
+                listaTarjetas.forEach(registro -> registro.setUsuario(nuevoUsuario));
+                tarjetas.saveAll(listaTarjetas);
+
+                List<MMuestra> listaMuestras = muestras.findByUsuarioId(idUsuario);
+                listaMuestras.forEach(registro -> registro.setUsuarioId(nuevoId));
+                muestras.saveAll(listaMuestras);
+                conexionesGmail.findByIdUsuario(idUsuario).ifPresent(conexion -> {
+                    conexionesGmail.delete(conexion);
+                    conexionesGmail.flush();
+                    conexion.setIdUsuario(nuevoId);
+                    conexionesGmail.save(conexion);
+                });
+                IUsuario.delete(anterior);
+                IUsuario.flush();
+                nuevoUsuario.setCorreo(anterior.getCorreo());
+                nuevoUsuario.setGoogleSubject(anterior.getGoogleSubject());
+                nuevoUsuario.setCorreoGoogle(anterior.getCorreoGoogle());
+                IUsuario.save(nuevoUsuario);
+                return nuevoUsuario;
             }
-        }catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
+            throw new IllegalStateException("No se puede modificar porque el usuario no está registrado.");
     }
 }

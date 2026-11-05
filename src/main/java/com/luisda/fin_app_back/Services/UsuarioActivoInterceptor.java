@@ -11,7 +11,9 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         String method = req.getMethod();
         if (!(method.equals("POST") || method.equals("PUT") || method.equals("PATCH") || method.equals("DELETE"))) return true;
         String path = req.getRequestURI();
-        if (path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout") || path.equals("/api/gmail/callback")) return true;
+        if (path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
+                || path.startsWith("/api/auth/google") || path.equals("/api/gmail/callback")
+                || path.startsWith("/asistente")) return true;
         if (req.getSession(false) != null && req.getSession(false).getAttribute(SUsuarioActivo.CLAVE_SESION) != null) return true;
         res.setStatus(401); res.setContentType("application/json;charset=UTF-8");
         res.getWriter().write("{\"tipo\":\"error\",\"mensaje\":\"Inicia sesión para continuar.\",\"campo\":null,\"datos\":null}");

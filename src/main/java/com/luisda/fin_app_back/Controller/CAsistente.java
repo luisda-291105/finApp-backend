@@ -2,7 +2,9 @@ package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.DTO.PeticionChat;
 import com.luisda.fin_app_back.DTO.RespuestaChat;
+import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Services.SAsistenteChat;
+import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.luisda.fin_app_back.Services.ServicioChatException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -25,9 +28,11 @@ public class CAsistente {
     private static final int MAX_SOLICITUDES_POR_MINUTO = 12;
     private static final ConcurrentHashMap<String, VentanaLimite> VENTANAS = new ConcurrentHashMap<>();
     private final SAsistenteChat servicio;
+    private final SUsuarioActivo usuarioActivo;
 
-    public CAsistente(SAsistenteChat servicio) {
+    public CAsistente(SAsistenteChat servicio, SUsuarioActivo usuarioActivo) {
         this.servicio = servicio;
+        this.usuarioActivo = usuarioActivo;
     }
 
     @PostMapping("/chat")
@@ -37,7 +42,8 @@ public class CAsistente {
                     .body(Map.of("mensaje", "Alcanzaste el límite temporal del asistente. Inténtalo más tarde."));
         }
         try {
-            RespuestaChat respuesta = servicio.responder(peticion);
+            Optional<MUsuario> usuario = usuarioActivo.obtenerUsuario(request);
+            RespuestaChat respuesta = servicio.responder(peticion, usuario.orElse(null));
             return ResponseEntity.ok(respuesta);
         } catch (ServicioChatException error) {
             System.err.println("[Asistente] ServicioChatException: " + error.getMessage());

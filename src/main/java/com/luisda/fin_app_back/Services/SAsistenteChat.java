@@ -4,6 +4,19 @@ import com.luisda.fin_app_back.DTO.FuenteChat;
 import com.luisda.fin_app_back.DTO.PeticionChat;
 import com.luisda.fin_app_back.DTO.RespuestaChat;
 import com.luisda.fin_app_back.DTO.TurnoChat;
+import com.luisda.fin_app_back.Model.CuentaGmail;
+import com.luisda.fin_app_back.Model.MContacto;
+import com.luisda.fin_app_back.Model.MFuente;
+import com.luisda.fin_app_back.Model.MGrupo;
+import com.luisda.fin_app_back.Model.MMuestra;
+import com.luisda.fin_app_back.Model.MTarjeta;
+import com.luisda.fin_app_back.Model.MUsuario;
+import com.luisda.fin_app_back.Repository.IContacto;
+import com.luisda.fin_app_back.Repository.ICuentaGmail;
+import com.luisda.fin_app_back.Repository.IFuentes;
+import com.luisda.fin_app_back.Repository.IGrupo;
+import com.luisda.fin_app_back.Repository.IMuestraRepository;
+import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Services.SDocumentacionFinApp.Fragmento;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,21 +37,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-/** Coordina la documentación local, la búsqueda pública y la generación de respuestas. */
+/** Coordina la documentación local, los datos del usuario en sesión, la búsqueda pública y la generación de respuestas. */
 @Service
 public class SAsistenteChat {
     private static final Pattern CORREO = Pattern.compile("(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
     private static final Pattern NUMERO_TARJETA = Pattern.compile("(?<!\\d)(?:\\d[ -]?){13,19}(?!\\d)");
     private static final String INSTRUCCIONES = """
             Eres el asistente de ayuda de FinApp. Responde siempre en español, de forma muy corta, directa y rápida (máximo 1 a 3 oraciones).
-            Si te saludan, responde de forma breve y cordial (por ejemplo: "¿En qué te puedo ayudar con FinApp?").
+            Si te saludan, responde de forma breve y cordial (por ejemplo: "¿En qué te puedo ayudar hoy?").
+            Si el usuario pregunta por sus datos (cuántos contactos, correos, cuentas de Gmail, datos de las muestras de inicio, contabilidad, tarjetas o bolsillos),
+            utiliza con total precisión los [DATOS DEL USUARIO EN SESIÓN] incluidos en el contexto para responderle de forma directa y concreta.
+            Si el usuario no ha iniciado sesión y pregunta por sus datos personales, indícale amablemente que debe iniciar sesión.
             No des explicaciones largas, rodeos ni listas innecesarias.
             No menciones fuentes, citas ni enlaces en la respuesta.
-            No consultes, infieras ni solicites datos privados de cuentas; no realices operaciones.
+            No realices operaciones ni solicites contraseñas.
             """;
 
     private final SDocumentacionFinApp documentacion;
+    private final IContacto contactosRepo;
+    private final ICuentaGmail cuentasGmailRepo;
+    private final IFuentes fuentesRepo;
+    private final IMuestraRepository muestrasRepo;
+    private final ITarjeta tarjetasRepo;
+    private final IGrupo gruposRepo;
     private final RestClient clienteHttp;
     private final String claveNvidia;
     private final String modeloNvidia;
@@ -49,6 +72,12 @@ public class SAsistenteChat {
     @Autowired
     public SAsistenteChat(
             SDocumentacionFinApp documentacion,
+            IContacto contactosRepo,
+            ICuentaGmail cuentasGmailRepo,
+            IFuentes fuentesRepo,
+            IMuestraRepository muestrasRepo,
+            ITarjeta tarjetasRepo,
+            IGrupo gruposRepo,
             @Autowired(required = false) RestClient.Builder restClientBuilder,
             @Value("${finapp.chat.nvidia.api-key:${NVIDIA_API_KEY:}}") String claveNvidia,
             @Value("${finapp.chat.nvidia.model:${NVIDIA_MODEL:meta/llama-3.3-70b-instruct}}") String modeloNvidia,
@@ -57,6 +86,12 @@ public class SAsistenteChat {
             @Value("${finapp.chat.tavily.url:${TAVILY_API_URL:${TAVILY_URL:https://api.tavily.com/search}}}") String urlTavily
     ) {
         this.documentacion = documentacion;
+        this.contactosRepo = contactosRepo;
+        this.cuentasGmailRepo = cuentasGmailRepo;
+        this.fuentesRepo = fuentesRepo;
+        this.muestrasRepo = muestrasRepo;
+        this.tarjetasRepo = tarjetasRepo;
+        this.gruposRepo = gruposRepo;
 
         // Leer variables de .env si no vinieron por entorno del sistema
         Map<String, String> dotEnv = cargarArchivoDotEnv();
@@ -125,7 +160,11 @@ public class SAsistenteChat {
     }
 
     public RespuestaChat responder(PeticionChat peticion) {
-        validar(peticion);
+        return responder(peticion, null);
+    }
+
+    public RespuestaChat responder(PeticionChat peticion, MUsuario usuario) {
+        validar(peticion, usuario);
         if (claveNvidia.isBlank()) {
             throw new ServicioChatException(HttpStatus.SERVICE_UNAVAILABLE,
                     "El modelo no está configurado. Añade NVIDIA_API_KEY a las variables del backend.");
@@ -135,6 +174,11 @@ public class SAsistenteChat {
         boolean buscarWeb = requiereInternet(peticion.mensaje());
         List<FuenteChat> fuentes = new ArrayList<>();
         List<String> contexto = new ArrayList<>();
+
+        if (usuario != null) {
+            agregarDatosUsuario(usuario, contexto);
+        }
+
         agregarDocumentacion(fragmentos, fuentes, contexto);
 
         boolean busquedaWebUsada = false;
@@ -156,16 +200,20 @@ public class SAsistenteChat {
         return new RespuestaChat(respuesta, List.copyOf(fuentes), busquedaWebUsada, aviso);
     }
 
-    private void validar(PeticionChat peticion) {
+    private void validar(PeticionChat peticion, MUsuario usuario) {
         if (peticion == null || peticion.mensaje() == null || peticion.mensaje().isBlank()) {
             throw new ServicioChatException(HttpStatus.BAD_REQUEST, "Escribe una pregunta para continuar.");
         }
         if (peticion.mensaje().length() > 500) {
             throw new ServicioChatException(HttpStatus.BAD_REQUEST, "La pregunta no puede superar 500 caracteres.");
         }
-        if (contieneDatoPrivado(peticion.mensaje())) {
+        if (NUMERO_TARJETA.matcher(peticion.mensaje()).find()) {
             throw new ServicioChatException(HttpStatus.BAD_REQUEST,
-                    "No envíes correos personales ni números de tarjeta en el chat.");
+                    "Por seguridad, no envíes números de tarjeta de crédito o débito completos en el chat.");
+        }
+        if (usuario == null && CORREO.matcher(peticion.mensaje()).find()) {
+            throw new ServicioChatException(HttpStatus.BAD_REQUEST,
+                    "Inicia sesión para consultar información de correos.");
         }
         if (peticion.historial() != null) {
             if (peticion.historial().size() > 8) {
@@ -174,7 +222,7 @@ public class SAsistenteChat {
             for (TurnoChat turno : peticion.historial()) {
                 if (turno == null || turno.contenido() == null || turno.contenido().length() > 1200
                         || !List.of("user", "assistant").contains(turno.rol())
-                        || contieneDatoPrivado(turno.contenido())) {
+                        || NUMERO_TARJETA.matcher(turno.contenido()).find()) {
                     throw new ServicioChatException(HttpStatus.BAD_REQUEST,
                             "El historial incluye un turno inválido o datos privados.");
                 }
@@ -182,8 +230,115 @@ public class SAsistenteChat {
         }
     }
 
-    private boolean contieneDatoPrivado(String texto) {
-        return CORREO.matcher(texto).find() || NUMERO_TARJETA.matcher(texto).find();
+    private void agregarDatosUsuario(MUsuario usuario, List<String> contexto) {
+        String idUsuario = usuario.getIdUsuario();
+        StringBuilder sb = new StringBuilder();
+        sb.append("[DATOS DEL USUARIO EN SESIÓN (Titular: ").append(usuario.getNombre()).append(")]\n");
+
+        // 1. Contactos
+        try {
+            if (contactosRepo != null) {
+                List<MContacto> contactos = contactosRepo.findByUsuario_IdUsuario(idUsuario);
+                sb.append("- Contactos: ").append(contactos.size()).append(" contacto(s) registrado(s)");
+                if (!contactos.isEmpty()) {
+                    String lista = contactos.stream()
+                            .map(c -> c.getNombre() + (c.getTelefono() != null && !c.getTelefono().isBlank() ? " (tel: " + c.getTelefono() + ")" : ""))
+                            .limit(10)
+                            .collect(Collectors.joining(", "));
+                    sb.append(" -> ").append(lista);
+                }
+                sb.append(".\n");
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Correos y Cuentas Gmail
+        try {
+            int totalCuentasGmail = 0;
+            String cuentasGmailNombres = "";
+            if (cuentasGmailRepo != null) {
+                List<CuentaGmail> gmail = cuentasGmailRepo.findByUsuarioIdOrderByCreadaEnAsc(idUsuario);
+                totalCuentasGmail = gmail.size();
+                if (!gmail.isEmpty()) {
+                    cuentasGmailNombres = gmail.stream().map(CuentaGmail::getEmail).collect(Collectors.joining(", "));
+                }
+            }
+
+            int totalFuentesCorreo = 0;
+            String fuentesCorreoNombres = "";
+            if (fuentesRepo != null) {
+                List<MFuente> fuentes = fuentesRepo.findByUsuario_IdUsuario(idUsuario);
+                List<MFuente> fCorreo = fuentes.stream()
+                        .filter(f -> "CORREO".equalsIgnoreCase(f.getTipo()))
+                        .toList();
+                totalFuentesCorreo = fCorreo.size();
+                if (!fCorreo.isEmpty()) {
+                    fuentesCorreoNombres = fCorreo.stream().map(MFuente::getContenido).collect(Collectors.joining(", "));
+                }
+            }
+
+            sb.append("- Correos / Gmail: ").append(totalCuentasGmail).append(" cuenta(s) Gmail conectada(s)");
+            if (!cuentasGmailNombres.isEmpty()) {
+                sb.append(" (").append(cuentasGmailNombres).append(")");
+            }
+            sb.append(" y ").append(totalFuentesCorreo).append(" fuente(s) de correo registrada(s)");
+            if (!fuentesCorreoNombres.isEmpty()) {
+                sb.append(" [").append(fuentesCorreoNombres).append("]");
+            }
+            sb.append(".\n");
+        } catch (Exception ignored) {}
+
+        // 3. Muestras del dashboard inicio
+        try {
+            if (muestrasRepo != null) {
+                List<MMuestra> muestras = muestrasRepo.findByUsuarioId(idUsuario);
+                sb.append("- Muestras del inicio: ").append(muestras.size()).append(" muestra(s) guardada(s)");
+                if (!muestras.isEmpty()) {
+                    String mList = muestras.stream()
+                            .map(m -> m.getTitulo() + " (tipo: " + m.getTipo() + ")")
+                            .limit(10)
+                            .collect(Collectors.joining("; "));
+                    sb.append(" -> ").append(mList);
+                }
+                sb.append(".\n");
+            }
+        } catch (Exception ignored) {}
+
+        // 4. Contabilidad (Tarjetas y Bolsillos/Grupos)
+        try {
+            int totalTarjetas = 0;
+            String listaTarjetas = "";
+            if (tarjetasRepo != null) {
+                List<MTarjeta> tarjetas = tarjetasRepo.findByUsuario_IdUsuario(idUsuario);
+                totalTarjetas = tarjetas.size();
+                if (!tarjetas.isEmpty()) {
+                    listaTarjetas = tarjetas.stream()
+                            .map(t -> (t.getEntidad() != null ? t.getEntidad() : "Tarjeta") + " titular " + t.getTitular())
+                            .collect(Collectors.joining(", "));
+                }
+            }
+
+            int totalGrupos = 0;
+            String listaGrupos = "";
+            if (gruposRepo != null) {
+                List<MGrupo> grupos = gruposRepo.findByUsuario_IdUsuario(idUsuario);
+                totalGrupos = grupos.size();
+                if (!grupos.isEmpty()) {
+                    listaGrupos = grupos.stream().map(MGrupo::getNombre).collect(Collectors.joining(", "));
+                }
+            }
+
+            sb.append("- Contabilidad: ").append(totalTarjetas).append(" tarjeta(s) registrada(s)");
+            if (!listaTarjetas.isEmpty()) {
+                sb.append(" (").append(listaTarjetas).append(")");
+            }
+            sb.append(" y ").append(totalGrupos).append(" bolsillo(s)/grupo(s) registrado(s)");
+            if (!listaGrupos.isEmpty()) {
+                sb.append(" (").append(listaGrupos).append(")");
+            }
+            sb.append(".\n");
+        } catch (Exception ignored) {}
+
+        contexto.add(sb.toString().trim());
     }
 
     private boolean requiereInternet(String pregunta) {

@@ -31,12 +31,11 @@ public class SAsistenteChat {
     private static final Pattern CORREO = Pattern.compile("(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
     private static final Pattern NUMERO_TARJETA = Pattern.compile("(?<!\\d)(?:\\d[ -]?){13,19}(?!\\d)");
     private static final String INSTRUCCIONES = """
-            Eres el asistente de ayuda de FinApp. Responde siempre en español, de forma directa, limpia y breve.
-            Entrega la respuesta clara sin saludos ceremoniosos, sin introducciones vacías y sin rodeos innecesarios.
-            Usa la documentación y fuentes públicas del contexto para afirmar hechos con certeza.
-            No inventes enlaces, referencias ni instrucciones operativas.
-            No consultes, infieras, solicites ni reveles datos privados de cuentas; no realices operaciones.
-            No afirmes que accediste a registros personales ni que hiciste cambios en FinApp.
+            Eres el asistente de ayuda de FinApp. Responde siempre en español, de forma muy corta, directa y rápida (máximo 1 a 3 oraciones).
+            Si te saludan, responde de forma breve y cordial (por ejemplo: "¿En qué te puedo ayudar con FinApp?").
+            No des explicaciones largas, rodeos ni listas innecesarias.
+            No menciones fuentes, citas ni enlaces en la respuesta.
+            No consultes, infieras ni solicites datos privados de cuentas; no realices operaciones.
             """;
 
     private final SDocumentacionFinApp documentacion;
@@ -133,8 +132,7 @@ public class SAsistenteChat {
         }
 
         List<Fragmento> fragmentos = documentacion.buscar(peticion.mensaje());
-        boolean buscarWeb = requiereInternet(peticion.mensaje())
-                || fragmentos.stream().noneMatch(fragmento -> fragmento.puntuacion() >= 0.5);
+        boolean buscarWeb = requiereInternet(peticion.mensaje());
         List<FuenteChat> fuentes = new ArrayList<>();
         List<String> contexto = new ArrayList<>();
         agregarDocumentacion(fragmentos, fuentes, contexto);
@@ -189,9 +187,12 @@ public class SAsistenteChat {
     }
 
     private boolean requiereInternet(String pregunta) {
-        String texto = pregunta.toLowerCase();
-        return List.of("internet", "web", "actual", "hoy", "reciente", "noticia", "busca", "buscar",
-                        "precio", "clima", "cotización", "cotizacion", "en línea", "en linea")
+        String texto = pregunta.toLowerCase().trim();
+        if (texto.matches("^(hola|buenas|buen[oa]s?\\s+(d[ií]as|tardes|noches)|hey|saludos).*")) {
+            return false;
+        }
+        return List.of("internet", "noticia", "busca en internet", "buscar en internet",
+                        "precio actual", "clima", "cotización", "cotizacion")
                 .stream().anyMatch(texto::contains);
     }
 
@@ -287,7 +288,7 @@ public class SAsistenteChat {
         solicitud.put("model", modeloNvidia);
         solicitud.put("messages", mensajes);
         solicitud.put("temperature", 0.2);
-        solicitud.put("max_tokens", 1000);
+        solicitud.put("max_tokens", 250);
         solicitud.put("stream", false);
 
         try {

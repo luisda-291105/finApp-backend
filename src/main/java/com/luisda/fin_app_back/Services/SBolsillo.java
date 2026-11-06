@@ -38,6 +38,12 @@ public class SBolsillo {
         List<MBolsillo> lista = bolsillos.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(contabilidad.getIdContabilidad());
         boolean actualizados = false;
         for (MBolsillo bolsillo : lista) {
+            // En instalaciones antiguas esta columna quedó en NULL antes de
+            // declararse obligatoria; normalízala antes de persistir reparaciones.
+            if (bolsillo.getMontoObjetivo() == null) {
+                bolsillo.setMontoObjetivo(BigDecimal.ZERO);
+                actualizados = true;
+            }
             if (bolsillo.getUsuario() == null) {
                 bolsillo.setUsuario(contabilidad.getUsuario());
                 actualizados = true;
@@ -79,7 +85,7 @@ public class SBolsillo {
         }
         bolsillo.setNombre(solicitud.nombre().trim());
         if (solicitud.estado() != null) bolsillo.setEstado(solicitud.estado());
-        if (solicitud.montoObjetivo() != null) bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
+        bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
         return bolsillos.save(bolsillo);
     }
 

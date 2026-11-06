@@ -62,7 +62,8 @@ public class SAsistenteChat {
     private final IMuestraRepository muestrasRepo;
     private final ITarjeta tarjetasRepo;
     private final IGrupo gruposRepo;
-    private final RestClient clienteHttp;
+    private final RestClient.Builder restClientBuilder;
+    private volatile RestClient clienteHttp;
     private final String claveNvidia;
     private final String modeloNvidia;
     private final String urlNvidia;
@@ -119,11 +120,21 @@ public class SAsistenteChat {
         this.claveTavily = apiKeyTavily;
         this.urlTavily = endpointTavily;
 
-        var clienteJava = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
-        var fabrica = new JdkClientHttpRequestFactory(clienteJava);
-        fabrica.setReadTimeout(Duration.ofSeconds(35));
-        var builder = restClientBuilder != null ? restClientBuilder : RestClient.builder();
-        this.clienteHttp = builder.requestFactory(fabrica).build();
+        this.restClientBuilder = restClientBuilder != null ? restClientBuilder : RestClient.builder();
+    }
+
+    private RestClient clienteHttp() {
+        RestClient cliente = clienteHttp;
+        if (cliente != null) return cliente;
+        synchronized (this) {
+            if (clienteHttp == null) {
+                var clienteJava = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
+                var fabrica = new JdkClientHttpRequestFactory(clienteJava);
+                fabrica.setReadTimeout(Duration.ofSeconds(90));
+                clienteHttp = restClientBuilder.requestFactory(fabrica).build();
+            }
+            return clienteHttp;
+        }
     }
 
     private static Map<String, String> cargarArchivoDotEnv() {
@@ -372,7 +383,7 @@ public class SAsistenteChat {
         solicitud.put("include_answer", false);
         solicitud.put("include_raw_content", false);
 
-        Map<?, ?> resultado = clienteHttp.post()
+        Map<?, ?> resultado = clienteHttp().post()
                 .uri(urlTavily)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
@@ -447,7 +458,7 @@ public class SAsistenteChat {
         solicitud.put("stream", false);
 
         try {
-            Map<?, ?> resultado = clienteHttp.post()
+            Map<?, ?> resultado = clienteHttp().post()
                     .uri(urlNvidia)
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")

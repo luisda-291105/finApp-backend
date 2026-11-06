@@ -6,6 +6,7 @@ import com.luisda.fin_app_back.Model.MContabilidad;
 import com.luisda.fin_app_back.Repository.IContabilidad;
 import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IUsuario;
+import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,11 +19,13 @@ import java.util.UUID;
 public class SBolsillo {
     private final IBolsillo bolsillos;
     private final IContabilidad contabilidades;
+    private final IMovimientoContable movimientos;
     private final IUsuario usuarios;
 
-    public SBolsillo(IBolsillo bolsillos, IContabilidad contabilidades, IUsuario usuarios) {
+    public SBolsillo(IBolsillo bolsillos, IContabilidad contabilidades, IMovimientoContable movimientos, IUsuario usuarios) {
         this.bolsillos = bolsillos;
         this.contabilidades = contabilidades;
+        this.movimientos = movimientos;
         this.usuarios = usuarios;
     }
 
@@ -52,7 +55,11 @@ public class SBolsillo {
     }
 
     public void eliminar(String idUsuario, String idBolsillo) {
-        bolsillos.delete(propio(idUsuario, idBolsillo));
+        MBolsillo bolsillo = propio(idUsuario, idBolsillo);
+        if (movimientos.existsByBolsillo_IdBolsillo(bolsillo.getIdBolsillo())) {
+            throw new IllegalStateException("No puedes eliminar un bolsillo que ya tiene movimientos.");
+        }
+        bolsillos.delete(bolsillo);
     }
 
     private MBolsillo propio(String idUsuario, String idBolsillo) {

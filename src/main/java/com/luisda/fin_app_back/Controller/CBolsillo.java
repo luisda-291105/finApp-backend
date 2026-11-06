@@ -64,6 +64,8 @@ public class CBolsillo {
             return ResponseEntity.ok(RespuestaModalDTO.exito("Bolsillo eliminado.", null));
         } catch (NoSuchElementException error) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(RespuestaModalDTO.error(error.getMessage(), null));
         }
     }
 

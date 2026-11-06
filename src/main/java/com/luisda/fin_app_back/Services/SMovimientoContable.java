@@ -91,6 +91,7 @@ public class SMovimientoContable {
         MMovimientoContable movimiento = new MMovimientoContable();
         movimiento.setIdMovimiento(UUID.randomUUID().toString());
         movimiento.setBolsillo(bolsillo);
+        movimiento.setTipo(bolsillo.getTipo());
         movimiento.setFecha(solicitud.fecha());
         movimiento.setMonto(solicitud.monto());
         movimiento.setCategoria(solicitud.categoria().trim());
@@ -114,12 +115,12 @@ public class SMovimientoContable {
 
     private MBolsillo bolsilloPropio(String idUsuario, String idBolsillo) {
         if (idBolsillo == null || idBolsillo.isBlank()) throw new IllegalArgumentException("Selecciona un bolsillo.");
-        return bolsillos.findByIdBolsilloAndUsuario_IdUsuario(idBolsillo, idUsuario)
+        return bolsillos.findByIdBolsilloAndIdUsuario(idBolsillo, idUsuario)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el bolsillo seleccionado."));
     }
 
     private List<MBolsillo> bolsillosPropios(String idUsuario) {
-        return bolsillos.findByUsuario_IdUsuarioOrderByFechaCreacionDesc(idUsuario);
+        return bolsillos.findByIdUsuarioOrderByFechaCreacionDesc(idUsuario);
     }
 
     private void validarUsuario(String idUsuario) {

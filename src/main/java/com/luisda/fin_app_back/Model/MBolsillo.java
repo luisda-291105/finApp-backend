@@ -27,10 +27,8 @@ public class MBolsillo {
     @JsonIgnore
     private MContabilidad contabilidad;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_usuario")
-    @JsonIgnore
-    private MUsuario usuario;
+    @Column(name = "id_usuario", length = 36)
+    private String idUsuario;
 
     @Column(length = 100, nullable = false)
     private String nombre;
@@ -102,10 +100,9 @@ public class MBolsillo {
 
     public void setContabilidad(MContabilidad contabilidad) { this.contabilidad = contabilidad; }
 
-    @JsonIgnore
-    public MUsuario getUsuario() { return usuario; }
+    public String getIdUsuario() { return idUsuario; }
 
-    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
+    public void setIdUsuario(String idUsuario) { this.idUsuario = idUsuario; }
 
     public String getIdContabilidad() { return contabilidad == null ? null : contabilidad.getIdContabilidad(); }
 

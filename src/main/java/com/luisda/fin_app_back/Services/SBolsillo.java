@@ -44,8 +44,8 @@ public class SBolsillo {
                 bolsillo.setMontoObjetivo(BigDecimal.ZERO);
                 actualizados = true;
             }
-            if (bolsillo.getUsuario() == null) {
-                bolsillo.setUsuario(contabilidad.getUsuario());
+            if (bolsillo.getIdUsuario() == null || bolsillo.getIdUsuario().isBlank()) {
+                bolsillo.setIdUsuario(idUsuario);
                 actualizados = true;
             }
             if (bolsillo.getTipo() == null || bolsillo.getTipo().isBlank()) {
@@ -63,7 +63,7 @@ public class SBolsillo {
         MBolsillo bolsillo = new MBolsillo();
         bolsillo.setIdBolsillo(UUID.randomUUID().toString());
         bolsillo.setContabilidad(contabilidad);
-        bolsillo.setUsuario(contabilidad.getUsuario());
+        bolsillo.setIdUsuario(idUsuario);
         bolsillo.setNombre(solicitud.nombre().trim());
         bolsillo.setTipo(solicitud.tipo());
         bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
@@ -99,7 +99,7 @@ public class SBolsillo {
 
     private MBolsillo propio(String idUsuario, String idBolsillo) {
         validarUsuario(idUsuario);
-        return bolsillos.findByIdBolsilloAndUsuario_IdUsuario(idBolsillo, idUsuario)
+        return bolsillos.findByIdBolsilloAndIdUsuario(idBolsillo, idUsuario)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el bolsillo."));
     }
 

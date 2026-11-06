@@ -1,120 +1,95 @@
 package com.luisda.fin_app_back.Services;
 
+import com.luisda.fin_app_back.DTO.TarjetaSolicitudDTO;
 import com.luisda.fin_app_back.Model.MTarjeta;
 import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-/**
- * @uso               Gestiona las operaciones disponibles de usuarios
- * @capa              Servicio
- * @responsabilidades CRUD, búsquedas por contacto y nombre, y unicidad del contacto
- * @datos             Recibe y devuelve entidades MUsuario
- * @dependencias      UsuarioRepository, SValidadorOperaciones
- * @usadoPor          Capas consumidoras de servicios
- */
+/** Gestiona el CRUD de tarjetas propias y enmascara el PAN antes de persistir. */
 @Service
 public class STarjeta {
-    private final ITarjeta ITarjeta;
-    private final IUsuario IUsuario;
+    private final ITarjeta tarjetas;
+    private final IUsuario usuarios;
 
-    public STarjeta(ITarjeta ITarjeta, IUsuario IUsuario) {
-        this.ITarjeta = ITarjeta;
-        this.IUsuario = IUsuario;
+    public STarjeta(ITarjeta tarjetas, IUsuario usuarios) {
+        this.tarjetas = tarjetas;
+        this.usuarios = usuarios;
     }
 
-    /** Agrega un usuario  */
-    public MTarjeta crear(MTarjeta MTarjeta) throws Exception{
-        try {
-            if (MTarjeta.getUsuario() == null || MTarjeta.getUsuario().getIdUsuario() == null) {
-                throw new Exception("La tarjeta debe estar asociada a un usuario");
+    public List<MTarjeta> buscarPorUsuario(String idUsuario) {
+        return tarjetas.findByUsuario_IdUsuario(idUsuario);
+    }
+
+    public Optional<MTarjeta> buscarPorIdPropio(String idTarjeta, String idUsuario) {
+        return tarjetas.findByIdTarjetaAndUsuario_IdUsuario(idTarjeta, idUsuario);
+    }
+
+    public MTarjeta crear(String idUsuario, TarjetaSolicitudDTO solicitud) {
+        validar(solicitud, true);
+        var usuario = usuarios.findById(idUsuario)
+                .orElseThrow(() -> new IllegalStateException("La sesión no corresponde a un usuario activo."));
+        MTarjeta tarjeta = new MTarjeta();
+        tarjeta.setIdTarjeta(UUID.randomUUID().toString());
+        tarjeta.setUsuario(usuario);
+        tarjeta.setTitular(solicitud.titular().trim());
+        tarjeta.setEntidad(solicitud.entidad().trim());
+        tarjeta.setExpiracion(solicitud.expiracion());
+        tarjeta.setNumero(enmascararPan(solicitud.numero()));
+        tarjeta.setCvv(""); // Compatibilidad con bases antiguas: solo se escribe el valor vacío, nunca un CVV.
+        return tarjetas.save(tarjeta);
+    }
+
+    public MTarjeta actualizar(String idTarjeta, String idUsuario, TarjetaSolicitudDTO solicitud) {
+        validar(solicitud, false);
+        MTarjeta existente = buscarPorIdPropio(idTarjeta, idUsuario)
+                .orElseThrow(() -> new IllegalStateException("No se encontró la tarjeta."));
+        existente.setTitular(solicitud.titular().trim());
+        existente.setEntidad(solicitud.entidad().trim());
+        existente.setExpiracion(solicitud.expiracion());
+        existente.setNumero(solicitud.numero() == null || solicitud.numero().isBlank()
+                ? enmascararPan(existente.getNumero())
+                : enmascararPan(solicitud.numero()));
+        existente.setCvv("");
+        return tarjetas.save(existente);
+    }
+
+    public boolean eliminarPropia(String idTarjeta, String idUsuario) {
+        Optional<MTarjeta> existente = buscarPorIdPropio(idTarjeta, idUsuario);
+        if (existente.isEmpty()) return false;
+        tarjetas.delete(existente.get());
+        return true;
+    }
+
+    /** Devuelve solo una máscara con los últimos cuatro dígitos del valor recibido. */
+    public static String enmascararPan(String numero) {
+        String digitos = numero == null ? "" : numero.replaceAll("\\D", "");
+        String ultimos = digitos.length() > 4 ? digitos.substring(digitos.length() - 4) : digitos;
+        return "**** " + ultimos;
+    }
+
+    private void validar(TarjetaSolicitudDTO solicitud, boolean requierePan) {
+        if (solicitud == null || solicitud.titular() == null || solicitud.titular().isBlank()) {
+            throw new IllegalArgumentException("El titular es obligatorio.");
+        }
+        if (solicitud.titular().trim().length() > 100) throw new IllegalArgumentException("El titular no puede superar 100 caracteres.");
+        if (solicitud.entidad() == null || solicitud.entidad().isBlank()) throw new IllegalArgumentException("La entidad financiera es obligatoria.");
+        if (solicitud.entidad().trim().length() > 100) throw new IllegalArgumentException("La entidad no puede superar 100 caracteres.");
+        if (solicitud.expiracion() == null) throw new IllegalArgumentException("El vencimiento es obligatorio.");
+        LocalDate mesActual = LocalDate.now().withDayOfMonth(1);
+        if (solicitud.expiracion().withDayOfMonth(1).isBefore(mesActual)) {
+            throw new IllegalArgumentException("La fecha de vencimiento debe ser el mes actual o uno futuro.");
+        }
+        String pan = solicitud.numero();
+        if (requierePan || (pan != null && !pan.isBlank())) {
+            if (pan == null || !pan.matches("\\d{14,19}")) {
+                throw new IllegalArgumentException("El número debe contener solo dígitos (14 a 19).");
             }
-            MTarjeta.setUsuario(this.IUsuario.findById(MTarjeta.getUsuario().getIdUsuario())
-                    .orElseThrow(() -> new Exception("El usuario asociado no existe")));
-            return this.ITarjeta.save(MTarjeta);
-        }catch (Exception error) {
-            throw new Exception(error.getMessage());
         }
     }
-
-    /** Consulta todos los usuarios. */
-    public List<MTarjeta> buscarTodos() throws Exception{
-        try {
-            return this.ITarjeta.findAll();
-        }catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
-    public List<MTarjeta> buscarPorUsuario(String idUsuario) throws Exception {
-        return this.ITarjeta.findByUsuario_IdUsuario(idUsuario);
-    }
-
-    /** Consulta por titular. */
-    public List<MTarjeta> buscarPorTitular(String titular) throws Exception{
-        try {
-            return this.ITarjeta.buscarPorTitular(titular);
-        }catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
-    /** Consulta por entidad. */
-    public List<MTarjeta> buscarPorEntidad(String entidad) throws Exception {
-        try {
-            return this.ITarjeta.buscarPorEntidad(entidad);
-        } catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
-    /** Consulta por id. */
-    public Optional<MTarjeta> buscarPorId(String idTarjeta) throws Exception {
-        try {
-            return this.ITarjeta.findById(idTarjeta);
-        } catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
-    /** eliminar por id. */
-    public Boolean eliminar(String idTarjeta) throws Exception {
-        try {
-            Optional<MTarjeta> tarjetaEncontrada = this.ITarjeta.findById(idTarjeta);
-            if (tarjetaEncontrada.isPresent()) {
-                this.ITarjeta.deleteById(idTarjeta);
-                return true;
-            }else {
-                throw new Exception("No se puede eliminar porque la tarjeta no esta registrado");
-            }
-        } catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
-    /** modificar por id. */
-    public MTarjeta modificar(MTarjeta MTarjeta , String idTarjeta) throws Exception {
-        try {
-            Optional<MTarjeta> tarjetaEncontrada = this.ITarjeta.findById(idTarjeta);
-            if (tarjetaEncontrada.isPresent()) {
-                MTarjeta tarjetaNueva = tarjetaEncontrada.get();
-                tarjetaNueva.setIdTarjeta(idTarjeta);
-                tarjetaNueva.setTitular(MTarjeta.getTitular());
-                tarjetaNueva.setNumero(MTarjeta.getNumero());
-                tarjetaNueva.setExpiracion(MTarjeta.getExpiracion());
-                tarjetaNueva.setCvv(MTarjeta.getCvv());
-                tarjetaNueva.setEntidad(MTarjeta.getEntidad());
-                return this.ITarjeta.save(tarjetaNueva);
-
-            }else {
-                throw new Exception("No se puede modificar porque la tarjeta no esta registrado");
-            }
-        } catch (Exception error) {
-            throw new Exception(error.getMessage());
-        }
-    }
-
 }

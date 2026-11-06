@@ -8,7 +8,7 @@ El dashboard incluye Inicio, Transacciones, Tarjetas, Bolsillos, Contactos, Corr
 
 ## Tarjetas
 
-La sección Tarjetas permite registrar y consultar tarjetas del usuario activo. El formulario solicita titular, número de tarjeta, vencimiento MM/AA, CVV y entidad financiera. El número debe tener entre 14 y 19 dígitos y el CVV exactamente 3. El vencimiento debe ser el mes actual o futuro. El detalle visual enmascara el número completo y no muestra el CVV.
+La sección Tarjetas permite crear, consultar, editar y eliminar tarjetas del usuario activo. Solicita titular, número, vencimiento MM/AA y entidad financiera; no solicita ni almacena CVV. El número debe tener entre 14 y 19 dígitos y el vencimiento debe ser el mes actual o futuro. El backend conserva solo los últimos cuatro dígitos enmascarados; el detalle nunca muestra el PAN completo.
 
 ## Contactos y bolsillos
 

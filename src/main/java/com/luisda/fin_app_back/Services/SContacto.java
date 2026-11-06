@@ -1,130 +1,72 @@
 package com.luisda.fin_app_back.Services;
 
+import com.luisda.fin_app_back.DTO.ContactoSolicitudDTO;
 import com.luisda.fin_app_back.Model.MContacto;
-
 import com.luisda.fin_app_back.Repository.IContacto;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-/**
- * @uso               Gestiona las operaciones disponibles de contactos
- * @capa              Servicio
- * @responsabilidades CRUD y consultas por usuario, nombre, teléfono y correo
- * @datos             Recibe y devuelve entidades MContacto
- * @dependencias      ContactoRepository, SValidadorOperaciones
- * @usadoPor          Capas consumidoras de servicios
- */
-
+/** Operaciones de contactos limitadas por propietario y validadas antes de persistir. */
 @Service
-public class SContacto  {
+public class SContacto {
+    private final IContacto contactos;
+    private final IUsuario usuarios;
 
-    private  final  IContacto IContacto;
-    private final IUsuario IUsuario;
-
-    public SContacto(IContacto iContacto, IUsuario iUsuario) {
-        IContacto = iContacto;
-        IUsuario = iUsuario;
+    public SContacto(IContacto contactos, IUsuario usuarios) {
+        this.contactos = contactos;
+        this.usuarios = usuarios;
     }
 
-    /** Agrega un contacto. */
-    public  MContacto crear (MContacto MContacto) throws Exception{
-        try {
-            if (MContacto.getUsuario() == null || MContacto.getUsuario().getIdUsuario() == null) {
-                throw new Exception("El contacto debe estar asociado a un usuario");
-            }
-            MContacto.setUsuario(this.IUsuario.findById(MContacto.getUsuario().getIdUsuario())
-                    .orElseThrow(() -> new Exception("El usuario asociado no existe")));
-            return this.IContacto.save(MContacto);
-        }catch (Exception error){
-            throw new Exception(error.getMessage());
+    public List<MContacto> buscarPorUsuario(String idUsuario) {
+        return contactos.findByUsuario_IdUsuario(idUsuario);
+    }
+
+    public Optional<MContacto> buscarPorIdPropio(String idContacto, String idUsuario) {
+        return contactos.findByIdContactoAndUsuario_IdUsuario(idContacto, idUsuario);
+    }
+
+    public MContacto crear(String idUsuario, ContactoSolicitudDTO solicitud) {
+        validar(solicitud);
+        var usuario = usuarios.findById(idUsuario).orElseThrow(() -> new IllegalStateException("La sesión no corresponde a un usuario activo."));
+        MContacto contacto = new MContacto();
+        contacto.setIdContacto(UUID.randomUUID().toString());
+        contacto.setUsuario(usuario);
+        asignarCampos(contacto, solicitud);
+        return contactos.save(contacto);
+    }
+
+    public MContacto actualizar(String idContacto, String idUsuario, ContactoSolicitudDTO solicitud) {
+        validar(solicitud);
+        MContacto existente = buscarPorIdPropio(idContacto, idUsuario)
+                .orElseThrow(() -> new IllegalStateException("No se encontró el contacto."));
+        asignarCampos(existente, solicitud);
+        return contactos.save(existente);
+    }
+
+    public boolean eliminarPropio(String idContacto, String idUsuario) {
+        Optional<MContacto> existente = buscarPorIdPropio(idContacto, idUsuario);
+        if (existente.isEmpty()) return false;
+        contactos.delete(existente.get());
+        return true;
+    }
+
+    private void validar(ContactoSolicitudDTO solicitud) {
+        if (solicitud == null || solicitud.nombre() == null || solicitud.nombre().isBlank()) {
+            throw new IllegalArgumentException("El nombre es obligatorio.");
         }
+        if (solicitud.nombre().trim().length() > 100) throw new IllegalArgumentException("El nombre no puede superar 100 caracteres.");
+        if (solicitud.telefono() == null || solicitud.telefono().isBlank()) throw new IllegalArgumentException("El teléfono es obligatorio.");
+        if (solicitud.telefono().trim().length() > 20) throw new IllegalArgumentException("El teléfono no puede superar 20 caracteres.");
+        if (solicitud.notas() != null && solicitud.notas().length() > 500) throw new IllegalArgumentException("Las notas no pueden superar 500 caracteres.");
     }
 
-    /** Consulta todos los contactos. */
-    public List<MContacto> buscarTodos()throws Exception{
-        try {
-            return this.IContacto.findAll();
-        } catch (Exception error) {
-            throw new RuntimeException(error.getMessage());
-        }
+    private void asignarCampos(MContacto contacto, ContactoSolicitudDTO solicitud) {
+        contacto.setNombre(solicitud.nombre().trim());
+        contacto.setTelefono(solicitud.telefono().trim());
+        contacto.setNotas(solicitud.notas() == null || solicitud.notas().isBlank() ? null : solicitud.notas().trim());
     }
-
-    public List<MContacto> buscarPorUsuario(String idUsuario) throws Exception {
-        return this.IContacto.findByUsuario_IdUsuario(idUsuario);
-    }
-
-    /** Consulta un contacto por identificador. */
-    public Optional<MContacto> buscarPorId(String idContacto)throws Exception{
-        try {
-            return  this.IContacto.findById(idContacto);
-        }catch (Exception error) {
-            throw new RuntimeException(error.getMessage());
-        }
-    }
-
-    /** Consulta un contacto por telefono*/
-    public List<MContacto> buscarPorTelefono(String telefono) throws Exception{
-        try {
-            return this.IContacto.buscarPorTelefono(telefono);
-        }catch (Exception error) {
-            throw new RuntimeException(error.getMessage());
-        }
-    }
-
-    /** Consulta un contacto por nota*/
-    public List<MContacto> buscarPorNota(String nota) throws Exception{
-        try {
-            return this.IContacto.buscarPorNota(nota);
-        }catch (Exception error) {
-            throw new RuntimeException(error.getMessage());
-        }
-    }
-
-    /** Consulta un contacto por nombre */
-    public List<MContacto> buscarPorNombre(String nombreContacto)throws Exception{
-        try {
-            return  this.IContacto.buscarPorNombre(nombreContacto);
-        }catch (Exception error) {
-            throw new RuntimeException(error.getMessage());
-        }
-    }
-
-    /** Elimina el usuario identificado */
-    public Boolean eliminar(String idContacto) throws  Exception{
-        try {
-            Optional<MContacto> contactoEncontrado = this.IContacto.findById(idContacto);
-            if (contactoEncontrado.isPresent()){
-                this.IContacto.deleteById(idContacto);
-                return true;
-            }else {
-                throw new Exception("No se puede eliminar porque contacto no registrado");
-            }
-        }catch (Exception error) {
-            throw new RuntimeException(error.getMessage());
-        }
-    }
-
-    /** Actualiza un usuario existente y comprueba que exista */
-     public MContacto modificar(MContacto MContacto ,String idContacto) throws Exception{
-         try {
-             Optional<MContacto> contactoEncontrado = this.IContacto.findById(idContacto);
-             if (contactoEncontrado.isPresent()){
-                 MContacto contactoNuevo = contactoEncontrado.get();
-                 contactoNuevo.setIdContacto(idContacto);
-                 contactoNuevo.setNombre(MContacto.getNombre());
-
-                 contactoNuevo.setTelefono(MContacto.getTelefono());
-                 contactoNuevo.setNotas(MContacto.getNotas());
-                 return this.IContacto.save(contactoNuevo);
-             }else {
-                 throw new Exception("No se puede modificar porque contacto no registrado");
-             }
-         }catch (Exception error) {
-             throw new RuntimeException(error.getMessage());
-         }
-     }
-
 }

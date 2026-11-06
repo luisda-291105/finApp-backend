@@ -9,6 +9,7 @@ import com.luisda.fin_app_back.Repository.IUsuario;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -31,7 +32,7 @@ public class SBolsillo {
 
     public List<MBolsillo> listar(String idUsuario) {
         MContabilidad contabilidad = obtenerContabilidad(idUsuario);
-        return bolsillos.findByIdContabilidadOrderByFechaCreacionDesc(contabilidad.getIdContabilidad());
+        return bolsillos.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(contabilidad.getIdContabilidad());
     }
 
     public MBolsillo crear(String idUsuario, BolsilloSolicitudDTO solicitud) {
@@ -39,8 +40,9 @@ public class SBolsillo {
         MContabilidad contabilidad = obtenerContabilidad(idUsuario);
         MBolsillo bolsillo = new MBolsillo();
         bolsillo.setIdBolsillo(UUID.randomUUID().toString());
-        bolsillo.setIdContabilidad(contabilidad.getIdContabilidad());
+        bolsillo.setContabilidad(contabilidad);
         bolsillo.setNombre(solicitud.nombre().trim());
+        bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
         bolsillo.setEstado(true);
         bolsillo.setFechaCreacion(LocalDate.now());
         return bolsillos.save(bolsillo);
@@ -51,6 +53,7 @@ public class SBolsillo {
         MBolsillo bolsillo = propio(idUsuario, idBolsillo);
         bolsillo.setNombre(solicitud.nombre().trim());
         if (solicitud.estado() != null) bolsillo.setEstado(solicitud.estado());
+        if (solicitud.montoObjetivo() != null) bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
         return bolsillos.save(bolsillo);
     }
 
@@ -64,16 +67,16 @@ public class SBolsillo {
 
     private MBolsillo propio(String idUsuario, String idBolsillo) {
         MContabilidad contabilidad = obtenerContabilidad(idUsuario);
-        return bolsillos.findByIdBolsilloAndIdContabilidad(idBolsillo, contabilidad.getIdContabilidad())
+        return bolsillos.findByIdBolsilloAndContabilidad_IdContabilidad(idBolsillo, contabilidad.getIdContabilidad())
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el bolsillo."));
     }
 
     private MContabilidad obtenerContabilidad(String idUsuario) {
         validarUsuario(idUsuario);
-        return contabilidades.findByIdUsuario(idUsuario).orElseGet(() -> {
+        return contabilidades.findByUsuario_IdUsuario(idUsuario).orElseGet(() -> {
             MContabilidad nueva = new MContabilidad();
             nueva.setIdContabilidad(UUID.randomUUID().toString());
-            nueva.setIdUsuario(idUsuario);
+            nueva.setUsuario(usuarios.findById(idUsuario).orElseThrow(() -> new NoSuchElementException("No se encontró el usuario activo.")));
             nueva.setNombre("Contabilidad personal");
             nueva.setValor(0);
             nueva.setEstado(true);
@@ -94,6 +97,10 @@ public class SBolsillo {
         }
         if (solicitud.nombre().trim().length() > 100) {
             throw new IllegalArgumentException("El nombre del bolsillo no puede superar 100 caracteres.");
+        }
+        BigDecimal objetivo = solicitud.montoObjetivo();
+        if (objetivo != null && (objetivo.compareTo(BigDecimal.ZERO) < 0 || objetivo.scale() > 2 || objetivo.precision() > 19)) {
+            throw new IllegalArgumentException("El monto objetivo no puede ser negativo ni superar dos decimales.");
         }
     }
 }

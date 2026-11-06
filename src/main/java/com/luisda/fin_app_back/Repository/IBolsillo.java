@@ -9,6 +9,6 @@ import java.util.Optional;
 
 @Repository
 public interface IBolsillo extends JpaRepository<MBolsillo, String> {
-    List<MBolsillo> findByIdContabilidadOrderByFechaCreacionDesc(String idContabilidad);
-    Optional<MBolsillo> findByIdBolsilloAndIdContabilidad(String idBolsillo, String idContabilidad);
+    List<MBolsillo> findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(String idContabilidad);
+    Optional<MBolsillo> findByIdBolsilloAndContabilidad_IdContabilidad(String idBolsillo, String idContabilidad);
 }

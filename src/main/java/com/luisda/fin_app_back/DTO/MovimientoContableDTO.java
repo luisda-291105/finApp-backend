@@ -6,6 +6,7 @@ import java.time.LocalDate;
 public record MovimientoContableDTO(
         String idMovimiento,
         String idBolsillo,
+        String nombreBolsillo,
         LocalDate fecha,
         BigDecimal monto,
         String tipo,

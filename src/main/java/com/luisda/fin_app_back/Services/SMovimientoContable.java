@@ -2,6 +2,8 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.DTO.MovimientoContableDTO;
 import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
+import com.luisda.fin_app_back.DTO.ResumenMovimientoBolsilloDTO;
+import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IContabilidad;
@@ -14,6 +16,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
@@ -37,15 +41,48 @@ public class SMovimientoContable {
     @Transactional(readOnly = true)
     public List<MovimientoContableDTO> listar(String idUsuario, String idBolsillo, String tipo) {
         validarUsuario(idUsuario);
-        var bolsillo = bolsilloPropio(idUsuario, idBolsillo);
         String filtro = tipo == null ? "TODOS" : tipo.trim().toUpperCase(Locale.ROOT);
         if (!filtro.equals("TODOS") && !TIPOS.contains(filtro)) {
             throw new IllegalArgumentException("El filtro debe ser Ingreso, Gasto, Ahorro o Todos.");
         }
+        List<String> idsBolsillo = idBolsillo == null || idBolsillo.isBlank()
+                ? bolsillosPropios(idUsuario).stream().map(MBolsillo::getIdBolsillo).toList()
+                : List.of(bolsilloPropio(idUsuario, idBolsillo).getIdBolsillo());
+        if (idsBolsillo.isEmpty()) return List.of();
         List<MMovimientoContable> encontrados = filtro.equals("TODOS")
-                ? movimientos.findByBolsillo_IdBolsilloOrderByFechaDesc(bolsillo.getIdBolsillo())
-                : movimientos.findByBolsillo_IdBolsilloAndTipoIgnoreCaseOrderByFechaDesc(bolsillo.getIdBolsillo(), filtro);
+                ? movimientos.findByBolsillo_IdBolsilloInOrderByFechaDesc(idsBolsillo)
+                : movimientos.findByBolsillo_IdBolsilloInAndTipoIgnoreCaseOrderByFechaDesc(idsBolsillo, filtro);
         return encontrados.stream().map(SMovimientoContable::dto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ResumenMovimientoBolsilloDTO> resumir(String idUsuario) {
+        validarUsuario(idUsuario);
+        List<MBolsillo> propios = bolsillosPropios(idUsuario);
+        if (propios.isEmpty()) return List.of();
+        Map<String, BigDecimal[]> totales = new LinkedHashMap<>();
+        Map<String, Long> cantidades = new LinkedHashMap<>();
+        propios.forEach(bolsillo -> {
+            totales.put(bolsillo.getIdBolsillo(), new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+            cantidades.put(bolsillo.getIdBolsillo(), 0L);
+        });
+        for (Object[] fila : movimientos.resumirPorBolsillos(List.copyOf(totales.keySet()))) {
+            String idBolsillo = (String) fila[0];
+            String tipo = String.valueOf(fila[1]).toUpperCase(Locale.ROOT);
+            long cantidad = ((Number) fila[2]).longValue();
+            BigDecimal monto = fila[3] == null ? BigDecimal.ZERO : new BigDecimal(fila[3].toString());
+            cantidades.put(idBolsillo, cantidad);
+            BigDecimal[] bolsilloTotal = totales.get(idBolsillo);
+            if ("INGRESO".equals(tipo)) bolsilloTotal[0] = monto;
+            if ("GASTO".equals(tipo)) bolsilloTotal[1] = monto;
+            if ("AHORRO".equals(tipo)) bolsilloTotal[2] = monto;
+        }
+        return propios.stream().map(bolsillo -> {
+            BigDecimal[] montos = totales.get(bolsillo.getIdBolsillo());
+            BigDecimal saldo = montos[0].subtract(montos[1]).subtract(montos[2]);
+            return new ResumenMovimientoBolsilloDTO(bolsillo.getIdBolsillo(), bolsillo.getNombre(),
+                    cantidades.get(bolsillo.getIdBolsillo()), montos[0], montos[1], montos[2], saldo);
+        }).toList();
     }
 
     @Transactional
@@ -65,13 +102,19 @@ public class SMovimientoContable {
         return dto(movimientos.save(movimiento));
     }
 
-    private com.luisda.fin_app_back.Model.MBolsillo bolsilloPropio(String idUsuario, String idBolsillo) {
+    private MBolsillo bolsilloPropio(String idUsuario, String idBolsillo) {
         if (idBolsillo == null || idBolsillo.isBlank()) throw new IllegalArgumentException("Selecciona un bolsillo.");
-        String idContabilidad = contabilidades.findByIdUsuario(idUsuario)
+        String idContabilidad = contabilidades.findByUsuario_IdUsuario(idUsuario)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró la contabilidad del usuario."))
                 .getIdContabilidad();
-        return bolsillos.findByIdBolsilloAndIdContabilidad(idBolsillo, idContabilidad)
+        return bolsillos.findByIdBolsilloAndContabilidad_IdContabilidad(idBolsillo, idContabilidad)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el bolsillo seleccionado."));
+    }
+
+    private List<MBolsillo> bolsillosPropios(String idUsuario) {
+        return contabilidades.findByUsuario_IdUsuario(idUsuario)
+                .map(contabilidad -> bolsillos.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(contabilidad.getIdContabilidad()))
+                .orElseGet(List::of);
     }
 
     private void validarUsuario(String idUsuario) {
@@ -103,7 +146,7 @@ public class SMovimientoContable {
     }
 
     private static MovimientoContableDTO dto(MMovimientoContable movimiento) {
-        return new MovimientoContableDTO(movimiento.getIdMovimiento(), movimiento.getBolsillo().getIdBolsillo(),
+        return new MovimientoContableDTO(movimiento.getIdMovimiento(), movimiento.getBolsillo().getIdBolsillo(), movimiento.getBolsillo().getNombre(),
                 movimiento.getFecha(), movimiento.getMonto(), movimiento.getTipo(), movimiento.getCategoria(), movimiento.getConcepto());
     }
 }

@@ -20,9 +20,9 @@ public class MContabilidad {
     @Column(length = 36, nullable = false)
     private String idContabilidad;
 
-    /** Usuario propietario de esta contabilidad personal. */
-    @Column(length = 36, unique = true)
-    private String idUsuario;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_usuario", unique = true)
+    private MUsuario usuario;
 
 
     @Column(length = 100, nullable = false)
@@ -36,14 +36,6 @@ public class MContabilidad {
 
     @Column(nullable = false)
     private LocalDate fechaCreacion;
-
-    // Relación entre clase MContabilidad y MUsuario
-/*
-    @ManyToOne
-    @JoinColumn(name = "idUsuario")
-   // @JsonManagedReference
-    private MUsuario MUsuario; */
-
 
     public MContabilidad() {
     }
@@ -60,9 +52,9 @@ public class MContabilidad {
         return idContabilidad;
     }
 
-    public String getIdUsuario() { return idUsuario; }
+    public MUsuario getUsuario() { return usuario; }
 
-    public void setIdUsuario(String idUsuario) { this.idUsuario = idUsuario; }
+    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
 
     public void setIdContabilidad(String idContabilidad) {
         this.idContabilidad = idContabilidad;

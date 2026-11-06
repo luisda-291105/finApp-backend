@@ -23,7 +23,7 @@ public class CMovimientoContable {
     }
 
     @GetMapping
-    public ResponseEntity<?> listar(@RequestParam String idBolsillo, @RequestParam(defaultValue = "TODOS") String tipo,
+    public ResponseEntity<?> listar(@RequestParam(required = false) String idBolsillo, @RequestParam(defaultValue = "TODOS") String tipo,
                                     HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request);
         if (usuario.isEmpty()) return noAutorizado();
@@ -34,6 +34,13 @@ public class CMovimientoContable {
         } catch (NoSuchElementException error) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
         }
+    }
+
+    @GetMapping("/resumen")
+    public ResponseEntity<?> resumir(HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        return ResponseEntity.ok(movimientos.resumir(usuario.get().getIdUsuario()));
     }
 
     @PostMapping

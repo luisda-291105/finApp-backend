@@ -37,7 +37,7 @@ public class CBolsillo {
         try {
             return ResponseEntity.status(HttpStatus.CREATED).body(bolsillos.crear(usuario.get().getIdUsuario(), solicitud));
         } catch (IllegalArgumentException error) {
-            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), "nombre"));
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), "bolsillo"));
         }
     }
 
@@ -49,7 +49,7 @@ public class CBolsillo {
         try {
             return ResponseEntity.ok(bolsillos.actualizar(usuario.get().getIdUsuario(), idBolsillo, solicitud));
         } catch (IllegalArgumentException error) {
-            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), "nombre"));
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), "bolsillo"));
         } catch (NoSuchElementException error) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
         }

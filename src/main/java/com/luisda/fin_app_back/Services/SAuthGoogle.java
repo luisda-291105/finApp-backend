@@ -35,7 +35,7 @@ public class SAuthGoogle {
 
     private final IUsuario usuarios;
     private final SVerificadorContrasena verificador;
-    private final RestClient clienteHttp = RestClient.create();
+    private volatile RestClient clienteHttp;
     private final SecureRandom random = new SecureRandom();
 
     @Value("${finapp.google.client-id:${GOOGLE_CLIENT_ID:}}") private String clientId;
@@ -46,6 +46,15 @@ public class SAuthGoogle {
     public SAuthGoogle(IUsuario usuarios, SVerificadorContrasena verificador) {
         this.usuarios = usuarios;
         this.verificador = verificador;
+    }
+
+    private RestClient clienteHttp() {
+        RestClient cliente = clienteHttp;
+        if (cliente != null) return cliente;
+        synchronized (this) {
+            if (clienteHttp == null) clienteHttp = RestClient.create();
+            return clienteHttp;
+        }
     }
 
     public String crearEstado(HttpServletRequest request) {
@@ -72,7 +81,7 @@ public class SAuthGoogle {
             formulario.add("client_secret", credenciales.clientSecret());
             formulario.add("redirect_uri", requerido(redirectUri, "Falta configurar GOOGLE_AUTH_REDIRECT_URI."));
             formulario.add("grant_type", "authorization_code");
-            tokens = clienteHttp.post().uri(URL_TOKEN_GOOGLE)
+            tokens = clienteHttp().post().uri(URL_TOKEN_GOOGLE)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(formulario).retrieve().body(GoogleOAuthTokenDTO.class);
         } catch (RestClientException error) {
@@ -85,7 +94,7 @@ public class SAuthGoogle {
         }
         GoogleUserInfoDTO perfil;
         try {
-            perfil = clienteHttp.get().uri(URL_PERFIL_GOOGLE)
+            perfil = clienteHttp().get().uri(URL_PERFIL_GOOGLE)
                     .headers(headers -> headers.setBearerAuth(token))
                     .retrieve().body(GoogleUserInfoDTO.class);
         } catch (RestClientException error) {

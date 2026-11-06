@@ -53,7 +53,7 @@ public class CGmail {
     private static final int DURACION_TOKEN_SEGUNDOS_POR_DEFECTO = 3600;
     private static final int MARGEN_RENOVACION_SEGUNDOS = 60;
 
-    private final RestClient clienteHttp = RestClient.create();
+    private volatile RestClient clienteHttp;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final IGmailConexion conexiones;
     private final ICuentaGmail cuentasGmail;
@@ -70,6 +70,15 @@ public class CGmail {
         this.conexiones = conexiones;
         this.cuentasGmail = cuentasGmail;
         this.usuarioActivo = usuarioActivo;
+    }
+
+    private RestClient clienteHttp() {
+        RestClient cliente = clienteHttp;
+        if (cliente != null) return cliente;
+        synchronized (this) {
+            if (clienteHttp == null) clienteHttp = RestClient.create();
+            return clienteHttp;
+        }
     }
 
     @PostMapping("/callback")
@@ -108,7 +117,7 @@ public class CGmail {
         formulario.add("grant_type", "authorization_code");
 
         try {
-            GoogleOAuthTokenDTO respuesta = clienteHttp.post().uri(URL_TOKEN_GOOGLE)
+            GoogleOAuthTokenDTO respuesta = clienteHttp().post().uri(URL_TOKEN_GOOGLE)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED).body(formulario)
                     .retrieve().body(GoogleOAuthTokenDTO.class);
             String accessToken = respuesta == null || respuesta.accessToken() == null ? "" : respuesta.accessToken().trim();
@@ -268,12 +277,12 @@ public class CGmail {
         formulario.add("client_secret", credenciales.clientSecret());
         formulario.add("refresh_token", refreshToken);
         formulario.add("grant_type", "refresh_token");
-        return clienteHttp.post().uri(URL_TOKEN_GOOGLE).contentType(MediaType.APPLICATION_FORM_URLENCODED)
+        return clienteHttp().post().uri(URL_TOKEN_GOOGLE).contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(formulario).retrieve().body(GoogleOAuthTokenDTO.class);
     }
 
     private String obtenerCorreoGoogle(String accessToken) {
-        GmailProfileDTO perfil = clienteHttp.get().uri(URL_PERFIL_GOOGLE)
+        GmailProfileDTO perfil = clienteHttp().get().uri(URL_PERFIL_GOOGLE)
                 .headers(headers -> headers.setBearerAuth(accessToken)).retrieve().body(GmailProfileDTO.class);
         String correo = perfil == null || perfil.emailAddress() == null ? "" : perfil.emailAddress().trim();
         if (correo.isBlank()) throw new IllegalArgumentException("Google no devolvió la dirección de la cuenta.");

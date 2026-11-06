@@ -5,6 +5,7 @@ import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MContabilidad;
 import com.luisda.fin_app_back.Repository.IContabilidad;
 import com.luisda.fin_app_back.Repository.IBolsillo;
+import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +25,14 @@ public class SBolsillo {
     private final IBolsillo bolsillos;
     private final IContabilidad contabilidades;
     private final IUsuario usuarios;
+    private final IMovimientoContable movimientos;
 
-    public SBolsillo(IBolsillo bolsillos, IContabilidad contabilidades, IUsuario usuarios) {
+    public SBolsillo(IBolsillo bolsillos, IContabilidad contabilidades, IUsuario usuarios,
+                     IMovimientoContable movimientos) {
         this.bolsillos = bolsillos;
         this.contabilidades = contabilidades;
         this.usuarios = usuarios;
+        this.movimientos = movimientos;
     }
 
     public List<MBolsillo> listar(String idUsuario) {

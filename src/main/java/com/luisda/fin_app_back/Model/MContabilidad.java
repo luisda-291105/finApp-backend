@@ -20,6 +20,10 @@ public class MContabilidad {
     @Column(length = 36, nullable = false)
     private String idContabilidad;
 
+    /** Usuario propietario de esta contabilidad personal. */
+    @Column(length = 36, unique = true)
+    private String idUsuario;
+
 
     @Column(length = 100, nullable = false)
     private String nombre;
@@ -55,6 +59,10 @@ public class MContabilidad {
     public String getIdContabilidad() {
         return idContabilidad;
     }
+
+    public String getIdUsuario() { return idUsuario; }
+
+    public void setIdUsuario(String idUsuario) { this.idUsuario = idUsuario; }
 
     public void setIdContabilidad(String idContabilidad) {
         this.idContabilidad = idContabilidad;

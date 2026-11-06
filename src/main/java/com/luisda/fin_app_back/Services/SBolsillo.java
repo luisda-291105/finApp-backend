@@ -60,7 +60,6 @@ public class SBolsillo {
     public MBolsillo crear(String idUsuario, BolsilloSolicitudDTO solicitud) {
         validar(solicitud);
         MContabilidad contabilidad = obtenerContabilidad(idUsuario);
-        validarTipoDisponible(contabilidad.getIdContabilidad(), solicitud.tipo(), null);
         MBolsillo bolsillo = new MBolsillo();
         bolsillo.setIdBolsillo(UUID.randomUUID().toString());
         bolsillo.setContabilidad(contabilidad);
@@ -79,7 +78,6 @@ public class SBolsillo {
         MBolsillo bolsillo = propio(idUsuario, idBolsillo);
         String tipoNuevo = solicitud.tipo() == null ? bolsillo.getTipo() : normalizarTipo(solicitud.tipo());
         if (!tipoNuevo.equalsIgnoreCase(bolsillo.getTipo())) {
-            validarTipoDisponible(bolsillo.getIdContabilidad(), tipoNuevo, bolsillo.getIdBolsillo());
             bolsillo.setTipo(tipoNuevo);
             movimientos.actualizarTipoPorBolsillo(bolsillo.getIdBolsillo(), tipoNuevo);
         }
@@ -146,14 +144,6 @@ public class SBolsillo {
         }
     }
 
-    private void validarTipoDisponible(String idContabilidad, String tipo, String idExcluir) {
-        String tipoNormalizado = normalizarTipo(tipo);
-        boolean existe = idExcluir == null
-                ? !bolsillos.findByContabilidad_IdContabilidadAndTipoIgnoreCase(idContabilidad, tipoNormalizado).isEmpty()
-                : bolsillos.existsByContabilidad_IdContabilidadAndTipoIgnoreCaseAndIdBolsilloNot(idContabilidad, tipoNormalizado, idExcluir);
-        if (existe) throw new IllegalArgumentException("Ya existe un bolsillo para el tipo " + etiquetaTipo(tipoNormalizado) + ".");
-    }
-
     private static String normalizarTipo(String tipo) {
         if (tipo == null) return "";
         String limpio = tipo.trim().replaceAll("\\s+", " ");
@@ -168,7 +158,4 @@ public class SBolsillo {
         return "GASTO";
     }
 
-    private static String etiquetaTipo(String tipo) {
-        return switch (tipo.toUpperCase(Locale.ROOT)) { case "INGRESO" -> "ingreso"; case "AHORRO" -> "ahorro"; case "GASTO" -> "gasto"; default -> tipo; };
-    }
 }

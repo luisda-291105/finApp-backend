@@ -13,6 +13,4 @@ public interface IBolsillo extends JpaRepository<MBolsillo, String> {
     Optional<MBolsillo> findByIdBolsilloAndContabilidad_IdContabilidad(String idBolsillo, String idContabilidad);
     List<MBolsillo> findByIdUsuarioOrderByFechaCreacionDesc(String idUsuario);
     Optional<MBolsillo> findByIdBolsilloAndIdUsuario(String idBolsillo, String idUsuario);
-    List<MBolsillo> findByContabilidad_IdContabilidadAndTipoIgnoreCase(String idContabilidad, String tipo);
-    boolean existsByContabilidad_IdContabilidadAndTipoIgnoreCaseAndIdBolsilloNot(String idContabilidad, String tipo, String idBolsillo);
 }

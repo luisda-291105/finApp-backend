@@ -84,7 +84,7 @@ public class SMovimientoContable {
     public MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud) {
         validarUsuario(idUsuario);
         validar(solicitud);
-        MBolsillo bolsillo = bolsilloPorTipoPropio(idUsuario, solicitud.tipo());
+        MBolsillo bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
         if (!bolsillo.isEstado()) throw new IllegalArgumentException("Activa el bolsillo para registrar movimientos.");
         MMovimientoContable movimiento = new MMovimientoContable();
         movimiento.setIdMovimiento(UUID.randomUUID().toString());
@@ -93,7 +93,7 @@ public class SMovimientoContable {
         movimiento.setFecha(solicitud.fecha());
         movimiento.setMonto(solicitud.monto());
         movimiento.setCategoria(solicitud.categoria().trim());
-        movimiento.setConcepto(solicitud.concepto().trim());
+        movimiento.setConcepto(solicitud.concepto() == null ? "" : solicitud.concepto().trim());
         return dto(movimientos.save(movimiento));
     }
 
@@ -102,7 +102,7 @@ public class SMovimientoContable {
         validarUsuario(idUsuario);
         validar(solicitud);
         MMovimientoContable movimiento = propio(idUsuario, idMovimiento);
-        MBolsillo bolsillo = bolsilloPorTipoPropio(idUsuario, solicitud.tipo());
+        MBolsillo bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
         if (!bolsillo.isEstado() && !bolsillo.getIdBolsillo().equals(movimiento.getBolsillo().getIdBolsillo())) {
             throw new IllegalArgumentException("Activa el bolsillo para asignarle este movimiento.");
         }
@@ -111,7 +111,7 @@ public class SMovimientoContable {
         movimiento.setFecha(solicitud.fecha());
         movimiento.setMonto(solicitud.monto());
         movimiento.setCategoria(solicitud.categoria().trim());
-        movimiento.setConcepto(solicitud.concepto().trim());
+        movimiento.setConcepto(solicitud.concepto() == null ? "" : solicitud.concepto().trim());
         return dto(movimientos.save(movimiento));
     }
 
@@ -124,20 +124,6 @@ public class SMovimientoContable {
     private MMovimientoContable propio(String idUsuario, String idMovimiento) {
         return movimientos.findByIdMovimientoAndBolsillo_IdUsuario(idMovimiento, idUsuario)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el movimiento."));
-    }
-
-    private MBolsillo bolsilloPorTipoPropio(String idUsuario, String tipo) {
-        String tipoNormalizado = tipo.trim().toUpperCase(Locale.ROOT);
-        List<MBolsillo> encontrados = bolsillosPropios(idUsuario).stream()
-                .filter(bolsillo -> tipoNormalizado.equalsIgnoreCase(bolsillo.getTipo()))
-                .toList();
-        if (encontrados.isEmpty()) {
-            throw new IllegalArgumentException("No tienes un bolsillo activo para el tipo " + tipoNormalizado.toLowerCase(Locale.ROOT) + ". Crea uno de ese tipo.");
-        }
-        if (encontrados.size() > 1) {
-            throw new IllegalStateException("Hay varios bolsillos del mismo tipo. Deja solo uno para registrar movimientos automáticamente.");
-        }
-        return encontrados.get(0);
     }
 
     private MBolsillo bolsilloPropio(String idUsuario, String idBolsillo) {
@@ -165,14 +151,14 @@ public class SMovimientoContable {
         if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0 || monto.scale() > 2 || monto.precision() > 19) {
             throw new IllegalArgumentException("El monto debe ser positivo y tener máximo dos decimales.");
         }
-        if (solicitud.tipo() == null || solicitud.tipo().isBlank() || solicitud.tipo().trim().length() > 40) {
-            throw new IllegalArgumentException("El tipo de movimiento es obligatorio y no puede superar 40 caracteres.");
+        if (solicitud.idBolsillo() == null || solicitud.idBolsillo().isBlank()) {
+            throw new IllegalArgumentException("Selecciona el bolsillo del movimiento.");
         }
         if (solicitud.categoria() == null || solicitud.categoria().isBlank() || solicitud.categoria().trim().length() > 80) {
             throw new IllegalArgumentException("La categoría es obligatoria y no puede superar 80 caracteres.");
         }
-        if (solicitud.concepto() == null || solicitud.concepto().isBlank() || solicitud.concepto().trim().length() > 160) {
-            throw new IllegalArgumentException("El concepto es obligatorio y no puede superar 160 caracteres.");
+        if (solicitud.concepto() != null && solicitud.concepto().trim().length() > 160) {
+            throw new IllegalArgumentException("El concepto no puede superar 160 caracteres.");
         }
     }
 

@@ -32,6 +32,15 @@ public class MMovimientoContable {
     @Column(nullable = false, length = 160)
     private String concepto;
 
+    @Column(name = "origen_tipo", length = 20)
+    private String origenTipo;
+
+    @Column(name = "origen_id", length = 36)
+    private String origenId;
+
+    @Column(name = "origen_nombre", length = 120)
+    private String origenNombre;
+
     public String getIdMovimiento() { return idMovimiento; }
     public void setIdMovimiento(String idMovimiento) { this.idMovimiento = idMovimiento; }
     public MBolsillo getBolsillo() { return bolsillo; }
@@ -46,4 +55,10 @@ public class MMovimientoContable {
     public void setCategoria(String categoria) { this.categoria = categoria; }
     public String getConcepto() { return concepto; }
     public void setConcepto(String concepto) { this.concepto = concepto; }
+    public String getOrigenTipo() { return origenTipo; }
+    public void setOrigenTipo(String origenTipo) { this.origenTipo = origenTipo; }
+    public String getOrigenId() { return origenId; }
+    public void setOrigenId(String origenId) { this.origenId = origenId; }
+    public String getOrigenNombre() { return origenNombre; }
+    public void setOrigenNombre(String origenNombre) { this.origenNombre = origenNombre; }
 }

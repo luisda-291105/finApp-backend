@@ -15,8 +15,10 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
     boolean existsByBolsillo_IdBolsillo(String idBolsillo);
     Optional<MMovimientoContable> findByIdMovimientoAndBolsillo_IdUsuario(String idMovimiento, String idUsuario);
 
-    @Query(value = "SELECT COALESCE(SUM(CASE WHEN UPPER(tipo) = 'INGRESO' THEN monto ELSE -monto END), 0) " +
-            "FROM movimiento_contable WHERE id_bolsillo = :idBolsillo " +
+    @Query(value = "SELECT COALESCE(SUM(CASE WHEN UPPER(tipo) = 'INGRESO' AND id_bolsillo = :idBolsillo THEN monto " +
+            "WHEN (origen_tipo = 'BOLSILLO' AND origen_id = :idBolsillo) OR " +
+            "(origen_tipo IS NULL AND UPPER(tipo) <> 'INGRESO' AND id_bolsillo = :idBolsillo) THEN -monto ELSE 0 END), 0) " +
+            "FROM movimiento_contable WHERE (id_bolsillo = :idBolsillo OR origen_id = :idBolsillo) " +
             "AND (:idMovimientoExcluir IS NULL OR id_movimiento <> :idMovimientoExcluir)", nativeQuery = true)
     java.math.BigDecimal calcularSaldoDisponible(@Param("idBolsillo") String idBolsillo,
                                                   @Param("idMovimientoExcluir") String idMovimientoExcluir);

@@ -9,5 +9,8 @@ public record MovimientoContableSolicitudDTO(
         LocalDate fecha,
         BigDecimal monto,
         String categoria,
-        String concepto
+        String concepto,
+        String origenTipo,
+        String origenId,
+        String origenNombre
 ) {}

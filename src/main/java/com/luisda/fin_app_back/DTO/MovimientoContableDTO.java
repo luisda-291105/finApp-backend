@@ -11,5 +11,8 @@ public record MovimientoContableDTO(
         BigDecimal monto,
         String tipo,
         String categoria,
-        String concepto
+        String concepto,
+        String origenTipo,
+        String origenId,
+        String origenNombre
 ) {}

@@ -1,6 +1,18 @@
 # FinApp: guía del asistente
 
-FinApp es una aplicación web para organizar información personal y financiera. El asistente de chat responde sobre el uso documentado de la aplicación y puede consultar fuentes públicas de Internet cuando la pregunta requiere información actual. No puede consultar los registros de una cuenta ni realizar operaciones.
+FinApp es una aplicación web para organizar información personal y financiera. El asistente de chat responde sobre el uso documentado de la aplicación, puede consultar los datos del usuario en sesión (contactos, grupos, correos, tarjetas, bolsillos contables y movimientos), y puede buscar información pública en Internet cuando la pregunta lo requiere. No puede modificar datos ni ejecutar operaciones financieras.
+
+## Consultas de datos del usuario
+
+Cuando el usuario está en sesión, el asistente puede responder preguntas simples sobre sus datos registrados:
+- **Contactos**: "¿qué contactos tengo?", "muéstrame mis contactos", "¿cuántos contactos hay?"
+- **Grupos**: "¿cuáles son mis grupos?", "¿qué grupos están activos?", "¿qué grupos están inactivos?"
+- **Bolsillos contables**: "¿cuánto he gastado este mes?", "¿qué categoría concentra más gastos?", "compara mis ingresos y gastos por mes".
+- **Correos**: "¿qué correos están activos?", "¿cuántas cuentas de correo tengo?", "¿qué cuentas Gmail tengo conectadas?"
+- **Tarjetas**: "¿cuántas tarjetas tengo registradas?", "¿qué tarjetas hay?"
+- **Finanzas**: puede comparar movimientos registrados por tipo, bolsillo, categoría y mes, y describir movimientos recientes. Los totales representan sumas de movimientos; no equivalen al saldo actual.
+
+Estas consultas son de solo lectura. El asistente no puede crear, editar ni eliminar registros.
 
 ## Navegación del dashboard
 
@@ -24,4 +36,4 @@ Configuración permite revisar el perfil y gestionar fuentes registradas. El swi
 
 ## Privacidad del asistente
 
-No escribas nombres completos, correos, números de tarjeta, CVV, contraseñas u otros datos privados en el chat. Los mensajes se envían al modelo configurado en el backend; si se necesita información web, la consulta también se envía al proveedor de búsqueda. El asistente no lee datos personales almacenados por FinApp y no ejecuta acciones financieras.
+No escribas nombres completos, correos, números de tarjeta, CVV, contraseñas u otros datos privados en el chat. Los mensajes se envían al modelo configurado en el backend; si se necesita información web, la consulta también se envía al proveedor de búsqueda. El asistente solo lee los datos básicos del usuario en sesión (contactos, grupos, correos y tarjetas) para responder consultas directas, y no ejecuta acciones financieras.

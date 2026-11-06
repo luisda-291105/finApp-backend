@@ -11,10 +11,14 @@ import com.luisda.fin_app_back.Model.MGrupo;
 import com.luisda.fin_app_back.Model.MMuestra;
 import com.luisda.fin_app_back.Model.MTarjeta;
 import com.luisda.fin_app_back.Model.MUsuario;
+import com.luisda.fin_app_back.Model.MBolsillo;
+import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Repository.IContacto;
 import com.luisda.fin_app_back.Repository.ICuentaGmail;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGrupo;
+import com.luisda.fin_app_back.Repository.IBolsillo;
+import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Repository.IMuestraRepository;
 import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Services.SDocumentacionFinApp.Fragmento;
@@ -26,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -42,15 +47,34 @@ import java.util.stream.Collectors;
 /** Coordina la documentación local, los datos del usuario en sesión, la búsqueda pública y la generación de respuestas. */
 @Service
 public class SAsistenteChat {
+    private static final int MAX_CARACTERES_PREGUNTA = 2000;
+    private static final int MAX_TURNOS_HISTORIAL = 20;
+    private static final int MAX_CARACTERES_TURNO = 2000;
+    private static final int MAX_CARACTERES_HISTORIAL = 24000;
     private static final Pattern CORREO = Pattern.compile("(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
     private static final Pattern NUMERO_TARJETA = Pattern.compile("(?<!\\d)(?:\\d[ -]?){13,19}(?!\\d)");
     private static final String INSTRUCCIONES = """
-            Eres el asistente de ayuda de FinApp. Responde siempre en español, de forma muy corta, directa y rápida (máximo 1 a 3 oraciones).
+            Eres el asistente de ayuda de FinApp. Responde siempre en español, con claridad y contexto suficiente para que el usuario pueda actuar.
+            Ajusta la extensión a la consulta: sé breve en preguntas simples y explica con pasos o ejemplos cuando el usuario pida ayuda detallada.
             Si te saludan, responde de forma breve y cordial (por ejemplo: "¿En qué te puedo ayudar hoy?").
-            Si el usuario pregunta por sus datos (cuántos contactos, correos, cuentas de Gmail, datos de las muestras de inicio, contabilidad, tarjetas o bolsillos),
-            utiliza con total precisión los [DATOS DEL USUARIO EN SESIÓN] incluidos en el contexto para responderle de forma directa y concreta.
+
+            CONSULTAS SOBRE DATOS DEL USUARIO:
+            Cuando el usuario pregunte por sus datos usa exclusivamente los [DATOS DEL USUARIO EN SESIÓN] del contexto.
+            - Contactos: si preguntan "qué contactos tengo", "mis contactos", "lista de contactos" → responde con el nombre y teléfono de cada uno.
+            - Grupos: si preguntan "mis grupos" o por grupos activos/inactivos → responde con nombre y estado (Activo/Inactivo).
+            - Bolsillos contables: usa el resumen financiero independiente para responder sobre tipos, objetivos y movimientos de cada bolsillo.
+            - Correos: si preguntan "correos activos", "cuentas de correo", "qué correos tengo" → responde listando las cuentas Gmail conectadas y fuentes de correo activas/inactivas.
+            - Finanzas: consulta el resumen de bolsillos contables y movimientos disponibles en el contexto para comparar ingresos, gastos, ahorros, categorías, meses y movimientos recientes.
+            - Para cálculos, usa los totales y desgloses proporcionados; explica el periodo y el tipo de movimiento que estás comparando. Si falta el periodo, pregunta o aclara que el resumen es histórico.
+            - Los montos por tipo, bolsillo, categoría y mes son sumas de movimientos registrados; no son el saldo actual. Solo afirma un saldo si el contexto lo incluye explícitamente.
+            - El contexto incluye resúmenes mensuales y por categoría, además de los 20 movimientos más recientes; si una pregunta exige un rango o detalle no incluido, dilo con claridad y pide que se consulte ese periodo en la aplicación.
+            - No confundas los bolsillos de contabilidad con los grupos de fuentes. El tipo del bolsillo clasifica sus movimientos.
+            - No inventes saldos actuales: los totales de movimientos no necesariamente equivalen al saldo disponible de una cuenta.
+
+            RESTRICCIONES:
+            Solo puedes consultar los datos que ya están en el contexto [DATOS DEL USUARIO EN SESIÓN]. No puedes ejecutar operaciones, modificar datos, ni acceder a información fuera de lo ya provisto.
             Si el usuario no ha iniciado sesión y pregunta por sus datos personales, indícale amablemente que debe iniciar sesión.
-            No des explicaciones largas, rodeos ni listas innecesarias.
+            Organiza las respuestas complejas en pasos o listas cortas y evita información que no ayude a responder la pregunta.
             No menciones fuentes, citas ni enlaces en la respuesta.
             No realices operaciones ni solicites contraseñas.
             """;
@@ -62,6 +86,8 @@ public class SAsistenteChat {
     private final IMuestraRepository muestrasRepo;
     private final ITarjeta tarjetasRepo;
     private final IGrupo gruposRepo;
+    private final IBolsillo bolsillosRepo;
+    private final IMovimientoContable movimientosRepo;
     private final RestClient.Builder restClientBuilder;
     private volatile RestClient clienteHttp;
     private final String claveNvidia;
@@ -79,6 +105,8 @@ public class SAsistenteChat {
             IMuestraRepository muestrasRepo,
             ITarjeta tarjetasRepo,
             IGrupo gruposRepo,
+            IBolsillo bolsillosRepo,
+            IMovimientoContable movimientosRepo,
             @Autowired(required = false) RestClient.Builder restClientBuilder,
             @Value("${finapp.chat.nvidia.api-key:${NVIDIA_API_KEY:}}") String claveNvidia,
             @Value("${finapp.chat.nvidia.model:${NVIDIA_MODEL:meta/llama-3.3-70b-instruct}}") String modeloNvidia,
@@ -93,6 +121,8 @@ public class SAsistenteChat {
         this.muestrasRepo = muestrasRepo;
         this.tarjetasRepo = tarjetasRepo;
         this.gruposRepo = gruposRepo;
+        this.bolsillosRepo = bolsillosRepo;
+        this.movimientosRepo = movimientosRepo;
 
         // Leer variables de .env si no vinieron por entorno del sistema
         Map<String, String> dotEnv = cargarArchivoDotEnv();
@@ -215,8 +245,8 @@ public class SAsistenteChat {
         if (peticion == null || peticion.mensaje() == null || peticion.mensaje().isBlank()) {
             throw new ServicioChatException(HttpStatus.BAD_REQUEST, "Escribe una pregunta para continuar.");
         }
-        if (peticion.mensaje().length() > 500) {
-            throw new ServicioChatException(HttpStatus.BAD_REQUEST, "La pregunta no puede superar 500 caracteres.");
+        if (peticion.mensaje().length() > MAX_CARACTERES_PREGUNTA) {
+            throw new ServicioChatException(HttpStatus.BAD_REQUEST, "La pregunta no puede superar 2000 caracteres.");
         }
         if (NUMERO_TARJETA.matcher(peticion.mensaje()).find()) {
             throw new ServicioChatException(HttpStatus.BAD_REQUEST,
@@ -227,15 +257,21 @@ public class SAsistenteChat {
                     "Inicia sesión para consultar información de correos.");
         }
         if (peticion.historial() != null) {
-            if (peticion.historial().size() > 8) {
-                throw new ServicioChatException(HttpStatus.BAD_REQUEST, "La conversación excede el contexto permitido.");
+            if (peticion.historial().size() > MAX_TURNOS_HISTORIAL) {
+                throw new ServicioChatException(HttpStatus.BAD_REQUEST, "La conversación supera los 20 mensajes de contexto permitidos.");
             }
+            int caracteresHistorial = 0;
             for (TurnoChat turno : peticion.historial()) {
-                if (turno == null || turno.contenido() == null || turno.contenido().length() > 1200
+                if (turno == null || turno.contenido() == null || turno.contenido().length() > MAX_CARACTERES_TURNO
                         || !List.of("user", "assistant").contains(turno.rol())
                         || NUMERO_TARJETA.matcher(turno.contenido()).find()) {
                     throw new ServicioChatException(HttpStatus.BAD_REQUEST,
                             "El historial incluye un turno inválido o datos privados.");
+                }
+                caracteresHistorial += turno.contenido().length();
+                if (caracteresHistorial > MAX_CARACTERES_HISTORIAL) {
+                    throw new ServicioChatException(HttpStatus.BAD_REQUEST,
+                            "El contexto de la conversación es demasiado extenso. Limpia el historial y vuelve a intentarlo.");
                 }
             }
         }
@@ -253,49 +289,67 @@ public class SAsistenteChat {
                 sb.append("- Contactos: ").append(contactos.size()).append(" contacto(s) registrado(s)");
                 if (!contactos.isEmpty()) {
                     String lista = contactos.stream()
-                            .map(c -> c.getNombre() + (c.getTelefono() != null && !c.getTelefono().isBlank() ? " (tel: " + c.getTelefono() + ")" : ""))
-                            .limit(10)
-                            .collect(Collectors.joining(", "));
+                            .map(c -> {
+                                StringBuilder entry = new StringBuilder(c.getNombre());
+                                if (c.getTelefono() != null && !c.getTelefono().isBlank()) {
+                                    entry.append(" [tel: ").append(c.getTelefono()).append("]");
+                                }
+                                if (c.getNotas() != null && !c.getNotas().isBlank()) {
+                                    String nota = c.getNotas().length() > 60
+                                            ? c.getNotas().substring(0, 60) + "…"
+                                            : c.getNotas();
+                                    entry.append(" [nota: ").append(nota).append("]");
+                                }
+                                return entry.toString();
+                            })
+                            .limit(15)
+                            .collect(Collectors.joining("; "));
                     sb.append(" -> ").append(lista);
                 }
                 sb.append(".\n");
             }
         } catch (Exception ignored) {}
 
-        // 2. Correos y Cuentas Gmail
+        // 2. Correos: cuentas Gmail conectadas + fuentes de correo con estado
         try {
-            int totalCuentasGmail = 0;
-            String cuentasGmailNombres = "";
             if (cuentasGmailRepo != null) {
                 List<CuentaGmail> gmail = cuentasGmailRepo.findByUsuarioIdOrderByCreadaEnAsc(idUsuario);
-                totalCuentasGmail = gmail.size();
+                sb.append("- Cuentas Gmail conectadas: ").append(gmail.size());
                 if (!gmail.isEmpty()) {
-                    cuentasGmailNombres = gmail.stream().map(CuentaGmail::getEmail).collect(Collectors.joining(", "));
+                    String lista = gmail.stream().map(CuentaGmail::getEmail).collect(Collectors.joining(", "));
+                    sb.append(" -> ").append(lista);
                 }
+                sb.append(".\n");
             }
 
-            int totalFuentesCorreo = 0;
-            String fuentesCorreoNombres = "";
             if (fuentesRepo != null) {
                 List<MFuente> fuentes = fuentesRepo.findByUsuario_IdUsuario(idUsuario);
                 List<MFuente> fCorreo = fuentes.stream()
                         .filter(f -> "CORREO".equalsIgnoreCase(f.getTipo()))
                         .toList();
-                totalFuentesCorreo = fCorreo.size();
+                long activas = fCorreo.stream().filter(MFuente::isEstado).count();
+                long inactivas = fCorreo.size() - activas;
+                sb.append("- Fuentes de correo registradas: ").append(fCorreo.size())
+                        .append(" (").append(activas).append(" activa(s), ").append(inactivas).append(" inactiva(s))");
                 if (!fCorreo.isEmpty()) {
-                    fuentesCorreoNombres = fCorreo.stream().map(MFuente::getContenido).collect(Collectors.joining(", "));
+                    String detalle = fCorreo.stream()
+                            .map(f -> f.getContenido() + " [" + (f.isEstado() ? "activa" : "inactiva") + "]")
+                            .collect(Collectors.joining(", "));
+                    sb.append(" -> ").append(detalle);
+                }
+                sb.append(".\n");
+
+                // Otras fuentes no-correo
+                List<MFuente> otrasF = fuentes.stream()
+                        .filter(f -> !"CORREO".equalsIgnoreCase(f.getTipo()))
+                        .toList();
+                if (!otrasF.isEmpty()) {
+                    String otras = otrasF.stream()
+                            .map(f -> f.getContenido() + " (tipo: " + f.getTipo() + ", " + (f.isEstado() ? "activa" : "inactiva") + ")")
+                            .collect(Collectors.joining(", "));
+                    sb.append("- Otras fuentes: ").append(otrasF.size()).append(" -> ").append(otras).append(".\n");
                 }
             }
-
-            sb.append("- Correos / Gmail: ").append(totalCuentasGmail).append(" cuenta(s) Gmail conectada(s)");
-            if (!cuentasGmailNombres.isEmpty()) {
-                sb.append(" (").append(cuentasGmailNombres).append(")");
-            }
-            sb.append(" y ").append(totalFuentesCorreo).append(" fuente(s) de correo registrada(s)");
-            if (!fuentesCorreoNombres.isEmpty()) {
-                sb.append(" [").append(fuentesCorreoNombres).append("]");
-            }
-            sb.append(".\n");
         } catch (Exception ignored) {}
 
         // 3. Muestras del dashboard inicio
@@ -314,42 +368,147 @@ public class SAsistenteChat {
             }
         } catch (Exception ignored) {}
 
-        // 4. Contabilidad (Tarjetas y Bolsillos/Grupos)
+        // 4. Tarjetas registradas
         try {
-            int totalTarjetas = 0;
-            String listaTarjetas = "";
             if (tarjetasRepo != null) {
                 List<MTarjeta> tarjetas = tarjetasRepo.findByUsuario_IdUsuario(idUsuario);
-                totalTarjetas = tarjetas.size();
+                sb.append("- Tarjetas registradas: ").append(tarjetas.size());
                 if (!tarjetas.isEmpty()) {
-                    listaTarjetas = tarjetas.stream()
-                            .map(t -> (t.getEntidad() != null ? t.getEntidad() : "Tarjeta") + " titular " + t.getTitular())
+                    String lista = tarjetas.stream()
+                            .map(t -> (t.getEntidad() != null ? t.getEntidad() : "Tarjeta") + " a nombre de " + t.getTitular())
                             .collect(Collectors.joining(", "));
+                    sb.append(" -> ").append(lista);
                 }
+                sb.append(".\n");
             }
+        } catch (Exception ignored) {}
 
-            int totalGrupos = 0;
-            String listaGrupos = "";
+        // 5. Grupos/Bolsillos con estado y fuentes vinculadas
+        try {
             if (gruposRepo != null) {
                 List<MGrupo> grupos = gruposRepo.findByUsuario_IdUsuario(idUsuario);
-                totalGrupos = grupos.size();
+                long activos = grupos.stream().filter(MGrupo::isEstado).count();
+                long inactivos = grupos.size() - activos;
+                sb.append("- Grupos/Bolsillos: ").append(grupos.size())
+                        .append(" (").append(activos).append(" activo(s), ").append(inactivos).append(" inactivo(s))");
                 if (!grupos.isEmpty()) {
-                    listaGrupos = grupos.stream().map(MGrupo::getNombre).collect(Collectors.joining(", "));
+                    String detalle = grupos.stream()
+                            .map(g -> {
+                                StringBuilder gEntry = new StringBuilder(g.getNombre())
+                                        .append(" [").append(g.isEstado() ? "activo" : "inactivo").append("]");
+                                if (g.getDescripcion() != null && !g.getDescripcion().isBlank()) {
+                                    String desc = g.getDescripcion().length() > 50
+                                            ? g.getDescripcion().substring(0, 50) + "…"
+                                            : g.getDescripcion();
+                                    gEntry.append(" (").append(desc).append(")");
+                                }
+                                List<MFuente> fuentsGrupo = g.getFuentes();
+                                if (fuentsGrupo != null && !fuentsGrupo.isEmpty()) {
+                                    String fNames = fuentsGrupo.stream()
+                                            .map(MFuente::getContenido).collect(Collectors.joining(", "));
+                                    gEntry.append(" {fuentes: ").append(fNames).append("}");
+                                }
+                                return gEntry.toString();
+                            })
+                            .limit(10)
+                            .collect(Collectors.joining("; "));
+                    sb.append(" -> ").append(detalle);
                 }
+                sb.append(".\n");
             }
+        } catch (Exception ignored) {}
 
-            sb.append("- Contabilidad: ").append(totalTarjetas).append(" tarjeta(s) registrada(s)");
-            if (!listaTarjetas.isEmpty()) {
-                sb.append(" (").append(listaTarjetas).append(")");
+        // 6. Bolsillos contables: contexto agregado para preguntas y comparaciones personales.
+        try {
+            if (bolsillosRepo != null && movimientosRepo != null) {
+                List<MBolsillo> bolsillos = bolsillosRepo.findByIdUsuarioOrderByFechaCreacionDesc(idUsuario);
+                sb.append("- Bolsillos contables: ").append(bolsillos.size());
+                if (!bolsillos.isEmpty()) {
+                    List<String> ids = bolsillos.stream().map(MBolsillo::getIdBolsillo).toList();
+                    Map<String, MBolsillo> porId = bolsillos.stream().collect(Collectors.toMap(
+                            MBolsillo::getIdBolsillo, bolsillo -> bolsillo, (primero, ignorado) -> primero));
+                    List<Object[]> resumen = movimientosRepo.resumirPorBolsillos(ids);
+                    Map<String, java.math.BigDecimal> montoPorTipo = new java.util.TreeMap<>();
+                    Map<String, Long> cantidadPorTipo = new java.util.TreeMap<>();
+                    for (Object[] fila : resumen) {
+                        String tipo = String.valueOf(fila[1]).toUpperCase(java.util.Locale.ROOT);
+                        java.math.BigDecimal monto = fila[3] instanceof java.math.BigDecimal decimal
+                                ? decimal : new java.math.BigDecimal(String.valueOf(fila[3]));
+                        montoPorTipo.merge(tipo, monto, java.math.BigDecimal::add);
+                        cantidadPorTipo.merge(tipo, ((Number) fila[2]).longValue(), Long::sum);
+                    }
+                    sb.append(". Desglose por bolsillo:");
+                    for (MBolsillo bolsillo : bolsillos) {
+                        List<Object[]> tipos = resumen.stream()
+                                .filter(fila -> bolsillo.getIdBolsillo().equals(String.valueOf(fila[0])))
+                                .toList();
+                        sb.append(" ").append(bolsillo.getNombre())
+                                .append(" [tipo: ").append(bolsillo.getTipo())
+                                .append(", ").append(bolsillo.isEstado() ? "activo" : "inactivo")
+                                .append(", objetivo: ").append(formatearMonto(bolsillo.getMontoObjetivo()))
+                                .append(", movimientos: ");
+                        if (tipos.isEmpty()) {
+                            sb.append("0");
+                        } else {
+                            sb.append(tipos.stream().map(fila -> String.valueOf(fila[1]).toUpperCase(java.util.Locale.ROOT)
+                                    + " " + fila[2] + " en " + fila[3] + " movimiento(s), total "
+                                    + formatearMonto(fila[4])).collect(Collectors.joining("; ")));
+                        }
+                        sb.append("]; ");
+                    }
+                    if (!montoPorTipo.isEmpty()) {
+                        sb.append(". Totales históricos por tipo:")
+                                .append(montoPorTipo.entrySet().stream().map(entrada -> entrada.getKey() + ": "
+                                        + cantidadPorTipo.getOrDefault(entrada.getKey(), 0L) + " movimiento(s), total "
+                                        + formatearMonto(entrada.getValue())).collect(Collectors.joining("; ")));
+                    }
+                    sb.append(". Desglose mensual por tipo:");
+                    List<Object[]> mensual = movimientosRepo.resumirPorMes(ids);
+                    if (mensual.isEmpty()) {
+                        sb.append(" sin movimientos registrados");
+                    } else {
+                        sb.append(mensual.stream().limit(60).map(fila -> fila[0] + "-"
+                                + String.format("%02d", ((Number) fila[1]).intValue()) + " " + fila[2]
+                                + ": " + fila[3] + " movimiento(s), total " + formatearMonto(fila[4]))
+                                .collect(Collectors.joining("; ")));
+                    }
+
+                    List<Object[]> categorias = movimientosRepo.resumirPorBolsilloTipoCategoria(ids);
+                    if (!categorias.isEmpty()) {
+                        sb.append(". Desglose histórico por categoría:")
+                                .append(categorias.stream().map(fila -> {
+                                    MBolsillo bolsillo = porId.get(String.valueOf(fila[0]));
+                                    String nombre = bolsillo == null ? "bolsillo" : bolsillo.getNombre();
+                                    return nombre + " / " + fila[1] + " / " + fila[2] + ": " + fila[3]
+                                            + " movimiento(s), total " + formatearMonto(fila[4]);
+                                }).limit(80).collect(Collectors.joining("; ")));
+                    }
+
+                    List<MMovimientoContable> recientes = movimientosRepo
+                            .findByBolsillo_IdBolsilloInOrderByFechaDesc(ids).stream().limit(20).toList();
+                    if (!recientes.isEmpty()) {
+                        sb.append(". Movimientos más recientes:")
+                                .append(recientes.stream().map(m -> {
+                                    MBolsillo bolsillo = m.getBolsillo();
+                                    return m.getFecha() + " " + String.valueOf(m.getTipo()).toUpperCase(java.util.Locale.ROOT)
+                                            + " " + formatearMonto(m.getMonto()) + " en "
+                                            + (bolsillo == null ? "bolsillo" : bolsillo.getNombre()) + " / " + m.getCategoria()
+                                            + (m.getConcepto() == null || m.getConcepto().isBlank() ? "" : " / " + m.getConcepto());
+                                }).collect(Collectors.joining("; ")));
+                    }
+                }
+                sb.append(".\n");
             }
-            sb.append(" y ").append(totalGrupos).append(" bolsillo(s)/grupo(s) registrado(s)");
-            if (!listaGrupos.isEmpty()) {
-                sb.append(" (").append(listaGrupos).append(")");
-            }
-            sb.append(".\n");
         } catch (Exception ignored) {}
 
         contexto.add(sb.toString().trim());
+    }
+
+    private String formatearMonto(Object valor) {
+        if (valor == null) return "0";
+        java.math.BigDecimal monto = valor instanceof java.math.BigDecimal decimal
+                ? decimal : new java.math.BigDecimal(valor.toString());
+        return monto.stripTrailingZeros().toPlainString();
     }
 
     private boolean requiereInternet(String pregunta) {
@@ -454,7 +613,7 @@ public class SAsistenteChat {
         solicitud.put("model", modeloNvidia);
         solicitud.put("messages", mensajes);
         solicitud.put("temperature", 0.2);
-        solicitud.put("max_tokens", 250);
+        solicitud.put("max_tokens", 800);
         solicitud.put("stream", false);
 
         try {
@@ -495,6 +654,10 @@ public class SAsistenteChat {
             }
             throw new ServicioChatException(HttpStatus.BAD_GATEWAY,
                     "Error del modelo NVIDIA (" + error.getStatusCode() + "): " + error.getStatusText());
+        } catch (ResourceAccessException error) {
+            System.err.println("[NVIDIA REST TIMEOUT/CONNECTION ERROR]: " + error.getMessage());
+            throw new ServicioChatException(HttpStatus.GATEWAY_TIMEOUT,
+                    "El modelo tardó demasiado en responder o canceló la solicitud. Inténtalo de nuevo.");
         } catch (RestClientException error) {
             System.err.println("[NVIDIA REST ERROR]: " + error.getMessage());
             throw new ServicioChatException(HttpStatus.BAD_GATEWAY,

@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RestController
 @RequestMapping("/asistente")
 public class CAsistente {
-    private static final int MAX_SOLICITUDES_POR_MINUTO = 12;
+    private static final int MAX_SOLICITUDES_POR_MINUTO = 30;
     private static final ConcurrentHashMap<String, VentanaLimite> VENTANAS = new ConcurrentHashMap<>();
     private final SAsistenteChat servicio;
     private final SUsuarioActivo usuarioActivo;

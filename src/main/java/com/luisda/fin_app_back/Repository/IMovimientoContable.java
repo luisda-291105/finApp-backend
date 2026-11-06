@@ -26,4 +26,15 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
     @Query("SELECT m.bolsillo.idBolsillo, m.tipo, COUNT(m), SUM(m.monto) FROM MMovimientoContable m " +
             "WHERE m.bolsillo.idBolsillo IN :idsBolsillo GROUP BY m.bolsillo.idBolsillo, m.tipo")
     List<Object[]> resumirPorBolsillos(@Param("idsBolsillo") List<String> idsBolsillo);
+
+    @Query("SELECT m.bolsillo.idBolsillo, UPPER(m.tipo), m.categoria, COUNT(m), SUM(m.monto) " +
+            "FROM MMovimientoContable m WHERE m.bolsillo.idBolsillo IN :idsBolsillo " +
+            "GROUP BY m.bolsillo.idBolsillo, UPPER(m.tipo), m.categoria")
+    List<Object[]> resumirPorBolsilloTipoCategoria(@Param("idsBolsillo") List<String> idsBolsillo);
+
+    @Query("SELECT FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha), UPPER(m.tipo), COUNT(m), SUM(m.monto) " +
+            "FROM MMovimientoContable m WHERE m.bolsillo.idBolsillo IN :idsBolsillo " +
+            "GROUP BY FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha), UPPER(m.tipo) " +
+            "ORDER BY FUNCTION('YEAR', m.fecha) DESC, FUNCTION('MONTH', m.fecha) DESC, UPPER(m.tipo)")
+    List<Object[]> resumirPorMes(@Param("idsBolsillo") List<String> idsBolsillo);
 }

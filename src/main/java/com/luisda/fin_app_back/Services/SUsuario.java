@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 
@@ -34,6 +37,7 @@ import java.util.regex.Pattern;
 @Service
 public  class SUsuario {
     private static final Pattern CORREO_VALIDO = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final Pattern TELEFONO_VALIDO = Pattern.compile("^\\+?\\d{7,15}$");
     private final IUsuario IUsuario;
     private final SVerificadorContrasena verificador;
     private final IContacto contactos;
@@ -69,41 +73,72 @@ public  class SUsuario {
         if (MUsuario.getContrasena() == null || MUsuario.getContrasena().length() < 8) {
             throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
         }
-        String correo = MUsuario.getCorreo() == null ? "" : MUsuario.getCorreo().trim().toLowerCase(Locale.ROOT);
-        if (!CORREO_VALIDO.matcher(correo).matches()) {
+        String correo = normalizarCorreo(MUsuario.getCorreo());
+        if (correo != null && !CORREO_VALIDO.matcher(correo).matches()) {
             throw new IllegalArgumentException("Ingresa un correo electrónico válido.");
         }
-        if (IUsuario.findByCorreoIgnoreCase(correo).isPresent()
-                || IUsuario.findByCorreoGoogleIgnoreCase(correo).isPresent()) {
+        if (correo != null && (IUsuario.findByCorreoIgnoreCase(correo).isPresent()
+                || IUsuario.findByCorreoGoogleIgnoreCase(correo).isPresent())) {
             throw new IllegalStateException("Ya existe una cuenta con este correo.");
+        }
+        String telefono = normalizarTelefono(MUsuario.getTelefono());
+        if (telefono != null && !TELEFONO_VALIDO.matcher(telefono).matches()) {
+            throw new IllegalArgumentException("Ingresa un teléfono válido con al menos 7 dígitos.");
+        }
+        if (telefono != null && IUsuario.findByTelefono(telefono).isPresent()) {
+            throw new IllegalStateException("Ya existe una cuenta con este teléfono.");
         }
         MUsuario.setIdUsuario(identificacion);
         MUsuario.setCorreo(correo);
+        MUsuario.setTelefono(telefono);
         MUsuario.setContrasena(verificador.codificar(MUsuario.getContrasena()));
         return IUsuario.save(MUsuario);
     }
 
-    /** Valida por identificación o correo Google y migra contraseñas heredadas a PBKDF2. */
+    /** Valida por nombre, identificación, correo o teléfono y migra contraseñas heredadas. */
     public MUsuario autenticar(String identificador, String contrasena, SVerificadorContrasena codificador) {
         if (identificador == null || contrasena == null) return null;
         String valor = identificador.trim();
-        Optional<MUsuario> usuarioEncontrado = IUsuario.findById(valor);
-        if (usuarioEncontrado.isEmpty() && valor.contains("@")) {
-            usuarioEncontrado = IUsuario.findByCorreoIgnoreCase(valor);
-            if (usuarioEncontrado.isEmpty()) usuarioEncontrado = IUsuario.findByCorreoGoogleIgnoreCase(valor);
+        Map<String, MUsuario> candidatos = new LinkedHashMap<>();
+        IUsuario.findById(valor).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
+        if (valor.contains("@")) {
+            IUsuario.findByCorreoIgnoreCase(valor).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
+            IUsuario.findByCorreoGoogleIgnoreCase(valor).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
         }
-        return usuarioEncontrado.filter(usuario -> {
+        String telefono = normalizarTelefono(valor);
+        if (telefono != null && TELEFONO_VALIDO.matcher(telefono).matches()) {
+            IUsuario.findByTelefono(telefono).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
+        }
+        IUsuario.findByNombreIgnoreCase(valor).forEach(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
+
+        List<MUsuario> validos = new ArrayList<>();
+        for (MUsuario usuario : candidatos.values()) {
             String guardada = usuario.getContrasena();
-            if (codificador.verificar(contrasena, guardada)) return true;
+            if (codificador.verificar(contrasena, guardada)) {
+                validos.add(usuario);
+                continue;
+            }
             if (guardada != null && !guardada.startsWith(SVerificadorContrasena.PREFIJO)
                     && java.security.MessageDigest.isEqual(guardada.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                     contrasena.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
                 usuario.setContrasena(codificador.codificar(contrasena));
                 IUsuario.save(usuario);
-                return true;
+                validos.add(usuario);
             }
-            return false;
-        }).orElse(null);
+        }
+        return validos.size() == 1 ? validos.get(0) : null;
+    }
+
+    private String normalizarTelefono(String telefono) {
+        if (telefono == null || telefono.isBlank()) return null;
+        String limpio = telefono.trim();
+        if (!limpio.matches("^[+\\d\\s().-]+$")) return limpio;
+        return limpio.replaceAll("[\\s().-]", "");
+    }
+
+    private String normalizarCorreo(String correo) {
+        if (correo == null || correo.isBlank()) return null;
+        return correo.trim().toLowerCase(Locale.ROOT);
     }
 
     /** Consulta todos los usuarios. */
@@ -163,14 +198,39 @@ public  class SUsuario {
                 if (cambios.getNombre() == null || cambios.getNombre().isBlank()) {
                     throw new IllegalArgumentException("El nombre es obligatorio.");
                 }
-                if (cambios.getContrasena() == null || cambios.getContrasena().isBlank()
-                        || cambios.getContrasena().length() < 8) {
+                if (cambios.getContrasena() != null && !cambios.getContrasena().isBlank()
+                        && cambios.getContrasena().length() < 8) {
                     throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
                 }
 
+                String correoNuevo = cambios.getCorreo() == null ? anterior.getCorreo() : normalizarCorreo(cambios.getCorreo());
+                if (correoNuevo != null && !CORREO_VALIDO.matcher(correoNuevo).matches()) {
+                    throw new IllegalArgumentException("Ingresa un correo electrónico válido.");
+                }
+                if (correoNuevo != null && !correoNuevo.equalsIgnoreCase(anterior.getCorreo())
+                        && (IUsuario.findByCorreoIgnoreCase(correoNuevo).isPresent()
+                        || IUsuario.findByCorreoGoogleIgnoreCase(correoNuevo).isPresent())) {
+                    throw new IllegalStateException("Ya existe una cuenta con este correo.");
+                }
+
+                String telefonoNuevo = cambios.getTelefono() == null ? anterior.getTelefono() : normalizarTelefono(cambios.getTelefono());
+                if (telefonoNuevo != null && !TELEFONO_VALIDO.matcher(telefonoNuevo).matches()) {
+                    throw new IllegalArgumentException("Ingresa un teléfono válido con al menos 7 dígitos.");
+                }
+                if (telefonoNuevo != null && !telefonoNuevo.equals(anterior.getTelefono())
+                        && IUsuario.findByTelefono(telefonoNuevo).isPresent()) {
+                    throw new IllegalStateException("Ya existe una cuenta con este teléfono.");
+                }
+
                 anterior.setNombre(cambios.getNombre().trim());
-                anterior.setContrasena(verificador.codificar(cambios.getContrasena()));
-                if (nuevoId.equals(idUsuario)) return IUsuario.save(anterior);
+                if (cambios.getContrasena() != null && !cambios.getContrasena().isBlank()) {
+                    anterior.setContrasena(verificador.codificar(cambios.getContrasena()));
+                }
+                if (nuevoId.equals(idUsuario)) {
+                    anterior.setCorreo(correoNuevo);
+                    anterior.setTelefono(telefonoNuevo);
+                    return IUsuario.save(anterior);
+                }
 
                 // Cambiar una PK requiere trasladar primero la cuenta y luego sus relaciones.
                 MUsuario actualizado = new MUsuario();
@@ -204,7 +264,8 @@ public  class SUsuario {
                 });
                 IUsuario.delete(anterior);
                 IUsuario.flush();
-                nuevoUsuario.setCorreo(anterior.getCorreo());
+                nuevoUsuario.setCorreo(correoNuevo);
+                nuevoUsuario.setTelefono(telefonoNuevo);
                 nuevoUsuario.setGoogleSubject(anterior.getGoogleSubject());
                 nuevoUsuario.setCorreoGoogle(anterior.getCorreoGoogle());
                 IUsuario.save(nuevoUsuario);

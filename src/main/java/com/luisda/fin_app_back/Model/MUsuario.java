@@ -35,6 +35,9 @@ public class MUsuario implements Persistable<String> {
     @Column(name = "correo", unique = true, length = 255)
     private String correo;
 
+    @Column(name = "telefono", unique = true, length = 30)
+    private String telefono;
+
     @Column(length = 255, nullable = false)
     private String contrasena;
 
@@ -92,6 +95,10 @@ public class MUsuario implements Persistable<String> {
     public String getCorreo() { return correo; }
 
     public void setCorreo(String correo) { this.correo = correo; }
+
+    public String getTelefono() { return telefono; }
+
+    public void setTelefono(String telefono) { this.telefono = telefono; }
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     public String getContrasena() {

@@ -27,6 +27,10 @@ public interface IUsuario extends JpaRepository<MUsuario , String> {
 
     java.util.Optional<MUsuario> findByCorreoIgnoreCase(String correo);
 
+    java.util.Optional<MUsuario> findByTelefono(String telefono);
+
+    List<MUsuario> findByNombreIgnoreCase(String nombre);
+
     // consultas
     @Query("SELECT u FROM MUsuario u WHERE u.nombre = :nombre")
     List<MUsuario> buscarPorNombre(

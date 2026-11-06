@@ -1,3 +1,5 @@
 package com.luisda.fin_app_back.DTO;
 
-public record UsuarioLoginDTO(String idUsuario, String contrasena) {}
+import com.fasterxml.jackson.annotation.JsonAlias;
+
+public record UsuarioLoginDTO(@JsonAlias("idUsuario") String identificador, String contrasena) {}

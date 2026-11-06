@@ -11,4 +11,8 @@ import java.util.Optional;
 public interface IBolsillo extends JpaRepository<MBolsillo, String> {
     List<MBolsillo> findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(String idContabilidad);
     Optional<MBolsillo> findByIdBolsilloAndContabilidad_IdContabilidad(String idBolsillo, String idContabilidad);
+    List<MBolsillo> findByUsuario_IdUsuarioOrderByFechaCreacionDesc(String idUsuario);
+    Optional<MBolsillo> findByIdBolsilloAndUsuario_IdUsuario(String idBolsillo, String idUsuario);
+    List<MBolsillo> findByContabilidad_IdContabilidadAndTipoIgnoreCase(String idContabilidad, String tipo);
+    boolean existsByContabilidad_IdContabilidadAndTipoIgnoreCaseAndIdBolsilloNot(String idContabilidad, String tipo, String idBolsillo);
 }

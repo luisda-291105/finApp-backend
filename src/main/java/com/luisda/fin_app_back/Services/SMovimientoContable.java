@@ -6,7 +6,6 @@ import com.luisda.fin_app_back.DTO.ResumenMovimientoBolsilloDTO;
 import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Repository.IBolsillo;
-import com.luisda.fin_app_back.Repository.IContabilidad;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
@@ -27,14 +26,12 @@ public class SMovimientoContable {
     private static final Set<String> TIPOS = Set.of("INGRESO", "GASTO", "AHORRO");
     private final IMovimientoContable movimientos;
     private final IBolsillo bolsillos;
-    private final IContabilidad contabilidades;
     private final IUsuario usuarios;
 
     public SMovimientoContable(IMovimientoContable movimientos, IBolsillo bolsillos,
-                               IContabilidad contabilidades, IUsuario usuarios) {
+                               IUsuario usuarios) {
         this.movimientos = movimientos;
         this.bolsillos = bolsillos;
-        this.contabilidades = contabilidades;
         this.usuarios = usuarios;
     }
 
@@ -51,7 +48,7 @@ public class SMovimientoContable {
         if (idsBolsillo.isEmpty()) return List.of();
         List<MMovimientoContable> encontrados = filtro.equals("TODOS")
                 ? movimientos.findByBolsillo_IdBolsilloInOrderByFechaDesc(idsBolsillo)
-                : movimientos.findByBolsillo_IdBolsilloInAndTipoIgnoreCaseOrderByFechaDesc(idsBolsillo, filtro);
+                : movimientos.findByBolsillo_IdBolsilloInAndBolsillo_TipoIgnoreCaseOrderByFechaDesc(idsBolsillo, filtro);
         return encontrados.stream().map(SMovimientoContable::dto).toList();
     }
 
@@ -89,32 +86,40 @@ public class SMovimientoContable {
     public MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud) {
         validarUsuario(idUsuario);
         validar(solicitud);
-        var bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
+        MBolsillo bolsillo = bolsilloPorTipoPropio(idUsuario, solicitud.tipo());
         if (!bolsillo.isEstado()) throw new IllegalArgumentException("Activa el bolsillo para registrar movimientos.");
         MMovimientoContable movimiento = new MMovimientoContable();
         movimiento.setIdMovimiento(UUID.randomUUID().toString());
         movimiento.setBolsillo(bolsillo);
         movimiento.setFecha(solicitud.fecha());
         movimiento.setMonto(solicitud.monto());
-        movimiento.setTipo(solicitud.tipo().trim().toUpperCase(Locale.ROOT));
         movimiento.setCategoria(solicitud.categoria().trim());
         movimiento.setConcepto(solicitud.concepto().trim());
         return dto(movimientos.save(movimiento));
     }
 
+    private MBolsillo bolsilloPorTipoPropio(String idUsuario, String tipo) {
+        String tipoNormalizado = tipo.trim().toUpperCase(Locale.ROOT);
+        List<MBolsillo> encontrados = bolsillosPropios(idUsuario).stream()
+                .filter(bolsillo -> tipoNormalizado.equalsIgnoreCase(bolsillo.getTipo()))
+                .toList();
+        if (encontrados.isEmpty()) {
+            throw new IllegalArgumentException("No tienes un bolsillo activo para el tipo " + tipoNormalizado.toLowerCase(Locale.ROOT) + ". Crea uno de ese tipo.");
+        }
+        if (encontrados.size() > 1) {
+            throw new IllegalStateException("Hay varios bolsillos del mismo tipo. Deja solo uno para registrar movimientos automáticamente.");
+        }
+        return encontrados.get(0);
+    }
+
     private MBolsillo bolsilloPropio(String idUsuario, String idBolsillo) {
         if (idBolsillo == null || idBolsillo.isBlank()) throw new IllegalArgumentException("Selecciona un bolsillo.");
-        String idContabilidad = contabilidades.findByUsuario_IdUsuario(idUsuario)
-                .orElseThrow(() -> new NoSuchElementException("No se encontró la contabilidad del usuario."))
-                .getIdContabilidad();
-        return bolsillos.findByIdBolsilloAndContabilidad_IdContabilidad(idBolsillo, idContabilidad)
+        return bolsillos.findByIdBolsilloAndUsuario_IdUsuario(idBolsillo, idUsuario)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el bolsillo seleccionado."));
     }
 
     private List<MBolsillo> bolsillosPropios(String idUsuario) {
-        return contabilidades.findByUsuario_IdUsuario(idUsuario)
-                .map(contabilidad -> bolsillos.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(contabilidad.getIdContabilidad()))
-                .orElseGet(List::of);
+        return bolsillos.findByUsuario_IdUsuarioOrderByFechaCreacionDesc(idUsuario);
     }
 
     private void validarUsuario(String idUsuario) {
@@ -124,9 +129,7 @@ public class SMovimientoContable {
     }
 
     private void validar(MovimientoContableSolicitudDTO solicitud) {
-        if (solicitud == null || solicitud.idBolsillo() == null || solicitud.idBolsillo().isBlank()) {
-            throw new IllegalArgumentException("Selecciona un bolsillo.");
-        }
+        if (solicitud == null) throw new IllegalArgumentException("Completa los datos del movimiento.");
         if (solicitud.fecha() == null) {
             throw new IllegalArgumentException("Ingresa una fecha válida.");
         }
@@ -147,6 +150,6 @@ public class SMovimientoContable {
 
     private static MovimientoContableDTO dto(MMovimientoContable movimiento) {
         return new MovimientoContableDTO(movimiento.getIdMovimiento(), movimiento.getBolsillo().getIdBolsillo(), movimiento.getBolsillo().getNombre(),
-                movimiento.getFecha(), movimiento.getMonto(), movimiento.getTipo(), movimiento.getCategoria(), movimiento.getConcepto());
+                movimiento.getFecha(), movimiento.getMonto(), movimiento.getBolsillo().getTipo(), movimiento.getCategoria(), movimiento.getConcepto());
     }
 }

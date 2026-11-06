@@ -22,9 +22,6 @@ public class MMovimientoContable {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal monto;
 
-    @Column(nullable = false, length = 16)
-    private String tipo;
-
     @Column(nullable = false, length = 80)
     private String categoria;
 
@@ -39,8 +36,6 @@ public class MMovimientoContable {
     public void setFecha(LocalDate fecha) { this.fecha = fecha; }
     public BigDecimal getMonto() { return monto; }
     public void setMonto(BigDecimal monto) { this.monto = monto; }
-    public String getTipo() { return tipo; }
-    public void setTipo(String tipo) { this.tipo = tipo; }
     public String getCategoria() { return categoria; }
     public void setCategoria(String categoria) { this.categoria = categoria; }
     public String getConcepto() { return concepto; }

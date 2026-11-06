@@ -9,12 +9,11 @@ import java.util.List;
 
 public interface IMovimientoContable extends JpaRepository<MMovimientoContable, String> {
     List<MMovimientoContable> findByBolsillo_IdBolsilloOrderByFechaDesc(String idBolsillo);
-    List<MMovimientoContable> findByBolsillo_IdBolsilloAndTipoIgnoreCaseOrderByFechaDesc(String idBolsillo, String tipo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInOrderByFechaDesc(List<String> idsBolsillo);
-    List<MMovimientoContable> findByBolsillo_IdBolsilloInAndTipoIgnoreCaseOrderByFechaDesc(List<String> idsBolsillo, String tipo);
+    List<MMovimientoContable> findByBolsillo_IdBolsilloInAndBolsillo_TipoIgnoreCaseOrderByFechaDesc(List<String> idsBolsillo, String tipo);
     boolean existsByBolsillo_IdBolsillo(String idBolsillo);
 
-    @Query("SELECT m.bolsillo.idBolsillo, m.tipo, COUNT(m), SUM(m.monto) FROM MMovimientoContable m " +
-            "WHERE m.bolsillo.idBolsillo IN :idsBolsillo GROUP BY m.bolsillo.idBolsillo, m.tipo")
+    @Query("SELECT m.bolsillo.idBolsillo, m.bolsillo.tipo, COUNT(m), SUM(m.monto) FROM MMovimientoContable m " +
+            "WHERE m.bolsillo.idBolsillo IN :idsBolsillo GROUP BY m.bolsillo.idBolsillo, m.bolsillo.tipo")
     List<Object[]> resumirPorBolsillos(@Param("idsBolsillo") List<String> idsBolsillo);
 }

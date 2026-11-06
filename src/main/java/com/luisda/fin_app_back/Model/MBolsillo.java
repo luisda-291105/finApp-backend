@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Locale;
 
 /**
  * @uso               Representa un espacio de información dentro de una contabilidad
@@ -26,8 +27,16 @@ public class MBolsillo {
     @JsonIgnore
     private MContabilidad contabilidad;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_usuario")
+    @JsonIgnore
+    private MUsuario usuario;
+
     @Column(length = 100, nullable = false)
     private String nombre;
+
+    @Column(length = 16)
+    private String tipo;
 
     @Column(name = "monto_objetivo", nullable = false, precision = 19, scale = 2,
             columnDefinition = "DECIMAL(19,2) NOT NULL DEFAULT 0.00")
@@ -82,10 +91,21 @@ public class MBolsillo {
         this.nombre = nombre;
     }
 
+    public String getTipo() { return tipo; }
+
+    public void setTipo(String tipo) {
+        this.tipo = tipo == null ? null : tipo.trim().toUpperCase(Locale.ROOT);
+    }
+
     @JsonIgnore
     public MContabilidad getContabilidad() { return contabilidad; }
 
     public void setContabilidad(MContabilidad contabilidad) { this.contabilidad = contabilidad; }
+
+    @JsonIgnore
+    public MUsuario getUsuario() { return usuario; }
+
+    public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
 
     public String getIdContabilidad() { return contabilidad == null ? null : contabilidad.getIdContabilidad(); }
 

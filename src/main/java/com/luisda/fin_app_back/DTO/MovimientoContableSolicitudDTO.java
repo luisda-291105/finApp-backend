@@ -4,10 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record MovimientoContableSolicitudDTO(
-        String idBolsillo,
+        String tipo,
         LocalDate fecha,
         BigDecimal monto,
-        String tipo,
         String categoria,
         String concepto
 ) {}

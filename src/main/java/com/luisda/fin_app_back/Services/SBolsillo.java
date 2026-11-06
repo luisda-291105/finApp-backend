@@ -6,7 +6,6 @@ import com.luisda.fin_app_back.Model.MContabilidad;
 import com.luisda.fin_app_back.Repository.IContabilidad;
 import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IUsuario;
-import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,13 +23,11 @@ public class SBolsillo {
     private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO");
     private final IBolsillo bolsillos;
     private final IContabilidad contabilidades;
-    private final IMovimientoContable movimientos;
     private final IUsuario usuarios;
 
-    public SBolsillo(IBolsillo bolsillos, IContabilidad contabilidades, IMovimientoContable movimientos, IUsuario usuarios) {
+    public SBolsillo(IBolsillo bolsillos, IContabilidad contabilidades, IUsuario usuarios) {
         this.bolsillos = bolsillos;
         this.contabilidades = contabilidades;
-        this.movimientos = movimientos;
         this.usuarios = usuarios;
     }
 
@@ -79,7 +76,6 @@ public class SBolsillo {
         String tipoNuevo = solicitud.tipo() == null ? bolsillo.getTipo() : normalizarTipo(solicitud.tipo());
         if (!tipoNuevo.equalsIgnoreCase(bolsillo.getTipo())) {
             bolsillo.setTipo(tipoNuevo);
-            movimientos.actualizarTipoPorBolsillo(bolsillo.getIdBolsillo(), tipoNuevo);
         }
         bolsillo.setNombre(solicitud.nombre().trim());
         if (solicitud.estado() != null) bolsillo.setEstado(solicitud.estado());

@@ -18,10 +18,12 @@ import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class SMovimientoContable {
+    private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO");
     private final IMovimientoContable movimientos;
     private final IBolsillo bolsillos;
     private final IUsuario usuarios;
@@ -46,7 +48,7 @@ public class SMovimientoContable {
         if (idsBolsillo.isEmpty()) return List.of();
         List<MMovimientoContable> encontrados = filtro.equals("TODOS")
                 ? movimientos.findByBolsillo_IdBolsilloInOrderByFechaDesc(idsBolsillo)
-                : movimientos.findByBolsillo_IdBolsilloInAndBolsillo_TipoIgnoreCaseOrderByFechaDesc(idsBolsillo, filtro);
+                : movimientos.findByBolsillo_IdBolsilloInAndTipoIgnoreCaseOrderByFechaDesc(idsBolsillo, filtro);
         return encontrados.stream().map(SMovimientoContable::dto).toList();
     }
 
@@ -58,7 +60,7 @@ public class SMovimientoContable {
         Map<String, BigDecimal[]> totales = new LinkedHashMap<>();
         Map<String, Long> cantidades = new LinkedHashMap<>();
         propios.forEach(bolsillo -> {
-            totales.put(bolsillo.getIdBolsillo(), new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+            totales.put(bolsillo.getIdBolsillo(), new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
             cantidades.put(bolsillo.getIdBolsillo(), 0L);
         });
         for (Object[] fila : movimientos.resumirPorBolsillos(List.copyOf(totales.keySet()))) {
@@ -66,17 +68,18 @@ public class SMovimientoContable {
             String tipo = String.valueOf(fila[1]).toUpperCase(Locale.ROOT);
             long cantidad = ((Number) fila[2]).longValue();
             BigDecimal monto = fila[3] == null ? BigDecimal.ZERO : new BigDecimal(fila[3].toString());
-            cantidades.put(idBolsillo, cantidad);
+            cantidades.merge(idBolsillo, cantidad, Long::sum);
             BigDecimal[] bolsilloTotal = totales.get(idBolsillo);
-            if ("INGRESO".equals(tipo)) bolsilloTotal[0] = monto;
-            if ("GASTO".equals(tipo)) bolsilloTotal[1] = monto;
-            if ("AHORRO".equals(tipo)) bolsilloTotal[2] = monto;
+            if ("INGRESO".equals(tipo)) bolsilloTotal[0] = bolsilloTotal[0].add(monto);
+            else if ("GASTO".equals(tipo)) bolsilloTotal[1] = bolsilloTotal[1].add(monto);
+            else if ("AHORRO".equals(tipo)) bolsilloTotal[2] = bolsilloTotal[2].add(monto);
+            else bolsilloTotal[3] = bolsilloTotal[3].add(monto);
         }
         return propios.stream().map(bolsillo -> {
             BigDecimal[] montos = totales.get(bolsillo.getIdBolsillo());
-            BigDecimal saldo = montos[0].subtract(montos[1]).subtract(montos[2]);
+            BigDecimal saldo = montos[0].subtract(montos[1]).subtract(montos[2]).subtract(montos[3]);
             return new ResumenMovimientoBolsilloDTO(bolsillo.getIdBolsillo(), bolsillo.getNombre(),
-                    cantidades.get(bolsillo.getIdBolsillo()), montos[0], montos[1], montos[2], saldo);
+                    cantidades.get(bolsillo.getIdBolsillo()), montos[0], montos[1], montos[2], montos[3], saldo);
         }).toList();
     }
 
@@ -86,10 +89,11 @@ public class SMovimientoContable {
         validar(solicitud);
         MBolsillo bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
         if (!bolsillo.isEstado()) throw new IllegalArgumentException("Activa el bolsillo para registrar movimientos.");
+        validarSaldoDisponible(bolsillo, solicitud.tipo(), solicitud.monto(), null);
         MMovimientoContable movimiento = new MMovimientoContable();
         movimiento.setIdMovimiento(UUID.randomUUID().toString());
         movimiento.setBolsillo(bolsillo);
-        movimiento.setTipo(bolsillo.getTipo());
+        movimiento.setTipo(normalizarTipo(solicitud.tipo()));
         movimiento.setFecha(solicitud.fecha());
         movimiento.setMonto(solicitud.monto());
         movimiento.setCategoria(solicitud.categoria().trim());
@@ -106,8 +110,11 @@ public class SMovimientoContable {
         if (!bolsillo.isEstado() && !bolsillo.getIdBolsillo().equals(movimiento.getBolsillo().getIdBolsillo())) {
             throw new IllegalArgumentException("Activa el bolsillo para asignarle este movimiento.");
         }
+        String idMovimientoExcluir = bolsillo.getIdBolsillo().equals(movimiento.getBolsillo().getIdBolsillo())
+                ? movimiento.getIdMovimiento() : null;
+        validarSaldoDisponible(bolsillo, solicitud.tipo(), solicitud.monto(), idMovimientoExcluir);
         movimiento.setBolsillo(bolsillo);
-        movimiento.setTipo(bolsillo.getTipo());
+        movimiento.setTipo(normalizarTipo(solicitud.tipo()));
         movimiento.setFecha(solicitud.fecha());
         movimiento.setMonto(solicitud.monto());
         movimiento.setCategoria(solicitud.categoria().trim());
@@ -132,6 +139,16 @@ public class SMovimientoContable {
                 .orElseThrow(() -> new NoSuchElementException("No se encontró el bolsillo seleccionado."));
     }
 
+    private void validarSaldoDisponible(MBolsillo bolsillo, String tipo, BigDecimal monto, String idMovimientoExcluir) {
+        if ("INGRESO".equalsIgnoreCase(tipo.trim())) return;
+        BigDecimal disponible = movimientos.calcularSaldoDisponible(bolsillo.getIdBolsillo(), idMovimientoExcluir);
+        if (disponible == null) disponible = BigDecimal.ZERO;
+        if (monto.compareTo(disponible) > 0) {
+            throw new IllegalArgumentException("Saldo insuficiente en «" + bolsillo.getNombre()
+                    + "». Disponible: " + disponible.toPlainString() + " COP.");
+        }
+    }
+
     private List<MBolsillo> bolsillosPropios(String idUsuario) {
         return bolsillos.findByIdUsuarioOrderByFechaCreacionDesc(idUsuario);
     }
@@ -154,6 +171,9 @@ public class SMovimientoContable {
         if (solicitud.idBolsillo() == null || solicitud.idBolsillo().isBlank()) {
             throw new IllegalArgumentException("Selecciona el bolsillo del movimiento.");
         }
+        if (solicitud.tipo() == null || solicitud.tipo().isBlank() || solicitud.tipo().trim().length() > 40) {
+            throw new IllegalArgumentException("Selecciona un tipo de movimiento válido.");
+        }
         if (solicitud.categoria() == null || solicitud.categoria().isBlank() || solicitud.categoria().trim().length() > 80) {
             throw new IllegalArgumentException("La categoría es obligatoria y no puede superar 80 caracteres.");
         }
@@ -162,8 +182,14 @@ public class SMovimientoContable {
         }
     }
 
+    private static String normalizarTipo(String tipo) {
+        String limpio = tipo.trim().replaceAll("\\s+", " ");
+        String mayusculas = limpio.toUpperCase(Locale.ROOT);
+        return TIPOS_BASE.contains(mayusculas) ? mayusculas : limpio;
+    }
+
     private static MovimientoContableDTO dto(MMovimientoContable movimiento) {
         return new MovimientoContableDTO(movimiento.getIdMovimiento(), movimiento.getBolsillo().getIdBolsillo(), movimiento.getBolsillo().getNombre(),
-                movimiento.getFecha(), movimiento.getMonto(), movimiento.getBolsillo().getTipo(), movimiento.getCategoria(), movimiento.getConcepto());
+                movimiento.getFecha(), movimiento.getMonto(), movimiento.getTipo(), movimiento.getCategoria(), movimiento.getConcepto());
     }
 }

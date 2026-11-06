@@ -9,5 +9,6 @@ public record ResumenMovimientoBolsilloDTO(
         BigDecimal ingresos,
         BigDecimal gastos,
         BigDecimal ahorros,
+        BigDecimal otros,
         BigDecimal saldo
 ) {}

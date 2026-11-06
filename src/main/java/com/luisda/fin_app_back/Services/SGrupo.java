@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * @uso Gestiona las operaciones disponibles de grupos
@@ -30,6 +32,21 @@ public class SGrupo {
         IGrupo = iGrupo;
         IUsuario = iUsuario;
         IFuentes = iFuentes;
+    }
+
+    /** Crea un grupo usando siempre el usuario suministrado por la sesión autenticada. */
+    public MGrupo crearPropio(String idUsuario, String nombre, String descripcion) throws Exception {
+        if (idUsuario == null || idUsuario.isBlank()) throw new IllegalArgumentException("Se requiere una sesión activa.");
+        MGrupo grupo = new MGrupo();
+        grupo.setIdGrupo(UUID.randomUUID().toString());
+        grupo.setNombre(nombre);
+        grupo.setDescripcion(descripcion);
+        grupo.setEstado(true);
+        grupo.setFechaCreacion(LocalDate.now());
+        com.luisda.fin_app_back.Model.MUsuario propietario = new com.luisda.fin_app_back.Model.MUsuario();
+        propietario.setIdUsuario(idUsuario);
+        grupo.setUsuario(propietario);
+        return crear(grupo);
     }
 
     /**

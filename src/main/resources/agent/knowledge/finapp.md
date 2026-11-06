@@ -1,10 +1,10 @@
 # FinApp: guía del asistente
 
-FinApp es una aplicación web para organizar información personal y financiera. El asistente de chat responde sobre el uso documentado de la aplicación, puede consultar los datos del usuario en sesión (contactos, grupos, correos, tarjetas, bolsillos contables y movimientos), y puede buscar información pública en Internet cuando la pregunta lo requiere. No puede modificar datos ni ejecutar operaciones financieras.
+FinApp es una aplicación web para organizar información personal y financiera. El asistente responde sobre la aplicación, consulta datos propios y puede proponer operaciones CRUD sobre contactos, grupos, fuentes que no sean de correo, bolsillos y movimientos. Toda escritura requiere confirmación explícita y el backend vuelve a validar que el registro pertenezca al usuario activo. Las fuentes de correo y tarjetas se administran desde sus secciones; el asistente nunca consulta ni modifica el perfil, identificación, credenciales o cuenta del usuario.
 
 ## Consultas de datos del usuario
 
-Cuando el usuario está en sesión, el asistente puede responder preguntas simples sobre sus datos registrados:
+Cuando el usuario está en sesión, el asistente puede responder consultas sobre sus datos registrados y ayudar a administrarlos:
 - **Contactos**: "¿qué contactos tengo?", "muéstrame mis contactos", "¿cuántos contactos hay?"
 - **Grupos**: "¿cuáles son mis grupos?", "¿qué grupos están activos?", "¿qué grupos están inactivos?"
 - **Bolsillos contables**: "¿cuánto he gastado este mes?", "¿qué categoría concentra más gastos?", "compara mis ingresos y gastos por mes".
@@ -12,7 +12,7 @@ Cuando el usuario está en sesión, el asistente puede responder preguntas simpl
 - **Tarjetas**: "¿cuántas tarjetas tengo registradas?", "¿qué tarjetas hay?"
 - **Finanzas**: puede comparar movimientos registrados por tipo, bolsillo, categoría y mes, y describir movimientos recientes. Los totales representan sumas de movimientos; no equivalen al saldo actual.
 
-Estas consultas son de solo lectura. El asistente no puede crear, editar ni eliminar registros.
+Puede crear, editar y eliminar contactos, grupos, fuentes no relacionadas con correo, bolsillos y movimientos. Antes de guardar o eliminar, muestra los datos de la operación y espera la confirmación del usuario. Si faltan datos, pregunta por ellos. No afirma que una operación se completó hasta recibir confirmación del backend.
 
 ## Navegación del dashboard
 
@@ -36,4 +36,4 @@ Configuración permite revisar el perfil y gestionar fuentes registradas. El swi
 
 ## Privacidad del asistente
 
-No escribas nombres completos, correos, números de tarjeta, CVV, contraseñas u otros datos privados en el chat. Los mensajes se envían al modelo configurado en el backend; si se necesita información web, la consulta también se envía al proveedor de búsqueda. El asistente solo lee los datos básicos del usuario en sesión (contactos, grupos, correos y tarjetas) para responder consultas directas, y no ejecuta acciones financieras.
+No escribas números de tarjeta, CVV o contraseñas en el chat. Los mensajes y el contexto necesario se envían al modelo configurado en el backend; si se necesita información web, la consulta también se envía al proveedor de búsqueda. El backend obtiene el usuario activo de la sesión, limita las lecturas y escrituras a sus registros y no expone ni modifica su perfil o cuenta. Las mutaciones requieren confirmación explícita.

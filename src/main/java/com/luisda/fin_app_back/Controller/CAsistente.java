@@ -1,8 +1,8 @@
 package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.DTO.PeticionChat;
+import com.luisda.fin_app_back.DTO.ConfirmacionAccionAsistente;
 import com.luisda.fin_app_back.DTO.RespuestaChat;
-import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Services.SAsistenteChat;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.luisda.fin_app_back.Services.ServicioChatException;
@@ -42,8 +42,8 @@ public class CAsistente {
                     .body(Map.of("mensaje", "Alcanzaste el límite temporal del asistente. Inténtalo más tarde."));
         }
         try {
-            Optional<MUsuario> usuario = usuarioActivo.obtenerUsuario(request);
-            RespuestaChat respuesta = servicio.responder(peticion, usuario.orElse(null));
+            String idUsuario = usuarioActivo.obtenerIdUsuario(request).orElse(null);
+            RespuestaChat respuesta = servicio.responder(peticion, idUsuario);
             return ResponseEntity.ok(respuesta);
         } catch (ServicioChatException error) {
             System.err.println("[Asistente] ServicioChatException: " + error.getMessage());
@@ -56,6 +56,26 @@ public class CAsistente {
             Map<String, Object> cuerpo = new java.util.HashMap<>();
             cuerpo.put("mensaje", "Error interno en el asistente: " + error.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(cuerpo);
+        }
+    }
+
+    @PostMapping("/confirmar")
+    public ResponseEntity<?> confirmar(@RequestBody ConfirmacionAccionAsistente confirmacion,
+                                       HttpServletRequest request) {
+        Optional<String> idUsuario = usuarioActivo.obtenerIdUsuario(request);
+        if (idUsuario.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("mensaje", "Inicia sesión para confirmar esta operación."));
+        }
+        try {
+            return ResponseEntity.ok(servicio.confirmarAccion(idUsuario.get(),
+                    confirmacion == null ? null : confirmacion.token()));
+        } catch (ServicioChatException error) {
+            return ResponseEntity.status(error.getEstado()).body(Map.of("mensaje",
+                    error.getMessage() == null ? "No se pudo confirmar la operación." : error.getMessage()));
+        } catch (Exception error) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("mensaje", error.getMessage() == null ? "No se pudo completar la operación." : error.getMessage()));
         }
     }
 

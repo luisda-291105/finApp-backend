@@ -97,6 +97,35 @@ public class SMovimientoContable {
         return dto(movimientos.save(movimiento));
     }
 
+    @Transactional
+    public MovimientoContableDTO actualizar(String idUsuario, String idMovimiento, MovimientoContableSolicitudDTO solicitud) {
+        validarUsuario(idUsuario);
+        validar(solicitud);
+        MMovimientoContable movimiento = propio(idUsuario, idMovimiento);
+        MBolsillo bolsillo = bolsilloPorTipoPropio(idUsuario, solicitud.tipo());
+        if (!bolsillo.isEstado() && !bolsillo.getIdBolsillo().equals(movimiento.getBolsillo().getIdBolsillo())) {
+            throw new IllegalArgumentException("Activa el bolsillo para asignarle este movimiento.");
+        }
+        movimiento.setBolsillo(bolsillo);
+        movimiento.setTipo(bolsillo.getTipo());
+        movimiento.setFecha(solicitud.fecha());
+        movimiento.setMonto(solicitud.monto());
+        movimiento.setCategoria(solicitud.categoria().trim());
+        movimiento.setConcepto(solicitud.concepto().trim());
+        return dto(movimientos.save(movimiento));
+    }
+
+    @Transactional
+    public void eliminar(String idUsuario, String idMovimiento) {
+        validarUsuario(idUsuario);
+        movimientos.delete(propio(idUsuario, idMovimiento));
+    }
+
+    private MMovimientoContable propio(String idUsuario, String idMovimiento) {
+        return movimientos.findByIdMovimientoAndBolsillo_IdUsuario(idMovimiento, idUsuario)
+                .orElseThrow(() -> new NoSuchElementException("No se encontró el movimiento."));
+    }
+
     private MBolsillo bolsilloPorTipoPropio(String idUsuario, String tipo) {
         String tipoNormalizado = tipo.trim().toUpperCase(Locale.ROOT);
         List<MBolsillo> encontrados = bolsillosPropios(idUsuario).stream()

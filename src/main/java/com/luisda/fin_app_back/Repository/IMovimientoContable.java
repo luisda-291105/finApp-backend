@@ -7,12 +7,14 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface IMovimientoContable extends JpaRepository<MMovimientoContable, String> {
     List<MMovimientoContable> findByBolsillo_IdBolsilloOrderByFechaDesc(String idBolsillo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInOrderByFechaDesc(List<String> idsBolsillo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInAndBolsillo_TipoIgnoreCaseOrderByFechaDesc(List<String> idsBolsillo, String tipo);
     boolean existsByBolsillo_IdBolsillo(String idBolsillo);
+    Optional<MMovimientoContable> findByIdMovimientoAndBolsillo_IdUsuario(String idMovimiento, String idUsuario);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE MMovimientoContable m SET m.tipo = :tipo WHERE m.bolsillo.idBolsillo = :idBolsillo")

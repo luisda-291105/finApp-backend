@@ -61,6 +61,35 @@ public class CMovimientoContable {
         }
     }
 
+    @PutMapping("/{idMovimiento}")
+    public ResponseEntity<?> actualizar(@PathVariable String idMovimiento,
+                                        @RequestBody MovimientoContableSolicitudDTO solicitud,
+                                        HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        try {
+            return ResponseEntity.ok(movimientos.actualizar(usuario.get().getIdUsuario(), idMovimiento, solicitud));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(RespuestaModalDTO.error(error.getMessage(), null));
+        }
+    }
+
+    @DeleteMapping("/{idMovimiento}")
+    public ResponseEntity<?> eliminar(@PathVariable String idMovimiento, HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        try {
+            movimientos.eliminar(usuario.get().getIdUsuario(), idMovimiento);
+            return ResponseEntity.ok(RespuestaModalDTO.exito("Movimiento eliminado.", null));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
+        }
+    }
+
     private ResponseEntity<RespuestaModalDTO> noAutorizado() {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(RespuestaModalDTO.error("Inicia sesión para consultar tus movimientos.", null));

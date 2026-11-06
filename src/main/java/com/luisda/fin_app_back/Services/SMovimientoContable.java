@@ -18,12 +18,10 @@ import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class SMovimientoContable {
-    private static final Set<String> TIPOS = Set.of("INGRESO", "GASTO", "AHORRO");
     private final IMovimientoContable movimientos;
     private final IBolsillo bolsillos;
     private final IUsuario usuarios;
@@ -39,8 +37,8 @@ public class SMovimientoContable {
     public List<MovimientoContableDTO> listar(String idUsuario, String idBolsillo, String tipo) {
         validarUsuario(idUsuario);
         String filtro = tipo == null ? "TODOS" : tipo.trim().toUpperCase(Locale.ROOT);
-        if (!filtro.equals("TODOS") && !TIPOS.contains(filtro)) {
-            throw new IllegalArgumentException("El filtro debe ser Ingreso, Gasto, Ahorro o Todos.");
+        if (!filtro.equals("TODOS") && (filtro.isBlank() || filtro.length() > 40)) {
+            throw new IllegalArgumentException("El filtro debe ser Todos o un tipo de movimiento válido.");
         }
         List<String> idsBolsillo = idBolsillo == null || idBolsillo.isBlank()
                 ? bolsillosPropios(idUsuario).stream().map(MBolsillo::getIdBolsillo).toList()
@@ -138,8 +136,8 @@ public class SMovimientoContable {
         if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0 || monto.scale() > 2 || monto.precision() > 19) {
             throw new IllegalArgumentException("El monto debe ser positivo y tener máximo dos decimales.");
         }
-        if (solicitud.tipo() == null || !TIPOS.contains(solicitud.tipo().trim().toUpperCase(Locale.ROOT))) {
-            throw new IllegalArgumentException("El tipo debe ser Ingreso, Gasto o Ahorro.");
+        if (solicitud.tipo() == null || solicitud.tipo().isBlank() || solicitud.tipo().trim().length() > 40) {
+            throw new IllegalArgumentException("El tipo de movimiento es obligatorio y no puede superar 40 caracteres.");
         }
         if (solicitud.categoria() == null || solicitud.categoria().isBlank() || solicitud.categoria().trim().length() > 80) {
             throw new IllegalArgumentException("La categoría es obligatoria y no puede superar 80 caracteres.");

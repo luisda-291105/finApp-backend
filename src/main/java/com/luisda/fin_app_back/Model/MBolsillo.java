@@ -33,7 +33,7 @@ public class MBolsillo {
     @Column(length = 100, nullable = false)
     private String nombre;
 
-    @Column(length = 16)
+    @Column(length = 40)
     private String tipo;
 
     @Column(name = "monto_objetivo", nullable = false, precision = 19, scale = 2,
@@ -92,7 +92,16 @@ public class MBolsillo {
     public String getTipo() { return tipo; }
 
     public void setTipo(String tipo) {
-        this.tipo = tipo == null ? null : tipo.trim().toUpperCase(Locale.ROOT);
+        if (tipo == null) {
+            this.tipo = null;
+            return;
+        }
+        String limpio = tipo.trim().replaceAll("\\s+", " ");
+        String normalizado = limpio.toUpperCase(Locale.ROOT);
+        this.tipo = switch (normalizado) {
+            case "INGRESO", "GASTO", "AHORRO" -> normalizado;
+            default -> limpio;
+        };
     }
 
     @JsonIgnore

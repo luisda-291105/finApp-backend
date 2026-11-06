@@ -23,7 +23,7 @@ public class MMovimientoContable {
     private BigDecimal monto;
 
     // La base instalada mantiene esta columna como obligatoria.
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 40)
     private String tipo;
 
     @Column(nullable = false, length = 80)

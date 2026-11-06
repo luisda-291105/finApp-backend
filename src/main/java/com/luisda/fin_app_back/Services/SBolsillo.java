@@ -8,6 +8,7 @@ import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -20,7 +21,7 @@ import java.util.UUID;
 /** CRUD de bolsillos privados del usuario autenticado. */
 @Service
 public class SBolsillo {
-    private static final Set<String> TIPOS = Set.of("INGRESO", "GASTO", "AHORRO");
+    private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO");
     private final IBolsillo bolsillos;
     private final IContabilidad contabilidades;
     private final IMovimientoContable movimientos;
@@ -72,16 +73,15 @@ public class SBolsillo {
         return bolsillos.save(bolsillo);
     }
 
+    @Transactional
     public MBolsillo actualizar(String idUsuario, String idBolsillo, BolsilloSolicitudDTO solicitud) {
         validar(solicitud);
         MBolsillo bolsillo = propio(idUsuario, idBolsillo);
         String tipoNuevo = solicitud.tipo() == null ? bolsillo.getTipo() : normalizarTipo(solicitud.tipo());
-        if (!tipoNuevo.equals(bolsillo.getTipo())) {
-            if (movimientos.existsByBolsillo_IdBolsillo(bolsillo.getIdBolsillo())) {
-                throw new IllegalArgumentException("No puedes cambiar el tipo de un bolsillo que ya tiene movimientos.");
-            }
+        if (!tipoNuevo.equalsIgnoreCase(bolsillo.getTipo())) {
             validarTipoDisponible(bolsillo.getIdContabilidad(), tipoNuevo, bolsillo.getIdBolsillo());
             bolsillo.setTipo(tipoNuevo);
+            movimientos.actualizarTipoPorBolsillo(bolsillo.getIdBolsillo(), tipoNuevo);
         }
         bolsillo.setNombre(solicitud.nombre().trim());
         if (solicitud.estado() != null) bolsillo.setEstado(solicitud.estado());
@@ -137,8 +137,8 @@ public class SBolsillo {
         if (solicitud.nombre().trim().length() > 100) {
             throw new IllegalArgumentException("El nombre del bolsillo no puede superar 100 caracteres.");
         }
-        if (solicitud.tipo() == null || !TIPOS.contains(normalizarTipo(solicitud.tipo()))) {
-            throw new IllegalArgumentException("El tipo del bolsillo debe ser Ingreso, Gasto o Ahorro.");
+        if (solicitud.tipo() == null || solicitud.tipo().isBlank() || solicitud.tipo().trim().length() > 40) {
+            throw new IllegalArgumentException("El tipo de movimiento es obligatorio y no puede superar 40 caracteres.");
         }
         BigDecimal objetivo = solicitud.montoObjetivo();
         if (objetivo != null && (objetivo.compareTo(BigDecimal.ZERO) < 0 || objetivo.scale() > 2 || objetivo.precision() > 19)) {
@@ -154,7 +154,12 @@ public class SBolsillo {
         if (existe) throw new IllegalArgumentException("Ya existe un bolsillo para el tipo " + etiquetaTipo(tipoNormalizado) + ".");
     }
 
-    private static String normalizarTipo(String tipo) { return tipo == null ? "" : tipo.trim().toUpperCase(Locale.ROOT); }
+    private static String normalizarTipo(String tipo) {
+        if (tipo == null) return "";
+        String limpio = tipo.trim().replaceAll("\\s+", " ");
+        String mayusculas = limpio.toUpperCase(Locale.ROOT);
+        return TIPOS_BASE.contains(mayusculas) ? mayusculas : limpio;
+    }
 
     private static String inferirTipo(String nombre) {
         String limpio = nombre == null ? "" : nombre.toLowerCase(Locale.ROOT);
@@ -164,6 +169,6 @@ public class SBolsillo {
     }
 
     private static String etiquetaTipo(String tipo) {
-        return switch (tipo) { case "INGRESO" -> "ingreso"; case "AHORRO" -> "ahorro"; default -> "gasto"; };
+        return switch (tipo.toUpperCase(Locale.ROOT)) { case "INGRESO" -> "ingreso"; case "AHORRO" -> "ahorro"; case "GASTO" -> "gasto"; default -> tipo; };
     }
 }

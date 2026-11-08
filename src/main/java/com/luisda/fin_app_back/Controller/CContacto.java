@@ -65,6 +65,17 @@ public class CContacto {
         }
     }
 
+    @PostMapping("/importar-google")
+    public ResponseEntity<?> importarGoogle(@RequestBody List<ContactoSolicitudDTO> solicitudesContacto, HttpServletRequest solicitud) {
+        Optional<String> idUsuario = idUsuarioActivo(solicitud);
+        if (idUsuario.isEmpty()) return noAutorizado();
+        try {
+            return ResponseEntity.ok(contactos.importarGoogle(idUsuario.get(), solicitudesContacto).stream().map(this::dto).toList());
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), "contactos"));
+        }
+    }
+
     @PutMapping("/{idContacto}")
     public ResponseEntity<?> actualizar(@PathVariable String idContacto, @RequestBody ContactoSolicitudDTO solicitudContacto,
                                         HttpServletRequest solicitud) {
@@ -99,7 +110,7 @@ public class CContacto {
 
     @GetMapping("/telefono/{telefono}")
     public ResponseEntity<?> buscarPorTelefono(@PathVariable String telefono, HttpServletRequest solicitud) {
-        return buscarEnContactosPropios(solicitud, contacto -> contacto.getTelefono().equals(telefono));
+        return buscarEnContactosPropios(solicitud, contacto -> contacto.getTelefono() != null && contacto.getTelefono().equals(telefono));
     }
 
     private ResponseEntity<?> buscarEnContactosPropios(HttpServletRequest solicitud, java.util.function.Predicate<MContacto> filtro) {
@@ -114,7 +125,7 @@ public class CContacto {
     }
 
     private ContactoDTO dto(MContacto contacto) {
-        return new ContactoDTO(contacto.getIdContacto(), contacto.getNombre(), contacto.getTelefono(), contacto.getNotas());
+        return new ContactoDTO(contacto.getIdContacto(), contacto.getNombre(), contacto.getTelefono(), contacto.getNotas(), contacto.getCorreo(), contacto.getOrigen(), contacto.getCargo(), contacto.getEmpresa(), contacto.getCorreoOrigen());
     }
 
     private ResponseEntity<RespuestaModalDTO> noAutorizado() {

@@ -56,6 +56,14 @@ public class SMovimientoContable {
     }
 
     @Transactional(readOnly = true)
+    public List<String> correosImportados(String idUsuario, List<String> origenesCorreo) {
+        validarUsuario(idUsuario);
+        if (origenesCorreo == null || origenesCorreo.isEmpty()) return List.of();
+        return movimientos.findByOrigenTipoAndOrigenIdInAndBolsillo_IdUsuario("GMAIL", origenesCorreo, idUsuario)
+                .stream().map(MMovimientoContable::getOrigenId).toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<ResumenMovimientoBolsilloDTO> resumir(String idUsuario) {
         validarUsuario(idUsuario);
         List<MBolsillo> propios = bolsillosPropios(idUsuario);
@@ -91,6 +99,9 @@ public class SMovimientoContable {
     public MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud) {
         validarUsuario(idUsuario);
         validar(solicitud);
+        if ("GMAIL".equalsIgnoreCase(solicitud.origenTipo()) && movimientos.existsByOrigenTipoAndOrigenId("GMAIL", solicitud.origenId())) {
+            throw new IllegalStateException("Este correo ya fue importado como movimiento.");
+        }
         MBolsillo bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
         if (!bolsillo.isEstado()) throw new IllegalArgumentException("Activa el bolsillo para registrar movimientos.");
         String tipo = tipoBolsillo(bolsillo);
@@ -171,6 +182,9 @@ public class SMovimientoContable {
 
     private void validar(MovimientoContableSolicitudDTO solicitud) {
         if (solicitud == null) throw new IllegalArgumentException("Completa los datos del movimiento.");
+        if (solicitud.origenId() != null && solicitud.origenId().length() > 180) {
+            throw new IllegalArgumentException("El identificador del origen supera el máximo permitido.");
+        }
         if (solicitud.fecha() == null) {
             throw new IllegalArgumentException("Ingresa una fecha válida.");
         }
@@ -202,10 +216,17 @@ public class SMovimientoContable {
     }
 
     private Origen resolverOrigen(String idUsuario, MovimientoContableSolicitudDTO solicitud, String tipo, String idMovimiento) {
-        if ("INGRESO".equalsIgnoreCase(tipo)) return new Origen(null, "", null, "");
         String origenTipo = solicitud.origenTipo() == null ? "" : solicitud.origenTipo().trim().toUpperCase(Locale.ROOT);
+        if ("INGRESO".equalsIgnoreCase(tipo) && !"GMAIL".equals(origenTipo)) return new Origen(null, "", null, "");
         return switch (origenTipo) {
             case "EFECTIVO" -> new Origen(null, "EFECTIVO", null, "Efectivo");
+            case "GMAIL" -> {
+                if (solicitud.origenId() == null || solicitud.origenId().isBlank()
+                        || solicitud.origenNombre() == null || solicitud.origenNombre().isBlank()) {
+                    throw new IllegalArgumentException("La referencia Gmail debe incluir identificador y remitente.");
+                }
+                yield new Origen(null, "GMAIL", solicitud.origenId(), solicitud.origenNombre().trim());
+            }
             case "BOLSILLO" -> {
                 MBolsillo origen = bolsilloPropio(idUsuario, solicitud.origenId());
                 if (!origen.isEstado() && (idMovimiento == null || !origen.getIdBolsillo().equals(solicitud.origenId()))) {
@@ -231,7 +252,7 @@ public class SMovimientoContable {
     }
 
     private void aplicarOrigen(MMovimientoContable movimiento, Origen origen, String tipo) {
-        if ("INGRESO".equalsIgnoreCase(tipo)) {
+        if ("INGRESO".equalsIgnoreCase(tipo) && !"GMAIL".equals(origen.tipo())) {
             movimiento.setOrigenTipo(null);
             movimiento.setOrigenId(null);
             movimiento.setOrigenNombre(null);

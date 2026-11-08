@@ -6,7 +6,6 @@ import com.luisda.fin_app_back.Repository.IContacto;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGrupo;
 import com.luisda.fin_app_back.Repository.ITarjeta;
-import com.luisda.fin_app_back.Repository.IGmailConexion;
 import com.luisda.fin_app_back.Repository.IMuestraRepository;
 import com.luisda.fin_app_back.Model.MContacto;
 import com.luisda.fin_app_back.Model.MFuente;
@@ -43,20 +42,18 @@ public  class SUsuario {
     private final IFuentes fuentes;
     private final IGrupo grupos;
     private final ITarjeta tarjetas;
-    private final IGmailConexion conexionesGmail;
     private final IMuestraRepository muestras;
 
     // Constructor
     public SUsuario(IUsuario iUsuario, SVerificadorContrasena verificador, IContacto contactos,
                     IFuentes fuentes, IGrupo grupos, ITarjeta tarjetas,
-                    IGmailConexion conexionesGmail, IMuestraRepository muestras) {
+                    IMuestraRepository muestras) {
         IUsuario = iUsuario;
         this.verificador = verificador;
         this.contactos = contactos;
         this.fuentes = fuentes;
         this.grupos = grupos;
         this.tarjetas = tarjetas;
-        this.conexionesGmail = conexionesGmail;
         this.muestras = muestras;
     }
 
@@ -255,12 +252,6 @@ public  class SUsuario {
                 List<MMuestra> listaMuestras = muestras.findByUsuarioId(idUsuario);
                 listaMuestras.forEach(registro -> registro.setUsuarioId(nuevoId));
                 muestras.saveAll(listaMuestras);
-                conexionesGmail.findByIdUsuario(idUsuario).ifPresent(conexion -> {
-                    conexionesGmail.delete(conexion);
-                    conexionesGmail.flush();
-                    conexion.setIdUsuario(nuevoId);
-                    conexionesGmail.save(conexion);
-                });
                 IUsuario.delete(anterior);
                 IUsuario.flush();
                 nuevoUsuario.setCorreo(correoNuevo);

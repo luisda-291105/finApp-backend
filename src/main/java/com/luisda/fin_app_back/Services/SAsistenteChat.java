@@ -8,7 +8,6 @@ import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
 import com.luisda.fin_app_back.DTO.PeticionChat;
 import com.luisda.fin_app_back.DTO.RespuestaChat;
 import com.luisda.fin_app_back.DTO.TurnoChat;
-import com.luisda.fin_app_back.Model.CuentaGmail;
 import com.luisda.fin_app_back.Model.MContacto;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGrupo;
@@ -17,7 +16,6 @@ import com.luisda.fin_app_back.Model.MTarjeta;
 import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Repository.IContacto;
-import com.luisda.fin_app_back.Repository.ICuentaGmail;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGrupo;
 import com.luisda.fin_app_back.Repository.IBolsillo;
@@ -49,6 +47,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.text.Normalizer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -88,7 +88,7 @@ public class SAsistenteChat {
             Si el usuario no ha iniciado sesión y pregunta por sus datos personales, indícale amablemente que debe iniciar sesión.
             Organiza las respuestas complejas en pasos o listas cortas y evita información que no ayude a responder la pregunta.
             No menciones fuentes, citas ni enlaces en la respuesta.
-            No realices operaciones ni solicites contraseñas.
+            No ejecutes una operación sin usar el flujo de propuesta y confirmación explícita. Nunca solicites contraseñas.
             """;
     private static final String INSTRUCCIONES_PUBLICAS = """
             Eres el asistente público de ayuda de FinApp. Responde siempre en español.
@@ -106,7 +106,6 @@ public class SAsistenteChat {
 
     private final SDocumentacionFinApp documentacion;
     private final IContacto contactosRepo;
-    private final ICuentaGmail cuentasGmailRepo;
     private final IFuentes fuentesRepo;
     private final IMuestraRepository muestrasRepo;
     private final ITarjeta tarjetasRepo;
@@ -132,7 +131,6 @@ public class SAsistenteChat {
     public SAsistenteChat(
             SDocumentacionFinApp documentacion,
             IContacto contactosRepo,
-            ICuentaGmail cuentasGmailRepo,
             IFuentes fuentesRepo,
             IMuestraRepository muestrasRepo,
             ITarjeta tarjetasRepo,
@@ -153,7 +151,6 @@ public class SAsistenteChat {
     ) {
         this.documentacion = documentacion;
         this.contactosRepo = contactosRepo;
-        this.cuentasGmailRepo = cuentasGmailRepo;
         this.fuentesRepo = fuentesRepo;
         this.muestrasRepo = muestrasRepo;
         this.tarjetasRepo = tarjetasRepo;
@@ -277,9 +274,33 @@ public class SAsistenteChat {
         return new RespuestaChat(respuesta, List.copyOf(fuentes), false, "");
     }
 
-    /** El asistente, incluso con sesión iniciada, solo contesta preguntas informativas de FinApp. */
+    /** Asistente personal: consulta datos del usuario activo y prepara operaciones propias para confirmación. */
     public RespuestaChat responder(PeticionChat peticion, String idUsuario) {
-        return responderPublico(peticion);
+        validar(peticion, idUsuario);
+        String pregunta = peticion.mensaje();
+        if (esSaludo(pregunta)) {
+            return respuestaSinCambio("Hola. Puedo consultar tus datos de FinApp y ayudarte a administrar contactos, bolsillos, movimientos, grupos y fuentes. Antes de guardar cualquier cambio te mostraré una propuesta para que la confirmes.");
+        }
+        if (parecePreguntaCapacidades(pregunta)) {
+            return respuestaSinCambio("Puedo consultar tus contactos, grupos, fuentes, correos, tarjetas, bolsillos y movimientos. También puedo proponer crear, editar o eliminar contactos, bolsillos, movimientos, grupos y fuentes que no sean de correo. Cada cambio requiere que revises y confirmes la propuesta. Las tarjetas, Gmail y fuentes de correo se administran desde sus secciones.");
+        }
+        if (esConfirmacionExplicita(pregunta)) {
+            return confirmarOperacionConversacional(peticion, idUsuario);
+        }
+        RespuestaChat consulta = responderConsultaPropia(idUsuario, pregunta);
+        if (consulta != null) return consulta;
+
+        List<String> contexto = new ArrayList<>();
+        agregarDatosUsuario(idUsuario, contexto);
+        if (pareceSolicitudDeCambio(pregunta) && !esPreguntaExplicativa(pregunta)) {
+            return proponerAccion(peticion, idUsuario, contexto);
+        }
+        List<Fragmento> fragmentos = documentacion.buscar(pregunta);
+        if (fragmentos.isEmpty()) {
+            return respuestaSinCambio("No encontré información relacionada en tus datos ni en la guía de FinApp. No hice búsquedas externas.");
+        }
+        agregarDocumentacion(fragmentos, new ArrayList<>(), contexto);
+        return new RespuestaChat(generarRespuesta(peticion, contexto), List.of(), false, "");
     }
 
     /** Responde con repositorios ya filtrados por el usuario activo para consultas comunes sin depender del LLM. */
@@ -287,6 +308,12 @@ public class SAsistenteChat {
         String q = pregunta.toLowerCase(java.util.Locale.ROOT);
         boolean consulta = q.matches("(?s).*(cu[aá]nt[oa]s?|qu[eé]|cu[aá]les?|cuales?|dime|lista|mu[eé]str|ver|tengo|hay|d[oó]nde|mis).*" );
         if (!consulta) return null;
+        if (q.matches("(?s).*(gast|gasto|ingres|ahorr|movimiento).*")
+                && q.matches("(?s).*(cu[aá]nt|total|resumen|gast|ingres|ahorr).*")
+                && !q.contains("registr") && !q.contains("crear")) {
+            RespuestaChat resumen = responderResumenFinanciero(idUsuario, q);
+            if (resumen != null) return resumen;
+        }
         if (q.contains("tarjeta") && (q.contains("donde") || q.contains("dónde") || q.contains("ver"))) {
             return respuestaSinCambio("Tus tarjetas se consultan en la sección Tarjetas del menú. Ahí puedes abrir cada tarjeta para ver sus datos enmascarados.");
         }
@@ -302,6 +329,24 @@ public class SAsistenteChat {
             return respuestaSinCambio(propios.isEmpty() ? "Todavía no tienes contactos registrados."
                     : "Estos son tus contactos:\n" + lista);
         }
+        if (q.matches("(?s).*(tel[eé]fono|n[uú]mero|celular|m[oó]vil).*")
+                || q.matches("(?s).*(cu[aá]l|dime|busca|buscar).*(de|del|para).*")) {
+            List<MContacto> propios = contactosRepo.findByUsuario_IdUsuario(idUsuario);
+            String consultaNormalizada = normalizarTexto(q);
+            List<MContacto> coincidencias = propios.stream().filter(contacto -> {
+                String nombre = normalizarTexto(contacto.getNombre());
+                return java.util.Arrays.stream(nombre.split("\\s+"))
+                        .filter(palabra -> palabra.length() >= 3)
+                        .anyMatch(consultaNormalizada::contains);
+            }).toList();
+            if (!coincidencias.isEmpty()) {
+                String detalle = coincidencias.stream().map(c -> c.getNombre() + ": "
+                        + (c.getTelefono() == null || c.getTelefono().isBlank() ? "no tiene teléfono registrado" : c.getTelefono()))
+                        .collect(Collectors.joining("\n"));
+                return respuestaSinCambio(detalle);
+            }
+            return respuestaSinCambio("No encontré un contacto con ese nombre en tus contactos registrados.");
+        }
         if (q.contains("grupo")) {
             List<MGrupo> propios = gruposRepo.findByUsuario_IdUsuario(idUsuario);
             if (q.matches("(?s).*cu[aá]nt[oa]s?.*")) return respuestaSinCambio("Tienes " + propios.size() + " grupo(s) registrado(s).");
@@ -310,14 +355,14 @@ public class SAsistenteChat {
             return respuestaSinCambio(propios.isEmpty() ? "Todavía no tienes grupos registrados." : "Estos son tus grupos:\n" + lista);
         }
         if (q.contains("correo") || q.contains("gmail")) {
-            List<CuentaGmail> cuentas = cuentasGmailRepo.findByUsuarioIdOrderByCreadaEnAsc(idUsuario);
             List<MFuente> fuentesCorreo = fuentesRepo.findByUsuario_IdUsuario(idUsuario).stream()
                     .filter(f -> "CORREO".equalsIgnoreCase(f.getTipo())).toList();
+            List<MFuente> cuentas = fuentesCorreo.stream().filter(MFuente::tieneConexionGmail).toList();
             if (q.matches("(?s).*cu[aá]nt[oa]s?.*")) {
                 return respuestaSinCambio("Tienes " + cuentas.size() + " cuenta(s) Gmail conectada(s) y "
                         + fuentesCorreo.size() + " fuente(s) de correo registrada(s).");
             }
-            String resultado = "Cuentas Gmail conectadas: " + cuentas.stream().map(CuentaGmail::getEmail).collect(Collectors.joining(", "))
+            String resultado = "Cuentas Gmail conectadas: " + cuentas.stream().map(MFuente::getContenido).collect(Collectors.joining(", "))
                     + ". Fuentes registradas: " + fuentesCorreo.stream().map(f -> f.getContenido()
                     + (f.isEstado() ? " (activa)" : " (inactiva)")).collect(Collectors.joining(", "));
             return respuestaSinCambio(resultado);
@@ -337,6 +382,38 @@ public class SAsistenteChat {
             return respuestaSinCambio(propios.isEmpty() ? "Todavía no tienes bolsillos contables." : "Tus bolsillos contables:\n" + lista);
         }
         return null;
+    }
+
+    private RespuestaChat responderResumenFinanciero(String idUsuario, String pregunta) {
+        List<MBolsillo> bolsillos = bolsillosRepo.findByIdUsuarioOrderByFechaCreacionDesc(idUsuario);
+        if (bolsillos.isEmpty()) return respuestaSinCambio("Todavía no tienes bolsillos contables ni movimientos registrados.");
+        List<String> ids = bolsillos.stream().map(MBolsillo::getIdBolsillo).toList();
+        LocalDate hoy = LocalDate.now();
+        boolean periodoActual = pregunta.contains("este mes") || pregunta.contains("mes actual") || pregunta.contains("del mes");
+        String tipoBuscado = pregunta.contains("gast") || pregunta.contains("gasto") ? "GASTO"
+                : pregunta.contains("ingres") ? "INGRESO" : pregunta.contains("ahorr") ? "AHORRO" : "";
+        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        long cantidad = 0;
+        for (Object[] fila : movimientosRepo.resumirPorMes(ids)) {
+            int anio = ((Number) fila[0]).intValue();
+            int mes = ((Number) fila[1]).intValue();
+            String tipo = String.valueOf(fila[2]).toUpperCase(java.util.Locale.ROOT);
+            if (!tipoBuscado.isBlank() && !tipoBuscado.equals(tipo)) continue;
+            if (periodoActual && (anio != hoy.getYear() || mes != hoy.getMonthValue())) continue;
+            cantidad += ((Number) fila[3]).longValue();
+            Object suma = fila[4];
+            if (suma != null) total = total.add(suma instanceof java.math.BigDecimal decimal
+                    ? decimal : new java.math.BigDecimal(suma.toString()));
+        }
+        String concepto = tipoBuscado.isBlank() ? "movimientos" : tipoBuscado.toLowerCase(java.util.Locale.ROOT) + "s";
+        String periodo = periodoActual ? " en " + hoy.getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.forLanguageTag("es-CO"))
+                + " de " + hoy.getYear() : " en todo el periodo registrado";
+        return respuestaSinCambio("Tienes " + cantidad + " " + concepto + periodo + ", por un total de " + formatearMonto(total) + " COP. Este total suma movimientos registrados; no representa el saldo disponible.");
+    }
+
+    private String normalizarTexto(String valor) {
+        return Normalizer.normalize(valor == null ? "" : valor, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toLowerCase(java.util.Locale.ROOT);
     }
 
     private RespuestaChat responderPreguntaCapacidades(String pregunta) {
@@ -825,23 +902,19 @@ public class SAsistenteChat {
             }
         } catch (Exception ignored) {}
 
-        // 2. Correos: cuentas Gmail conectadas + fuentes de correo con estado
+        // 2. Correos: cuentas Gmail conectadas representadas por fuentes CORREO
         try {
-            if (cuentasGmailRepo != null) {
-                List<CuentaGmail> gmail = cuentasGmailRepo.findByUsuarioIdOrderByCreadaEnAsc(idUsuario);
-                sb.append("- Cuentas Gmail conectadas: ").append(gmail.size());
-                if (!gmail.isEmpty()) {
-                    String lista = gmail.stream().map(CuentaGmail::getEmail).collect(Collectors.joining(", "));
-                    sb.append(" -> ").append(lista);
-                }
-                sb.append(".\n");
-            }
-
             if (fuentesRepo != null) {
                 List<MFuente> fuentes = fuentesRepo.findByUsuario_IdUsuario(idUsuario);
                 List<MFuente> fCorreo = fuentes.stream()
                         .filter(f -> "CORREO".equalsIgnoreCase(f.getTipo()))
                         .toList();
+                List<MFuente> gmail = fCorreo.stream().filter(MFuente::tieneConexionGmail).toList();
+                sb.append("- Cuentas Gmail conectadas: ").append(gmail.size());
+                if (!gmail.isEmpty()) {
+                    sb.append(" -> ").append(gmail.stream().map(MFuente::getContenido).collect(Collectors.joining(", ")));
+                }
+                sb.append(".\n");
                 long activas = fCorreo.stream().filter(MFuente::isEstado).count();
                 long inactivas = fCorreo.size() - activas;
                 sb.append("- Fuentes de correo registradas: ").append(fCorreo.size())

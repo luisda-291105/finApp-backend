@@ -22,6 +22,7 @@ import java.util.Optional;
 public interface IContacto extends JpaRepository<MContacto ,String> {
     List<MContacto> findByUsuario_IdUsuario(String idUsuario);
     Optional<MContacto> findByIdContactoAndUsuario_IdUsuario(String idContacto, String idUsuario);
+    Optional<MContacto> findByOrigenAndUsuario_IdUsuario(String origen, String idUsuario);
     // consultas
     @Query("SELECT c FROM MContacto c WHERE c.nombre = :nombre")
     List<MContacto> buscarPorNombre(

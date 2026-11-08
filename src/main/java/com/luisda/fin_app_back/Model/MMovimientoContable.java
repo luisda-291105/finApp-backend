@@ -35,7 +35,7 @@ public class MMovimientoContable {
     @Column(name = "origen_tipo", length = 20)
     private String origenTipo;
 
-    @Column(name = "origen_id", length = 36)
+    @Column(name = "origen_id", length = 180)
     private String origenId;
 
     @Column(name = "origen_nombre", length = 120)

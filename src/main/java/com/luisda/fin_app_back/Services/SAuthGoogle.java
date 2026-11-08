@@ -41,7 +41,7 @@ public class SAuthGoogle {
     @Value("${finapp.google.client-id:${GOOGLE_CLIENT_ID:}}") private String clientId;
     @Value("${finapp.google.client-secret:${GOOGLE_CLIENT_SECRET:}}") private String clientSecret;
     @Value("${finapp.google.auth-redirect-uri:${GOOGLE_AUTH_REDIRECT_URI:http://localhost:8080/api/auth/google/callback}}") private String redirectUri;
-    @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:../client_secret_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}") private String archivoCredenciales;
+    @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:client_secret_2_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}") private String archivoCredenciales;
 
     public SAuthGoogle(IUsuario usuarios, SVerificadorContrasena verificador) {
         this.usuarios = usuarios;
@@ -154,8 +154,8 @@ public class SAuthGoogle {
         try {
             Path ruta = Path.of(archivoCredenciales);
             if (!Files.isRegularFile(ruta)) {
-                Path desdeRaiz = Path.of("client_secret_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json");
-                if (Files.isRegularFile(desdeRaiz)) ruta = desdeRaiz;
+                Path desdeCarpetaBackend = Path.of("finApp-backend").resolve(ruta.getFileName());
+                if (Files.isRegularFile(desdeCarpetaBackend)) ruta = desdeCarpetaBackend;
             }
             JsonNode web;
             try (var entrada = Files.newInputStream(ruta)) {

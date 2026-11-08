@@ -7,10 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.DTO.GmailProfileDTO;
 import com.luisda.fin_app_back.DTO.GmailCuentaDTO;
 import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
-import com.luisda.fin_app_back.Model.CuentaGmail;
-import com.luisda.fin_app_back.Model.MGmailConexion;
-import com.luisda.fin_app_back.Repository.ICuentaGmail;
-import com.luisda.fin_app_back.Repository.IGmailConexion;
+import com.luisda.fin_app_back.Model.MFuente;
+import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,10 +39,12 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.UUID;
 
 /** Canjea y mantiene credenciales Gmail cifradas para el usuario activo. */
 @RestController
@@ -58,20 +58,18 @@ public class CGmail {
 
     private volatile RestClient clienteHttp;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final IGmailConexion conexiones;
-    private final ICuentaGmail cuentasGmail;
+    private final IFuentes fuentes;
     private final SUsuarioActivo usuarioActivo;
     private final SecureRandom random = new SecureRandom();
 
     @Value("${finapp.google.client-id:${GOOGLE_CLIENT_ID:}}") private String clientId;
     @Value("${finapp.google.client-secret:${GOOGLE_CLIENT_SECRET:}}") private String clientSecret;
-    @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:../client_secret_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}")
+    @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:client_secret_2_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}")
     private String archivoCredenciales;
     @Value("${finapp.cors.allowed-origins:http://localhost:5173}") private String origenesPermitidos;
 
-    public CGmail(IGmailConexion conexiones, ICuentaGmail cuentasGmail, SUsuarioActivo usuarioActivo) {
-        this.conexiones = conexiones;
-        this.cuentasGmail = cuentasGmail;
+    public CGmail(IFuentes fuentes, SUsuarioActivo usuarioActivo) {
+        this.fuentes = fuentes;
         this.usuarioActivo = usuarioActivo;
     }
 
@@ -128,31 +126,43 @@ public class CGmail {
                     .body(Map.of("message", "Google no devolvió un token de acceso."));
 
             String correo = obtenerCorreoGoogle(accessToken);
-            var cuentaExistente = cuentasGmail.findByUsuarioIdAndEmailIgnoreCase(usuario.getIdUsuario(), correo);
+            List<MFuente> coincidenciasFuente = fuentes.findByUsuario_IdUsuarioAndTipoIgnoreCaseAndContenidoIgnoreCase(
+                    usuario.getIdUsuario(), "CORREO", correo);
+            MFuente fuente;
+            if (solicitud.expectedAccountId() != null && !solicitud.expectedAccountId().isBlank()) {
+                fuente = fuentes.findByIdFuenteAndUsuario_IdUsuario(solicitud.expectedAccountId(), usuario.getIdUsuario()).orElse(null);
+                if (fuente == null || !"CORREO".equalsIgnoreCase(fuente.getTipo())
+                        || !fuente.getContenido().equalsIgnoreCase(correo)) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                            "message", "Google autorizó otra cuenta. Vuelve a intentarlo con la misma cuenta registrada en Fuentes."
+                    ));
+                }
+            } else {
+                fuente = coincidenciasFuente.stream().filter(MFuente::tieneConexionGmail).findFirst()
+                        .orElseGet(() -> coincidenciasFuente.stream().findFirst().orElseGet(() -> {
+                            MFuente nueva = new MFuente(UUID.randomUUID().toString(), "CORREO", correo, true, LocalDate.now());
+                            nueva.setUsuario(usuario);
+                            return nueva;
+                        }));
+            }
             String refreshToken = respuesta.refreshToken() == null ? "" : respuesta.refreshToken().trim();
-            CuentaGmail cuenta = cuentaExistente.orElseGet(CuentaGmail::new);
-            if (refreshToken.isBlank() && cuenta.getRefreshTokenCifrado() == null) {
+            if (refreshToken.isBlank() && !fuente.tieneConexionGmail()) {
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
                         "message", "Google no entregó un refresh token. Vuelve a conectar y acepta el consentimiento de Gmail."
                 ));
             }
-            cuenta.setUsuarioId(usuario.getIdUsuario());
-            cuenta.setEmail(correo);
-            if (!refreshToken.isBlank()) cuenta.setRefreshTokenCifrado(cifrar(refreshToken, credenciales.clientSecret()));
-            cuenta = cuentasGmail.save(cuenta);
-
-            MGmailConexion conexion = conexiones.findById(usuario.getIdUsuario()).orElseGet(MGmailConexion::new);
-            conexion.setIdUsuario(usuario.getIdUsuario());
-            conexion.setCorreoGoogle(correo);
-            conexion.setAccessTokenCifrado(cifrar(accessToken, credenciales.clientSecret()));
-            if (!refreshToken.isBlank()) conexion.setRefreshTokenCifrado(cifrar(refreshToken, credenciales.clientSecret()));
             long expiraEn = respuesta.expiresIn() == null || respuesta.expiresIn() <= 0
                     ? DURACION_TOKEN_SEGUNDOS_POR_DEFECTO : respuesta.expiresIn();
-            conexion.setExpiraEn(Instant.now().plusSeconds(expiraEn));
-            conexiones.save(conexion);
+            fuente.setTipo("CORREO");
+            fuente.setContenido(correo);
+            fuente.setEstado(true);
+            fuente.setAccessTokenCifrado(cifrar(accessToken, credenciales.clientSecret()));
+            if (!refreshToken.isBlank()) fuente.setRefreshTokenCifrado(cifrar(refreshToken, credenciales.clientSecret()));
+            fuente.setExpiraEn(Instant.now().plusSeconds(expiraEn));
+            fuente = fuentes.save(fuente);
 
             return ResponseEntity.ok(Map.of("access_token", accessToken, "email", correo,
-                    "account_id", cuenta.getId(), "expires_at", conexion.getExpiraEn().toString()));
+                    "account_id", fuente.getIdFuente(), "expires_at", fuente.getExpiraEn().toString()));
         } catch (RestClientResponseException error) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
                     "message", "Google rechazó el canje del código de autorización. Revisa la configuración OAuth del backend."
@@ -168,43 +178,50 @@ public class CGmail {
         }
     }
 
-    /** Restaura tras recargar la página el token cifrado guardado para el usuario de la sesión. */
+    /** Lista fuentes CORREO con una autorización Gmail renovable. */
     @GetMapping("/cuentas")
     public ResponseEntity<?> listarCuentas(HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "No hay una sesión activa."));
-        // Migra la conexión única previa a la tabla de cuentas múltiples cuando conserva refresh token.
-        if (cuentasGmail.findByUsuarioIdOrderByCreadaEnAsc(usuario.getIdUsuario()).isEmpty()) {
-            conexiones.findById(usuario.getIdUsuario()).filter(legacy -> legacy.getRefreshTokenCifrado() != null
-                    && !legacy.getRefreshTokenCifrado().isBlank()).ifPresent(legacy -> {
-                CuentaGmail cuenta = new CuentaGmail();
-                cuenta.setUsuarioId(usuario.getIdUsuario());
-                cuenta.setEmail(legacy.getCorreoGoogle());
-                cuenta.setRefreshTokenCifrado(legacy.getRefreshTokenCifrado());
-                cuentasGmail.save(cuenta);
-            });
-        }
-        return ResponseEntity.ok(cuentasGmail.findByUsuarioIdOrderByCreadaEnAsc(usuario.getIdUsuario()).stream()
-                .map(cuenta -> new GmailCuentaDTO(cuenta.getId(), cuenta.getEmail())).toList());
+        return ResponseEntity.ok(fuentes.findByUsuario_IdUsuario(usuario.getIdUsuario()).stream()
+                .filter(fuente -> "CORREO".equalsIgnoreCase(fuente.getTipo()) && fuente.tieneConexionGmail())
+                .map(fuente -> new GmailCuentaDTO(fuente.getIdFuente(), fuente.getContenido())).toList());
     }
 
-    /** Devuelve un token de acceso renovado solo si la cuenta pertenece a la sesión activa. */
+    /** Devuelve o renueva el token de la fuente Gmail propia indicada. */
     @GetMapping("/cuentas/{cuentaId}/conexion")
-    public ResponseEntity<?> obtenerConexionCuenta(@org.springframework.web.bind.annotation.PathVariable Long cuentaId,
+    public ResponseEntity<?> obtenerConexionCuenta(@org.springframework.web.bind.annotation.PathVariable String cuentaId,
                                                     HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "No hay una sesión activa."));
-        CuentaGmail cuenta = cuentasGmail.findByIdAndUsuarioId(cuentaId, usuario.getIdUsuario()).orElse(null);
-        if (cuenta == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "No se encontró esa cuenta Gmail."));
+        MFuente fuente = fuentes.findByIdFuenteAndUsuario_IdUsuario(cuentaId, usuario.getIdUsuario()).orElse(null);
+        if (fuente == null || !"CORREO".equalsIgnoreCase(fuente.getTipo()) || !fuente.tieneConexionGmail()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "No se encontró esa cuenta Gmail."));
+        }
         try {
             CredencialesOAuth credenciales = resolverCredenciales();
-            GoogleOAuthTokenDTO renovacion = renovarToken(descifrar(cuenta.getRefreshTokenCifrado(), credenciales.clientSecret()), credenciales);
+            if (fuente.getExpiraEn() != null && fuente.getExpiraEn().isAfter(Instant.now().plusSeconds(MARGEN_RENOVACION_SEGUNDOS))
+                    && fuente.getAccessTokenCifrado() != null && !fuente.getAccessTokenCifrado().isBlank()) {
+                String token = descifrar(fuente.getAccessTokenCifrado(), credenciales.clientSecret());
+                return ResponseEntity.ok(Map.of("connected", true, "access_token", token,
+                        "email", fuente.getContenido(), "expires_at", fuente.getExpiraEn().toString()));
+            }
+            if (fuente.getRefreshTokenCifrado() == null || fuente.getRefreshTokenCifrado().isBlank()) {
+                return ResponseEntity.ok(Map.of("connected", false, "requires_reconnect", true, "email", fuente.getContenido()));
+            }
+            GoogleOAuthTokenDTO renovacion = renovarToken(descifrar(fuente.getRefreshTokenCifrado(), credenciales.clientSecret()), credenciales);
             String token = renovacion == null || renovacion.accessToken() == null ? "" : renovacion.accessToken().trim();
             if (token.isBlank()) return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("message", "Google no devolvió un token renovado."));
             long duracion = renovacion.expiresIn() == null || renovacion.expiresIn() <= 0
                     ? DURACION_TOKEN_SEGUNDOS_POR_DEFECTO : renovacion.expiresIn();
+            fuente.setAccessTokenCifrado(cifrar(token, credenciales.clientSecret()));
+            if (renovacion.refreshToken() != null && !renovacion.refreshToken().isBlank()) {
+                fuente.setRefreshTokenCifrado(cifrar(renovacion.refreshToken().trim(), credenciales.clientSecret()));
+            }
+            fuente.setExpiraEn(Instant.now().plusSeconds(duracion));
+            fuentes.save(fuente);
             return ResponseEntity.ok(Map.of("connected", true, "access_token", token,
-                    "email", cuenta.getEmail(), "expires_at", Instant.now().plusSeconds(duracion).toString()));
+                    "email", fuente.getContenido(), "expires_at", fuente.getExpiraEn().toString()));
         } catch (RestClientResponseException error) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                     "connected", false, "requires_reconnect", true,
@@ -216,13 +233,14 @@ public class CGmail {
     }
 
     @DeleteMapping("/cuentas/{cuentaId}")
-    public ResponseEntity<?> eliminarCuenta(@org.springframework.web.bind.annotation.PathVariable Long cuentaId,
+    public ResponseEntity<?> eliminarCuenta(@org.springframework.web.bind.annotation.PathVariable String cuentaId,
                                             HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "No hay una sesión activa."));
-        var cuenta = cuentasGmail.findByIdAndUsuarioId(cuentaId, usuario.getIdUsuario()).orElse(null);
-        if (cuenta == null) return ResponseEntity.notFound().build();
-        cuentasGmail.delete(cuenta);
+        MFuente fuente = fuentes.findByIdFuenteAndUsuario_IdUsuario(cuentaId, usuario.getIdUsuario()).orElse(null);
+        if (fuente == null || !"CORREO".equalsIgnoreCase(fuente.getTipo())) return ResponseEntity.notFound().build();
+        fuente.desconectarGmail();
+        fuentes.save(fuente);
         return ResponseEntity.noContent().build();
     }
 
@@ -230,47 +248,21 @@ public class CGmail {
     public ResponseEntity<?> obtenerConexion(HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "No hay una sesión activa."));
-        Optional<MGmailConexion> encontrada = conexiones.findById(usuario.getIdUsuario());
-        if (encontrada.isEmpty()) return ResponseEntity.ok(Map.of("connected", false));
-
-        MGmailConexion conexion = encontrada.get();
-        try {
-            CredencialesOAuth credenciales = resolverCredenciales();
-            if (!conexion.getExpiraEn().isAfter(Instant.now().plusSeconds(MARGEN_RENOVACION_SEGUNDOS))) {
-                String refreshCifrado = conexion.getRefreshTokenCifrado();
-                if (refreshCifrado == null || refreshCifrado.isBlank()) {
-                    return ResponseEntity.ok(Map.of("connected", false, "requires_reconnect", true, "email", conexion.getCorreoGoogle()));
-                }
-                try {
-                    GoogleOAuthTokenDTO renovacion = renovarToken(descifrar(refreshCifrado, credenciales.clientSecret()), credenciales);
-                    String tokenNuevo = renovacion == null || renovacion.accessToken() == null ? "" : renovacion.accessToken().trim();
-                    if (tokenNuevo.isBlank()) return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                            .body(Map.of("message", "Google no devolvió un token renovado."));
-                    conexion.setAccessTokenCifrado(cifrar(tokenNuevo, credenciales.clientSecret()));
-                    long duracion = renovacion.expiresIn() == null || renovacion.expiresIn() <= 0
-                            ? DURACION_TOKEN_SEGUNDOS_POR_DEFECTO : renovacion.expiresIn();
-                    conexion.setExpiraEn(Instant.now().plusSeconds(duracion));
-                    conexiones.save(conexion);
-                } catch (RestClientResponseException error) {
-                    return ResponseEntity.ok(Map.of("connected", false, "requires_reconnect", true, "email", conexion.getCorreoGoogle()));
-                }
-            }
-            String accessToken = descifrar(conexion.getAccessTokenCifrado(), credenciales.clientSecret());
-            return ResponseEntity.ok(Map.of("connected", true, "access_token", accessToken, "email", conexion.getCorreoGoogle(),
-                    "expires_at", conexion.getExpiraEn().toString()));
-        } catch (IOException | GeneralSecurityException error) {
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
-                    "message", "No se pudo restaurar la conexión guardada. Vuelve a conectar Gmail."
-            ));
-        }
+        MFuente fuente = fuentes.findByUsuario_IdUsuario(usuario.getIdUsuario()).stream()
+                .filter(item -> "CORREO".equalsIgnoreCase(item.getTipo()) && item.tieneConexionGmail()).findFirst().orElse(null);
+        if (fuente == null) return ResponseEntity.ok(Map.of("connected", false));
+        return obtenerConexionCuenta(fuente.getIdFuente(), request);
     }
 
-    /** Elimina la credencial persistida al desconectar Gmail desde Configuración. */
+    /** Desconecta las cuentas Gmail sin eliminar las fuentes de correo registradas. */
     @DeleteMapping("/conexion")
     public ResponseEntity<?> desconectar(HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "No hay una sesión activa."));
-        conexiones.deleteById(usuario.getIdUsuario());
+        List<MFuente> fuentesCorreo = fuentes.findByUsuario_IdUsuario(usuario.getIdUsuario()).stream()
+                .filter(fuente -> "CORREO".equalsIgnoreCase(fuente.getTipo())).toList();
+        fuentesCorreo.forEach(MFuente::desconectarGmail);
+        fuentes.saveAll(fuentesCorreo);
         return ResponseEntity.noContent().build();
     }
 
@@ -326,8 +318,8 @@ public class CGmail {
 
         Path ruta = Path.of(archivoCredenciales);
         if (!Files.isRegularFile(ruta)) {
-            Path desdeRaiz = Path.of("client_secret_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json");
-            if (Files.isRegularFile(desdeRaiz)) ruta = desdeRaiz;
+            Path desdeCarpetaBackend = Path.of("finApp-backend").resolve(ruta.getFileName());
+            if (Files.isRegularFile(desdeCarpetaBackend)) ruta = desdeCarpetaBackend;
         }
         JsonNode web;
         try (var entrada = Files.newInputStream(ruta)) { web = objectMapper.readTree(entrada).path("web"); }
@@ -337,6 +329,6 @@ public class CGmail {
         return new CredencialesOAuth(id, secreto);
     }
 
-    public record SolicitudCodigo(String code) { }
+    public record SolicitudCodigo(String code, @com.fasterxml.jackson.annotation.JsonProperty("expected_account_id") String expectedAccountId) { }
     private record CredencialesOAuth(String clientId, String clientSecret) { }
 }

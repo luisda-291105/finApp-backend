@@ -1,7 +1,9 @@
 package com.luisda.fin_app_back.Model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 /**
@@ -38,6 +40,18 @@ public class MFuente {
     @JoinColumn(name = "idUsuario", nullable = false)
     //@JsonManagedReference
     private MUsuario usuario;
+
+    @JsonIgnore
+    @Column(name = "access_token_cifrado", columnDefinition = "TEXT")
+    private String accessTokenCifrado;
+
+    @JsonIgnore
+    @Column(name = "refresh_token_cifrado", columnDefinition = "TEXT")
+    private String refreshTokenCifrado;
+
+    @JsonIgnore
+    @Column(name = "expira_en")
+    private Instant expiraEn;
 
 
     public MFuente(String idFuente, String tipo, String contenido, boolean estado, LocalDate fechaCreacion) {
@@ -94,4 +108,25 @@ public class MFuente {
     public MUsuario getUsuario() { return usuario; }
 
     public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
+
+    @JsonIgnore
+    public boolean tieneConexionGmail() {
+        boolean renovable = refreshTokenCifrado != null && !refreshTokenCifrado.isBlank();
+        boolean accesoVigente = accessTokenCifrado != null && !accessTokenCifrado.isBlank()
+                && expiraEn != null && expiraEn.isAfter(Instant.now());
+        return renovable || accesoVigente;
+    }
+
+    public String getAccessTokenCifrado() { return accessTokenCifrado; }
+    public void setAccessTokenCifrado(String accessTokenCifrado) { this.accessTokenCifrado = accessTokenCifrado; }
+    public String getRefreshTokenCifrado() { return refreshTokenCifrado; }
+    public void setRefreshTokenCifrado(String refreshTokenCifrado) { this.refreshTokenCifrado = refreshTokenCifrado; }
+    public Instant getExpiraEn() { return expiraEn; }
+    public void setExpiraEn(Instant expiraEn) { this.expiraEn = expiraEn; }
+
+    public void desconectarGmail() {
+        accessTokenCifrado = null;
+        refreshTokenCifrado = null;
+        expiraEn = null;
+    }
 }

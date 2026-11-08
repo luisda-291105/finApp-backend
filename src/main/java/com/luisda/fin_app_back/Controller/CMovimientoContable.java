@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -46,6 +47,13 @@ public class CMovimientoContable {
         var usuario = usuarioActivo.obtenerUsuario(request);
         if (usuario.isEmpty()) return noAutorizado();
         return ResponseEntity.ok(movimientos.resumir(usuario.get().getIdUsuario()));
+    }
+
+    @GetMapping("/correos")
+    public ResponseEntity<?> correosImportados(@RequestParam List<String> ids, HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        return ResponseEntity.ok(movimientos.correosImportados(usuario.get().getIdUsuario(), ids));
     }
 
     @PostMapping

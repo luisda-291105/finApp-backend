@@ -12,7 +12,6 @@ import com.luisda.fin_app_back.Model.MContacto;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGrupo;
 import com.luisda.fin_app_back.Model.MTarjeta;
-import com.luisda.fin_app_back.Model.MGmailConexion;
 import com.luisda.fin_app_back.Model.MMuestra;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

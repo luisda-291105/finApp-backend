@@ -1,6 +1,5 @@
 package com.luisda.fin_app_back.Repository;
 import com.luisda.fin_app_back.Model.MContacto;
-import com.luisda.fin_app_back.Model.MUsuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

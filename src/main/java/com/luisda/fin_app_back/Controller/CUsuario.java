@@ -15,6 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * @uso               dar puntos de coneccion con la api
@@ -26,6 +27,7 @@ import jakarta.servlet.http.HttpSession;
  */
 
 @RestController
+@Tag(name = "Usuarios y sesión", description = "Registro, inicio y cierre de sesión y administración del perfil.")
 @RequestMapping("/usuario")
 public class CUsuario {
     @Autowired

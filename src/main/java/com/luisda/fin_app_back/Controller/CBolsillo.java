@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.DTO.BolsilloSolicitudDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.Services.SBolsillo;
@@ -13,6 +15,7 @@ import java.util.NoSuchElementException;
 
 /** Endpoints de bolsillos asociados al usuario autenticado. */
 @RestController
+@Tag(name = "Bolsillos", description = "Operaciones de consulta y administración de bolsillos.")
 @RequestMapping("/bolsillo")
 public class CBolsillo {
     private final SBolsillo bolsillos;

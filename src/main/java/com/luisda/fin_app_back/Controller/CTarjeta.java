@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.TarjetaDTO;
 import com.luisda.fin_app_back.DTO.TarjetaSolicitudDTO;
@@ -16,6 +18,7 @@ import java.util.Optional;
 
 /** Endpoints de tarjetas con autorización por usuario de sesión y respuestas sin CVV/PAN completo. */
 @RestController
+@Tag(name = "Tarjetas", description = "Administración de tarjetas de pago.")
 @RequestMapping("/tarjeta")
 public class CTarjeta {
     private final STarjeta tarjetas;

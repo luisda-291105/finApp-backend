@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Services.SFuente;
 
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
  */
 
 @RestController
+@Tag(name = "Fuentes", description = "Registro y administración de fuentes de información financiera.")
 @RequestMapping("/fuente")
 public class CFuente {
 

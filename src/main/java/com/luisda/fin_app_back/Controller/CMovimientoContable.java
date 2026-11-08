@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.Services.SMovimientoContable;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.NoSuchElementException;
 
 @RestController
+@Tag(name = "Movimientos", description = "Registro y consulta de movimientos contables.")
 @RequestMapping("/movimiento")
 public class CMovimientoContable {
     private final SMovimientoContable movimientos;

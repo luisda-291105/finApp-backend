@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.DTO.GmailProfileDTO;
@@ -46,6 +48,7 @@ import java.util.Optional;
 
 /** Canjea y mantiene credenciales Gmail cifradas para el usuario activo. */
 @RestController
+@Tag(name = "Gmail", description = "Conexión y operaciones de integración con Gmail.")
 @RequestMapping("/api/gmail")
 public class CGmail {
     private static final String URL_TOKEN_GOOGLE = "https://oauth2.googleapis.com/token";

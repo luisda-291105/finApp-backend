@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.DTO.ContactoDTO;
 import com.luisda.fin_app_back.DTO.ContactoSolicitudDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
@@ -16,6 +18,7 @@ import java.util.Optional;
 
 /** Endpoints autenticados para administrar contactos propios. */
 @RestController
+@Tag(name = "Contactos", description = "Administración de contactos asociados a la cuenta.")
 @RequestMapping("/contacto")
 public class CContacto {
     private final SContacto contactos;

@@ -19,9 +19,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /** Separa el asistente público explicativo del asistente personal autenticado. */
 @RestController
+@Tag(name = "Asistente", description = "Consultas informativas de la aplicación y del usuario autenticado.")
 @RequestMapping("/asistente")
 public class CAsistente {
     private static final int MAX_SOLICITUDES_POR_MINUTO = 30;

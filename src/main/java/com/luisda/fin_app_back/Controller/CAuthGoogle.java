@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.DTO.GoogleOAuthStateDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.Services.SAuthGoogle;
@@ -19,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 @RestController
+@Tag(name = "Autenticación Google", description = "Conexión y callback OAuth de Google.")
 @RequestMapping("/api/auth/google")
 public class CAuthGoogle {
     private final SAuthGoogle authGoogle;

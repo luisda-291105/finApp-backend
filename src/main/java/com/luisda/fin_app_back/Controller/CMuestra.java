@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.DTO.*;
 import com.luisda.fin_app_back.Services.SMuestra;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
@@ -9,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@Tag(name = "Muestras", description = "Endpoints de muestra y datos demostrativos.")
 @RequestMapping("/api/muestras")
 public class CMuestra {
     private final SMuestra muestras; private final SUsuarioActivo usuarioActivo;

@@ -25,6 +25,7 @@ import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Services.SDocumentacionFinApp.Fragmento;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -287,6 +288,11 @@ public class SAsistenteChat {
         if (esConfirmacionExplicita(pregunta)) {
             return confirmarOperacionConversacional(peticion, idUsuario);
         }
+        if (esConsultaPerfilUsuario(pregunta)) {
+            return respuestaSinCambio("No puedo consultar información del perfil, identificación, credenciales ni cuenta de usuario. Puedes revisar esos datos desde Configuración.");
+        }
+        RespuestaChat busqueda = responderBusquedaPorPalabrasClave(idUsuario, pregunta);
+        if (busqueda != null) return busqueda;
         RespuestaChat consulta = responderConsultaPropia(idUsuario, pregunta);
         if (consulta != null) return consulta;
 
@@ -301,6 +307,47 @@ public class SAsistenteChat {
         }
         agregarDocumentacion(fragmentos, new ArrayList<>(), contexto);
         return new RespuestaChat(generarRespuesta(peticion, contexto), List.of(), false, "");
+    }
+
+    /** Búsquedas concretas y acotadas: siempre limitadas al usuario autenticado y sin pasar por el LLM. */
+    private RespuestaChat responderBusquedaPorPalabrasClave(String idUsuario, String pregunta) {
+        if (pareceSolicitudDeCambio(pregunta) && !esPreguntaExplicativa(pregunta)) return null;
+        String q = normalizarTexto(pregunta);
+        java.util.regex.Matcher matcher = Pattern.compile(
+                "(?:contactos?|fuentes?|tarjetas?)\\s+(?:llamados?|llamadas?|con nombre|de nombre|nombre|que contiene|con contenido|de tipo|tipo|de|del)\\s+(.+)$"
+        ).matcher(q);
+        if (!matcher.find()) return null;
+        String termino = matcher.group(1).replaceAll("[^\\p{L}\\p{N}@._ -]", " ").trim();
+        termino = termino.replaceAll("\\s+", " ");
+        if (termino.length() < 2) return null;
+
+        if (q.contains("contacto")) {
+            List<MContacto> encontrados = contactosRepo
+                    .findTop25ByUsuario_IdUsuarioAndNombreContainingIgnoreCaseOrderByNombreAsc(idUsuario, termino);
+            if (encontrados.isEmpty()) return respuestaSinCambio("No pude encontrar un contacto llamado «" + termino + "» en tus contactos.");
+            String detalle = encontrados.stream().map(c -> c.getNombre()
+                    + (c.getTelefono() == null || c.getTelefono().isBlank() ? "" : " — " + c.getTelefono()))
+                    .collect(Collectors.joining("\n"));
+            return respuestaSinCambio("Contactos que coinciden con «" + termino + "»:\n" + detalle);
+        }
+        if (q.contains("fuente")) {
+            List<MFuente> encontrados = fuentesRepo.buscarPropias(idUsuario, termino, PageRequest.of(0, 25));
+            if (encontrados.isEmpty()) return respuestaSinCambio("No pude encontrar fuentes que coincidan con «" + termino + "».");
+            String detalle = encontrados.stream().map(f -> f.getContenido() + " — " + f.getTipo()
+                    + (f.isEstado() ? " (activa)" : " (inactiva)")).collect(Collectors.joining("\n"));
+            return respuestaSinCambio("Fuentes que coinciden con «" + termino + "»:\n" + detalle);
+        }
+        List<MTarjeta> encontrados = tarjetasRepo.buscarPropias(idUsuario, termino, PageRequest.of(0, 25));
+        if (encontrados.isEmpty()) return respuestaSinCambio("No pude encontrar tarjetas que coincidan con «" + termino + "».");
+        String detalle = encontrados.stream().map(t -> t.getEntidad() + " — titular: " + t.getTitular())
+                .collect(Collectors.joining("\n"));
+        return respuestaSinCambio("Tarjetas que coinciden con «" + termino + "»:\n" + detalle);
+    }
+
+    private boolean esConsultaPerfilUsuario(String pregunta) {
+        String q = normalizarTexto(pregunta);
+        return q.matches("(?s).*(mi|mis|del|de mi|datos del|datos de).*\\b(usuario|perfil|identificacion|cedula|documento|credenciales|contrasena|clave)\\b.*")
+                || q.matches("(?s).*\\b(usuario|perfil)\\b.*\\b(identificacion|cedula|documento|contrasena|credenciales|clave|correo registrado)\\b.*");
     }
 
     /** Responde con repositorios ya filtrados por el usuario activo para consultas comunes sin depender del LLM. */

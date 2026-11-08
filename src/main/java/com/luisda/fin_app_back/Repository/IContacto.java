@@ -21,6 +21,7 @@ import java.util.Optional;
 @Repository
 public interface IContacto extends JpaRepository<MContacto ,String> {
     List<MContacto> findByUsuario_IdUsuario(String idUsuario);
+    List<MContacto> findTop25ByUsuario_IdUsuarioAndNombreContainingIgnoreCaseOrderByNombreAsc(String idUsuario, String nombre);
     Optional<MContacto> findByIdContactoAndUsuario_IdUsuario(String idContacto, String idUsuario);
     Optional<MContacto> findByOrigenAndUsuario_IdUsuario(String origen, String idUsuario);
     // consultas

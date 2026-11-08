@@ -68,6 +68,6 @@ public class CAuthGoogle {
     private String urlLogin(String resultado) {
         String base = webBaseUrl == null ? "http://localhost:5173" : webBaseUrl.trim();
         while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        return base + "/login?google=" + URLEncoder.encode(resultado, StandardCharsets.UTF_8);
+        return base + "/?google=" + URLEncoder.encode(resultado, StandardCharsets.UTF_8);
     }
 }

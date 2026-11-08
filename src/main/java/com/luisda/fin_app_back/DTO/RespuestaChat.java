@@ -7,5 +7,10 @@ public record RespuestaChat(
         String respuesta,
         List<FuenteChat> fuentes,
         boolean busquedaWebUsada,
-        String aviso
-) {}
+        String aviso,
+        AccionAsistentePendiente accionPendiente
+) {
+    public RespuestaChat(String respuesta, List<FuenteChat> fuentes, boolean busquedaWebUsada, String aviso) {
+        this(respuesta, fuentes, busquedaWebUsada, aviso, null);
+    }
+}

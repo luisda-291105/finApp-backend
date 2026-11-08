@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.luisda.fin_app_back.Model.MGrupo;
 
 import com.luisda.fin_app_back.Services.SGrupo;
@@ -19,8 +21,8 @@ import org.springframework.web.bind.annotation.*;
  */
 
 @RestController
+@Tag(name = "Grupos", description = "Creación y administración de grupos.")
 @RequestMapping("/grupo")
-@CrossOrigin(origins = "*")
 public class CGrupo {
     @Autowired
     SGrupo SGrupo;

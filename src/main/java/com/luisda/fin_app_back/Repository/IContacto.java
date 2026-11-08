@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 
 
@@ -21,6 +22,7 @@ import java.util.List;
 @Repository
 public interface IContacto extends JpaRepository<MContacto ,String> {
     List<MContacto> findByUsuario_IdUsuario(String idUsuario);
+    Optional<MContacto> findByIdContactoAndUsuario_IdUsuario(String idContacto, String idUsuario);
     // consultas
     @Query("SELECT c FROM MContacto c WHERE c.nombre = :nombre")
     List<MContacto> buscarPorNombre(

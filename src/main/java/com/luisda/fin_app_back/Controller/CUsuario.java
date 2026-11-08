@@ -2,10 +2,20 @@ package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Services.SUsuario;
+import com.luisda.fin_app_back.Services.SUsuarioActivo;
+import com.luisda.fin_app_back.Services.SVerificadorContrasena;
+import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
+import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
+import com.luisda.fin_app_back.DTO.UsuarioDTO;
+import com.luisda.fin_app_back.DTO.UsuarioActivoDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * @uso               dar puntos de coneccion con la api
@@ -17,24 +27,89 @@ import org.springframework.web.bind.annotation.*;
  */
 
 @RestController
+@Tag(name = "Usuarios y sesión", description = "Registro, inicio y cierre de sesión y administración del perfil.")
 @RequestMapping("/usuario")
-@CrossOrigin(origins = "*")
 public class CUsuario {
     @Autowired
     SUsuario SUsuario;
+
+    private final SUsuarioActivo usuarioActivo;
+    private final SVerificadorContrasena verificadorContrasena;
+
+    public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena) {
+        this.usuarioActivo = usuarioActivo;
+        this.verificadorContrasena = verificadorContrasena;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> iniciarSesion(@RequestBody UsuarioLoginDTO credenciales, HttpServletRequest solicitud) {
+        if (credenciales == null || credenciales.identificador() == null || credenciales.contrasena() == null) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa tu nombre, identificación, correo o teléfono y contraseña.", "credenciales"));
+        }
+        try {
+            MUsuario usuario = this.SUsuario.autenticar(credenciales.identificador(), credenciales.contrasena(), verificadorContrasena);
+            if (usuario == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("El usuario o la contraseña no son correctos.", "credenciales"));
+            }
+            HttpSession sesionAnterior = solicitud.getSession(false);
+            if (sesionAnterior != null) sesionAnterior.invalidate();
+            HttpSession sesion = solicitud.getSession(true);
+            sesion.setAttribute(SUsuarioActivo.CLAVE_SESION, usuario.getIdUsuario());
+            return ResponseEntity.ok(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
+        } catch (Exception error) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudo iniciar sesión.", null));
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> cerrarSesion(HttpServletRequest solicitud) {
+        HttpSession sesion = solicitud.getSession(false);
+        if (sesion != null) sesion.invalidate();
+        return ResponseEntity.ok(RespuestaModalDTO.exito("Sesión cerrada.", null));
+    }
+
+    @GetMapping("/activo")
+    public ResponseEntity<?> usuarioActivo(HttpServletRequest solicitud) {
+        return usuarioActivo.obtenerUsuario(solicitud)
+                .<ResponseEntity<?>>map(usuario -> ResponseEntity.ok(RespuestaModalDTO.exito(
+                        "Usuario activo.", dtoActivo(usuario))))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null)));
+    }
+
+    private UsuarioActivoDTO dtoActivo(MUsuario usuario) {
+        String correo = usuario.getCorreo() != null ? usuario.getCorreo() : usuario.getCorreoGoogle();
+        return new UsuarioActivoDTO(usuario.getIdUsuario(), usuario.getNombre(), usuario.getFechaCreacion(), correo, usuario.getTelefono());
+    }
 
     /** crear un registro  */
     @PostMapping
     public ResponseEntity<?> adicionar(@RequestBody MUsuario MUsuario)throws Exception{
         try {
-            return ResponseEntity
-                    .status(HttpStatus.CREATED)
-                    .body(this.SUsuario.crear(MUsuario));
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(UsuarioDTO.desde(this.SUsuario.crear(MUsuario)));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(RespuestaModalDTO.error(error.getMessage(), campoCredencial(error.getMessage())));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest()
+                    .body(RespuestaModalDTO.error(error.getMessage(), campoCredencial(error.getMessage())));
+        } catch (DataIntegrityViolationException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(RespuestaModalDTO.error("Ya existe una cuenta con esta identificación o correo.", "credenciales"));
         } catch (Exception error){
-            return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudo crear la cuenta.", null));
         }
+    }
+
+    private String campoCredencial(String mensaje) {
+        String normalizado = mensaje == null ? "" : mensaje.toLowerCase();
+        if (normalizado.contains("correo")) return "correo";
+        if (normalizado.contains("teléfono") || normalizado.contains("telefono")) return "telefono";
+        return "idUsuario";
     }
 
     /** consultar general */
@@ -43,11 +118,11 @@ public class CUsuario {
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SUsuario.buscarTodos());
+                    .body(this.SUsuario.buscarTodos().stream().map(UsuarioDTO::desde).toList());
         } catch (Exception error){
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudieron consultar los usuarios.", null));
         }
     }
 
@@ -57,11 +132,11 @@ public class CUsuario {
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SUsuario.buscarPorId(idUsuario));
+                    .body(this.SUsuario.buscarPorId(idUsuario).map(UsuarioDTO::desde));
         } catch (Exception error){
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudo consultar el usuario.", null));
         }
     }
 
@@ -71,11 +146,11 @@ public class CUsuario {
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SUsuario.buscarPorNombre(nombre));
+                    .body(this.SUsuario.buscarPorNombre(nombre).stream().map(UsuarioDTO::desde).toList());
         } catch (Exception error){
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudieron consultar los usuarios.", null));
         }
     }
 
@@ -96,15 +171,26 @@ public class CUsuario {
     /** modificar usuario por id */
 
     @PutMapping("/{idUsuario}")
-    public ResponseEntity<?> modificar(@PathVariable  String idUsuario , @RequestBody  MUsuario MUsuario) throws Exception{
+    public ResponseEntity<?> modificar(@PathVariable String idUsuario, @RequestBody MUsuario cambios,
+                                       HttpServletRequest solicitud) throws Exception{
         try {
-            return ResponseEntity
-                    .status(HttpStatus.OK)
-                    .body(this.SUsuario.modificar(MUsuario , idUsuario));
+            MUsuario actualizado = this.SUsuario.modificar(cambios, idUsuario);
+            HttpSession sesion = solicitud.getSession(false);
+            if (sesion != null && idUsuario.equals(sesion.getAttribute(SUsuarioActivo.CLAVE_SESION))) {
+                sesion.setAttribute(SUsuarioActivo.CLAVE_SESION, actualizado.getIdUsuario());
+            }
+            return ResponseEntity.ok(RespuestaModalDTO.exito("Perfil actualizado.",
+                    UsuarioDTO.desde(actualizado)));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(RespuestaModalDTO.error(error.getMessage(), "idUsuario"));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest()
+                    .body(RespuestaModalDTO.error(error.getMessage(), "perfil"));
         } catch (Exception error){
             return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(error.getMessage());
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(RespuestaModalDTO.error("No se pudo guardar el perfil.", null));
         }
     }
 

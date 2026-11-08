@@ -38,7 +38,7 @@ public class SDocumentacionFinApp {
                         fragmento.titulo(), fragmento.contenido(), puntuar(fragmento, terminos)))
                 .filter(fragmento -> fragmento.puntuacion() > 0)
                 .sorted(Comparator.comparingDouble(Fragmento::puntuacion).reversed())
-                .limit(3)
+                .limit(5)
                 .toList();
     }
 

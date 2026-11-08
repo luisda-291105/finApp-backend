@@ -1,27 +1,20 @@
-# FinApp: guía del asistente
+# FinApp: guía informativa del asistente
 
-FinApp es una aplicación web para organizar información personal y financiera. El asistente de chat responde sobre el uso documentado de la aplicación y puede consultar fuentes públicas de Internet cuando la pregunta requiere información actual. No puede consultar los registros de una cuenta ni realizar operaciones.
+FinApp ayuda a organizar información financiera personal. Esta guía solo describe la aplicación y sus funciones. El asistente no tiene permiso para consultar datos de cuentas ni para crear, editar o eliminar registros.
 
-## Navegación del dashboard
+## Secciones de la aplicación
 
-El dashboard incluye Inicio, Transacciones, Tarjetas, Bolsillos, Contactos, Correos y Configuración. La navegación lateral permite cambiar de sección. En móvil, las opciones adicionales aparecen en el menú lateral.
+- **Inicio**: muestra un resumen de la actividad y accesos a las secciones principales.
+- **Contabilidad**: permite registrar ingresos, gastos y ahorros, y organizarlos en bolsillos. Ejemplo: «Me gasté 12.000 pesos en un helado y pagué en efectivo».
+- **Tarjetas**: permite guardar referencias de tarjetas; la aplicación muestra los datos de manera protegida.
+- **Contactos**: sirve para organizar contactos guardados en la cuenta.
+- **Grupos y fuentes**: permiten clasificar y administrar fuentes de información financiera.
+- **Correos**: permite conectar Gmail y revisar mensajes relacionados cuando la cuenta está autorizada.
+- **Suscripciones**: organiza pagos recurrentes y fechas de cobro.
+- **Configuración**: permite administrar perfil, fuentes registradas y apariencia clara u oscura.
 
-## Tarjetas
+## Alcance del asistente
 
-La sección Tarjetas permite registrar y consultar tarjetas del usuario activo. El formulario solicita titular, número de tarjeta, vencimiento MM/AA, CVV y entidad financiera. El número debe tener entre 14 y 19 dígitos y el CVV exactamente 3. El vencimiento debe ser el mes actual o futuro. El detalle visual enmascara el número completo y no muestra el CVV.
+El asistente responde únicamente preguntas informativas y básicas sobre qué es FinApp, para qué sirve y cómo usar sus funciones documentadas. Puede explicar pasos y dar ejemplos cotidianos. No consulta saldos, movimientos, contactos, grupos, correos, tarjetas ni ningún otro dato personal. Tampoco ejecuta ni prepara operaciones. Para consultar o cambiar información, el usuario debe hacerlo directamente en la sección correspondiente de la aplicación.
 
-## Contactos y bolsillos
-
-Contactos permite registrar y ver contactos asociados al usuario activo. Bolsillos organiza grupos y sus fuentes asociadas. El detalle del grupo muestra fuentes vinculadas y permite gestionar la información disponible en la interfaz. Chat e invitaciones de grupos que se indiquen como demostración no representan comunicaciones enviadas a otras personas.
-
-## Correos
-
-La sección Correos puede consultar mensajes de Gmail después de autorizar la conexión. La consulta usa el permiso de solo lectura. Los mensajes de Gmail no forman parte del contexto del agente de chat y no se envían a NVIDIA ni al proveedor de búsqueda web.
-
-## Configuración y apariencia
-
-Configuración permite revisar el perfil y gestionar fuentes registradas. El switch de Apariencia cambia entre tema claro y oscuro y conserva la preferencia en el navegador.
-
-## Privacidad del asistente
-
-No escribas nombres completos, correos, números de tarjeta, CVV, contraseñas u otros datos privados en el chat. Los mensajes se envían al modelo configurado en el backend; si se necesita información web, la consulta también se envía al proveedor de búsqueda. El asistente no lee datos personales almacenados por FinApp y no ejecuta acciones financieras.
+Si una pregunta no trata sobre el uso de FinApp o la documentación no contiene la respuesta, debe decirlo con claridad y no inventar.

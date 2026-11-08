@@ -1,5 +1,6 @@
 package com.luisda.fin_app_back.Model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -71,6 +72,7 @@ public class MTarjeta {
         this.titular = titular;
     }
 
+    @JsonIgnore
     public String getNumero() {
         return numero;
     }
@@ -87,6 +89,7 @@ public class MTarjeta {
         this.expiracion = expiracion;
     }
 
+    @JsonIgnore
     public String getCvv() {
         return cvv;
     }

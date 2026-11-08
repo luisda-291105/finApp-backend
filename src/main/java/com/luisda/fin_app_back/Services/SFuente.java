@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * @uso               Gestiona las operaciones CRUD disponibles de fuentes
@@ -29,6 +31,21 @@ public class SFuente {
         IFuentes = iFuentes;
         IUsuario = iUsuario;
         IGrupo = iGrupo;
+    }
+
+    /** Crea una fuente asociada exclusivamente al usuario activo de la sesión. */
+    public MFuente crearPropia(String idUsuario, String tipo, String contenido, Boolean estado) throws Exception {
+        if (idUsuario == null || idUsuario.isBlank()) throw new IllegalArgumentException("Se requiere una sesión activa.");
+        if (tipo == null || tipo.isBlank() || tipo.trim().length() > 36
+                || contenido == null || contenido.isBlank() || contenido.trim().length() > 255) {
+            throw new IllegalArgumentException("Indica un tipo y un contenido válidos para la fuente.");
+        }
+        MFuente fuente = new MFuente(UUID.randomUUID().toString(), tipo.trim(), contenido.trim(),
+                estado == null || estado, LocalDate.now());
+        com.luisda.fin_app_back.Model.MUsuario propietario = new com.luisda.fin_app_back.Model.MUsuario();
+        propietario.setIdUsuario(idUsuario);
+        fuente.setUsuario(propietario);
+        return crear(fuente);
     }
 
     /** Agrega una fuente  */

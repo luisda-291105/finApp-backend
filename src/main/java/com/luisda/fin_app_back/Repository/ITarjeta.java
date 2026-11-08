@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @uso               crud usuario
@@ -19,6 +20,7 @@ import java.util.List;
 @Repository
 public interface ITarjeta extends JpaRepository<MTarjeta,String> {
     List<MTarjeta> findByUsuario_IdUsuario(String idUsuario);
+    Optional<MTarjeta> findByIdTarjetaAndUsuario_IdUsuario(String idTarjeta, String idUsuario);
 
     @Query("SELECT t FROM MTarjeta t WHERE t.titular = :titular ")
     List<MTarjeta> buscarPorTitular(

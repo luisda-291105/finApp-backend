@@ -8,7 +8,6 @@ import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.luisda.fin_app_back.Services.ServicioChatException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,7 +20,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Recibe las preguntas del asistente y aplica un límite básico por dirección de red. */
+/** Separa el asistente público explicativo del asistente personal autenticado. */
 @RestController
 @RequestMapping("/asistente")
 public class CAsistente {
@@ -35,15 +34,38 @@ public class CAsistente {
         this.usuarioActivo = usuarioActivo;
     }
 
-    @PostMapping("/chat")
-    public ResponseEntity<?> conversar(@RequestBody PeticionChat peticion, HttpServletRequest request) {
-        if (superoLimite(request.getRemoteAddr())) {
+    @PostMapping("/publico")
+    public ResponseEntity<?> conversarPublico(@RequestBody PeticionChat peticion, HttpServletRequest request) {
+        if (superoLimite("publico:" + request.getRemoteAddr())) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .body(Map.of("mensaje", "Alcanzaste el límite temporal del asistente. Inténtalo más tarde."));
         }
         try {
-            String idUsuario = usuarioActivo.obtenerIdUsuario(request).orElse(null);
-            RespuestaChat respuesta = servicio.responder(peticion, idUsuario);
+            return ResponseEntity.ok(servicio.responderPublico(peticion));
+        } catch (ServicioChatException error) {
+            Map<String, Object> cuerpo = new java.util.HashMap<>();
+            cuerpo.put("mensaje", error.getMessage() != null ? error.getMessage() : "Error en el asistente");
+            return ResponseEntity.status(error.getEstado()).body(cuerpo);
+        } catch (Exception error) {
+            Map<String, Object> cuerpo = new java.util.HashMap<>();
+            cuerpo.put("mensaje", "No se pudo generar una respuesta. Inténtalo de nuevo.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(cuerpo);
+        }
+    }
+
+    @PostMapping("/chat")
+    public ResponseEntity<?> conversar(@RequestBody PeticionChat peticion, HttpServletRequest request) {
+        Optional<String> idUsuario = usuarioActivo.obtenerIdUsuario(request);
+        if (idUsuario.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("mensaje", "Inicia sesión para usar tu asistente personal."));
+        }
+        if (superoLimite("usuario:" + idUsuario.get())) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(Map.of("mensaje", "Alcanzaste el límite temporal del asistente. Inténtalo más tarde."));
+        }
+        try {
+            RespuestaChat respuesta = servicio.responderPublico(peticion);
             return ResponseEntity.ok(respuesta);
         } catch (ServicioChatException error) {
             System.err.println("[Asistente] ServicioChatException: " + error.getMessage());
@@ -62,21 +84,8 @@ public class CAsistente {
     @PostMapping("/confirmar")
     public ResponseEntity<?> confirmar(@RequestBody ConfirmacionAccionAsistente confirmacion,
                                        HttpServletRequest request) {
-        Optional<String> idUsuario = usuarioActivo.obtenerIdUsuario(request);
-        if (idUsuario.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("mensaje", "Inicia sesión para confirmar esta operación."));
-        }
-        try {
-            return ResponseEntity.ok(servicio.confirmarAccion(idUsuario.get(),
-                    confirmacion == null ? null : confirmacion.token()));
-        } catch (ServicioChatException error) {
-            return ResponseEntity.status(error.getEstado()).body(Map.of("mensaje",
-                    error.getMessage() == null ? "No se pudo confirmar la operación." : error.getMessage()));
-        } catch (Exception error) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("mensaje", error.getMessage() == null ? "No se pudo completar la operación." : error.getMessage()));
-        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("mensaje", "El asistente solo responde preguntas informativas y no realiza operaciones."));
     }
 
     private boolean superoLimite(String direccion) {

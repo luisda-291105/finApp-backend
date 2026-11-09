@@ -3,6 +3,7 @@ package com.luisda.fin_app_back.Services;
 import com.luisda.fin_app_back.DTO.MovimientoContableDTO;
 import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
 import com.luisda.fin_app_back.DTO.ResumenMovimientoBolsilloDTO;
+import com.luisda.fin_app_back.DTO.SuscripcionRecurrenteDTO;
 import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Model.MTarjeta;
@@ -21,6 +22,10 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.text.Normalizer;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.stream.Collectors;
 
 @Service
 public class SMovimientoContable {
@@ -53,6 +58,57 @@ public class SMovimientoContable {
                 ? movimientos.findByBolsillo_IdBolsilloInOrderByFechaDesc(idsBolsillo)
                 : movimientos.findByBolsillo_IdBolsilloInAndTipoIgnoreCaseOrderByFechaDesc(idsBolsillo, filtro);
         return encontrados.stream().map(SMovimientoContable::dto).toList();
+    }
+
+    /** Detecta cobros repetidos y periódicos entre los gastos reales confirmados del usuario. */
+    @Transactional(readOnly = true)
+    public List<SuscripcionRecurrenteDTO> detectarSuscripcionesRecurrentes(String idUsuario) {
+        validarUsuario(idUsuario);
+        Map<String, List<MovimientoContableDTO>> grupos = listar(idUsuario, null, "GASTO").stream()
+                .filter(m -> m.fecha() != null && m.monto() != null && m.monto().signum() > 0)
+                .collect(Collectors.groupingBy(m -> claveSuscripcion(
+                        m.origenNombre() == null || m.origenNombre().isBlank() ? m.concepto() : m.origenNombre())));
+        return grupos.entrySet().stream().map(entrada -> crearSuscripcionDetectada(entrada.getKey(), entrada.getValue()))
+                .filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparing(SuscripcionRecurrenteDTO::proximoCobro))
+                .toList();
+    }
+
+    private SuscripcionRecurrenteDTO crearSuscripcionDetectada(String clave, List<MovimientoContableDTO> movimientosRepetidos) {
+        if (clave.isBlank() || movimientosRepetidos.size() < 2) return null;
+        List<MovimientoContableDTO> ordenados = movimientosRepetidos.stream()
+                .sorted(Comparator.comparing(MovimientoContableDTO::fecha)).toList();
+        List<Long> intervalos = new java.util.ArrayList<>();
+        for (int i = 1; i < ordenados.size(); i++) intervalos.add(ChronoUnit.DAYS.between(ordenados.get(i - 1).fecha(), ordenados.get(i).fecha()));
+        double media = intervalos.stream().mapToLong(Long::longValue).average().orElse(0);
+        int[] periodos = {7, 14, 30, 60, 90, 180, 365};
+        int periodo = java.util.Arrays.stream(periodos).boxed().min(Comparator.comparingDouble(p -> Math.abs(p - media))).orElse(0);
+        long tolerancia = Math.max(4, Math.round(periodo * 0.18));
+        boolean periodica = intervalos.stream().allMatch(dias -> Math.abs(dias - periodo) <= tolerancia);
+        if (!periodica) return null;
+
+        java.math.BigDecimal promedio = ordenados.stream().map(MovimientoContableDTO::monto)
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)
+                .divide(java.math.BigDecimal.valueOf(ordenados.size()), 2, java.math.RoundingMode.HALF_UP);
+        MovimientoContableDTO ultimo = ordenados.get(ordenados.size() - 1);
+        String frecuencia = switch (periodo) {
+            case 7 -> "Semanal";
+            case 14 -> "Quincenal";
+            case 30 -> "Mensual";
+            case 60 -> "Cada 2 meses";
+            case 90 -> "Trimestral";
+            case 180 -> "Semestral";
+            default -> "Anual";
+        };
+        String nombre = ultimo.origenNombre() == null || ultimo.origenNombre().isBlank() ? ultimo.concepto() : ultimo.origenNombre();
+        return new SuscripcionRecurrenteDTO(clave, nombre, ultimo.categoria(), promedio, frecuencia, periodo,
+                ultimo.fecha(), ultimo.fecha().plusDays(periodo), ordenados.size());
+    }
+
+    private String claveSuscripcion(String nombre) {
+        if (nombre == null) return "";
+        return Normalizer.normalize(nombre.trim(), Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
     }
 
     @Transactional(readOnly = true)
@@ -117,6 +173,23 @@ public class SMovimientoContable {
         movimiento.setConcepto(solicitud.concepto() == null ? "" : solicitud.concepto().trim());
         aplicarOrigen(movimiento, origen, tipo);
         return dto(movimientos.save(movimiento));
+    }
+
+    @Transactional
+    public java.util.Optional<MovimientoContableDTO> crearAutomaticamenteDesdeGmail(
+            String idUsuario, String tipo, java.time.LocalDate fecha, BigDecimal monto,
+            String categoria, String concepto, String origenId, String origenNombre) {
+        validarUsuario(idUsuario);
+        List<MBolsillo> compatibles = bolsillosPropios(idUsuario).stream()
+                .filter(MBolsillo::isEstado)
+                .filter(bolsillo -> bolsillo.getTipo() != null
+                        && tipo.equalsIgnoreCase(normalizarTipo(bolsillo.getTipo())))
+                .toList();
+        if (compatibles.size() != 1) return java.util.Optional.empty();
+        MovimientoContableSolicitudDTO solicitud = new MovimientoContableSolicitudDTO(
+                compatibles.get(0).getIdBolsillo(), tipo, fecha, monto, categoria, concepto,
+                "GMAIL", origenId, origenNombre);
+        return java.util.Optional.of(crear(idUsuario, solicitud));
     }
 
     @Transactional

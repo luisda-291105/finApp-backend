@@ -49,6 +49,13 @@ public class CMovimientoContable {
         return ResponseEntity.ok(movimientos.resumir(usuario.get().getIdUsuario()));
     }
 
+    @GetMapping("/recurrentes")
+    public ResponseEntity<?> detectarRecurrentes(HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        return ResponseEntity.ok(movimientos.detectarSuscripcionesRecurrentes(usuario.get().getIdUsuario()));
+    }
+
     @GetMapping("/correos")
     public ResponseEntity<?> correosImportados(@RequestParam List<String> ids, HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request);

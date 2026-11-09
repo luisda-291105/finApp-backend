@@ -28,6 +28,7 @@ public interface IFuentes extends JpaRepository<MFuente , String> {
     List<MFuente> buscarPropias(@Param("idUsuario") String idUsuario, @Param("termino") String termino, Pageable pageable);
     List<MFuente> findByUsuario_IdUsuarioAndTipoIgnoreCaseAndContenidoIgnoreCase(String idUsuario, String tipo, String contenido);
     java.util.Optional<MFuente> findByIdFuenteAndUsuario_IdUsuario(String idFuente, String idUsuario);
+    List<MFuente> findByTipoIgnoreCaseAndContenidoIgnoreCase(String tipo, String contenido);
 
     @Query("SELECT COUNT(f) FROM MFuente f WHERE f.usuario.idUsuario = :idUsuario AND UPPER(f.tipo) = UPPER(:tipo) AND LOWER(TRIM(f.contenido)) = LOWER(TRIM(:contenido))")
     long contarDuplicadas(@Param("idUsuario") String idUsuario, @Param("tipo") String tipo, @Param("contenido") String contenido);

@@ -8,7 +8,6 @@ import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
 import com.luisda.fin_app_back.DTO.UsuarioDTO;
 import com.luisda.fin_app_back.DTO.UsuarioActivoDTO;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,15 +29,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "Usuarios y sesión", description = "Registro, inicio y cierre de sesión y administración del perfil.")
 @RequestMapping("/usuario")
 public class CUsuario {
-    @Autowired
-    SUsuario SUsuario;
+    final SUsuario SUsuario;
 
     private final SUsuarioActivo usuarioActivo;
     private final SVerificadorContrasena verificadorContrasena;
 
-    public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena) {
+    public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena, SUsuario SUsuario) {
         this.usuarioActivo = usuarioActivo;
         this.verificadorContrasena = verificadorContrasena;
+        this.SUsuario = SUsuario;
     }
 
     @PostMapping("/login")

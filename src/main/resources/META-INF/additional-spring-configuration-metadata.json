@@ -1,0 +1,57 @@
+{"properties": [
+  {
+    "name": "finapp.chat.nvidia.model",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.nvidia.model'"
+  },
+  {
+    "name": "finapp.chat.nvidia.api-key",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.nvidia.api-key'"
+  },
+  {
+    "name": "finapp.chat.nvidia.url",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.nvidia.url'"
+  },
+  {
+    "name": "finapp.chat.tavily.api-key",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.tavily.api-key'"
+  },
+  {
+    "name": "finapp.chat.tavily.url",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.tavily.url'"
+  },
+  {
+    "name": "finapp.cors.allowed-origins",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.cors.allowed-origins'"
+  },
+  {
+    "name": "finapp.google.client-id",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.client-id'"
+  },
+  {
+    "name": "finapp.google.client-secret",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.client-secret'"
+  },
+  {
+    "name": "finapp.google.auth-redirect-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.auth-redirect-uri'"
+  },
+  {
+    "name": "finapp.web.base-url",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.web.base-url'"
+  },
+  {
+    "name": "finapp.google.credentials-file",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.credentials-file'"
+  }
+]}

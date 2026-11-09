@@ -128,7 +128,7 @@ public class SAsistenteChat {
     private final String claveTavily;
     private final String urlTavily;
 
-    @Autowired
+
     public SAsistenteChat(
             SDocumentacionFinApp documentacion,
             IContacto contactosRepo,
@@ -282,9 +282,8 @@ public class SAsistenteChat {
         if (esSaludo(pregunta)) {
             return respuestaSinCambio("Hola. Puedo consultar tus datos de FinApp y ayudarte a administrar contactos, bolsillos, movimientos, grupos y fuentes. Antes de guardar cualquier cambio te mostraré una propuesta para que la confirmes.");
         }
-        if (parecePreguntaCapacidades(pregunta)) {
-            return respuestaSinCambio("Puedo consultar tus contactos, grupos, fuentes, correos, tarjetas, bolsillos y movimientos. También puedo proponer crear, editar o eliminar contactos, bolsillos, movimientos, grupos y fuentes que no sean de correo. Cada cambio requiere que revises y confirmes la propuesta. Las tarjetas, Gmail y fuentes de correo se administran desde sus secciones.");
-        }
+        RespuestaChat capacidades = responderPreguntaCapacidades(pregunta);
+        if (capacidades != null) return capacidades;
         if (esConfirmacionExplicita(pregunta)) {
             return confirmarOperacionConversacional(peticion, idUsuario);
         }

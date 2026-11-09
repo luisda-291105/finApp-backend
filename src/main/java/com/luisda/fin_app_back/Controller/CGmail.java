@@ -949,7 +949,7 @@ public class CGmail {
                     extraerDestinoBaja(unsubscribe, "https?"), extraerDestinoBaja(unsubscribe, "mailto"),
                     valorSeguro(suscripcion.getListUnsubscribePost()).toLowerCase(Locale.ROOT)
                             .contains("list-unsubscribe=one-click"),
-                    null, cuenta.getIdFuente(), cuenta.getContenido()));
+                    null, cuenta.getIdFuente(), cuenta.getContenido(), suscripcion.getUltimaActividad()));
         }
         return List.copyOf(resultado);
     }

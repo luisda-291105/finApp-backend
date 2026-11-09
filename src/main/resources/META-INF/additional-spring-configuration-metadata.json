@@ -1,5 +1,20 @@
 {"properties": [
   {
+    "name": "finapp.jwt.secret",
+    "type": "java.lang.String",
+    "description": "Clave Base64 de al menos 256 bits para firmar los JWT de FinApp."
+  },
+  {
+    "name": "finapp.jwt.expiration-seconds",
+    "type": "java.lang.Long",
+    "description": "Duración de los JWT de FinApp en segundos."
+  },
+  {
+    "name": "finapp.jwt.cookie-secure",
+    "type": "java.lang.Boolean",
+    "description": "Indica si la cookie JWT requiere HTTPS."
+  },
+  {
     "name": "finapp.chat.nvidia.model",
     "type": "java.lang.String",
     "description": "A description for 'finapp.chat.nvidia.model'"

@@ -8,20 +8,17 @@ import java.util.Optional;
 
 @Service
 public class SUsuarioActivo {
-    public static final String CLAVE_SESION = "usuarioActivoId";
     private final IUsuario usuarios;
-    public SUsuarioActivo(IUsuario usuarios) { this.usuarios = usuarios; }
-    /** Devuelve únicamente el identificador de la sesión, sin consultar ni cargar el perfil del usuario. */
+    private final JwtTokenService tokens;
+    public SUsuarioActivo(IUsuario usuarios, JwtTokenService tokens) {
+        this.usuarios = usuarios;
+        this.tokens = tokens;
+    }
+    /** Devuelve únicamente el identificador validado del JWT, sin cargar el perfil. */
     public Optional<String> obtenerIdUsuario(HttpServletRequest request) {
-        var session = request.getSession(false);
-        if (session == null) return Optional.empty();
-        Object id = session.getAttribute(CLAVE_SESION);
-        return id instanceof String value && !value.isBlank() ? Optional.of(value) : Optional.empty();
+        return tokens.obtenerIdUsuario(request);
     }
     public Optional<MUsuario> obtenerUsuario(HttpServletRequest request) {
-        var session = request.getSession(false);
-        if (session == null) return Optional.empty();
-        Object id = session.getAttribute(CLAVE_SESION);
-        return id instanceof String value ? usuarios.findById(value) : Optional.empty();
+        return obtenerIdUsuario(request).flatMap(usuarios::findById);
     }
 }

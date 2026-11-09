@@ -4,16 +4,17 @@ import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Services.SUsuario;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.luisda.fin_app_back.Services.SVerificadorContrasena;
+import com.luisda.fin_app_back.Services.JwtTokenService;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
 import com.luisda.fin_app_back.DTO.UsuarioDTO;
 import com.luisda.fin_app_back.DTO.UsuarioActivoDTO;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -26,18 +27,21 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 
 @RestController
-@Tag(name = "Usuarios y sesión", description = "Registro, inicio y cierre de sesión y administración del perfil.")
+@Tag(name = "Usuarios y autenticación", description = "Registro, inicio y cierre de sesión JWT y administración del perfil.")
 @RequestMapping("/usuario")
 public class CUsuario {
     final SUsuario SUsuario;
 
     private final SUsuarioActivo usuarioActivo;
     private final SVerificadorContrasena verificadorContrasena;
+    private final JwtTokenService tokens;
 
-    public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena, SUsuario SUsuario) {
+    public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena,
+                    SUsuario SUsuario, JwtTokenService tokens) {
         this.usuarioActivo = usuarioActivo;
         this.verificadorContrasena = verificadorContrasena;
         this.SUsuario = SUsuario;
+        this.tokens = tokens;
     }
 
     @PostMapping("/login")
@@ -51,11 +55,12 @@ public class CUsuario {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(RespuestaModalDTO.error("El usuario o la contraseña no son correctos.", "credenciales"));
             }
-            HttpSession sesionAnterior = solicitud.getSession(false);
-            if (sesionAnterior != null) sesionAnterior.invalidate();
-            HttpSession sesion = solicitud.getSession(true);
-            sesion.setAttribute(SUsuarioActivo.CLAVE_SESION, usuario.getIdUsuario());
-            return ResponseEntity.ok(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, tokens.cookie(tokens.emitir(usuario.getIdUsuario())).toString())
+                    .body(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(RespuestaModalDTO.error(error.getMessage(), null));
         } catch (Exception error) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(RespuestaModalDTO.error("No se pudo iniciar sesión.", null));
@@ -64,9 +69,9 @@ public class CUsuario {
 
     @PostMapping("/logout")
     public ResponseEntity<?> cerrarSesion(HttpServletRequest solicitud) {
-        HttpSession sesion = solicitud.getSession(false);
-        if (sesion != null) sesion.invalidate();
-        return ResponseEntity.ok(RespuestaModalDTO.exito("Sesión cerrada.", null));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, tokens.cookieExpirado().toString())
+                .body(RespuestaModalDTO.exito("Sesión cerrada.", null));
     }
 
     @GetMapping("/activo")
@@ -174,12 +179,12 @@ public class CUsuario {
                                        HttpServletRequest solicitud) throws Exception{
         try {
             MUsuario actualizado = this.SUsuario.modificar(cambios, idUsuario);
-            HttpSession sesion = solicitud.getSession(false);
-            if (sesion != null && idUsuario.equals(sesion.getAttribute(SUsuarioActivo.CLAVE_SESION))) {
-                sesion.setAttribute(SUsuarioActivo.CLAVE_SESION, actualizado.getIdUsuario());
+            ResponseEntity.BodyBuilder respuesta = ResponseEntity.ok();
+            if (idUsuario.equals(usuarioActivo.obtenerIdUsuario(solicitud).orElse(null))) {
+                respuesta.header(HttpHeaders.SET_COOKIE,
+                        tokens.cookie(tokens.emitir(actualizado.getIdUsuario())).toString());
             }
-            return ResponseEntity.ok(RespuestaModalDTO.exito("Perfil actualizado.",
-                    UsuarioDTO.desde(actualizado)));
+            return respuesta.body(RespuestaModalDTO.exito("Perfil actualizado.", UsuarioDTO.desde(actualizado)));
         } catch (IllegalStateException error) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(RespuestaModalDTO.error(error.getMessage(), "idUsuario"));

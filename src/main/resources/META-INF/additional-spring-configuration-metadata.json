@@ -68,5 +68,20 @@
     "name": "finapp.google.credentials-file",
     "type": "java.lang.String",
     "description": "A description for 'finapp.google.credentials-file'"
+  },
+  {
+    "name": "finapp.google.pubsub.topic",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.pubsub.topic'"
+  },
+  {
+    "name": "finapp.google.pubsub.audience",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.pubsub.audience'"
+  },
+  {
+    "name": "finapp.google.pubsub.service-account",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.pubsub.service-account'"
   }
 ]}

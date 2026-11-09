@@ -27,7 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 
 @RestController
-@Tag(name = "Usuarios y autenticación", description = "Registro, inicio y cierre de sesión JWT y administración del perfil.")
+@Tag(name = "Usuarios y sesión", description = "Registro, inicio y cierre de sesión JWT y administración del perfil.")
 @RequestMapping("/usuario")
 public class CUsuario {
     final SUsuario SUsuario;

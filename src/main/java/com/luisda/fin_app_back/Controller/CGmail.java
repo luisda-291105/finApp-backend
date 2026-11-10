@@ -64,6 +64,7 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -80,6 +81,13 @@ public class CGmail {
     private static final int MARGEN_RENOVACION_SEGUNDOS = 60;
     private static final int RETENCION_CORREOS_DIAS = 90;
     private static final int TAMANO_PAGINA_GMAIL = 500;
+    private static final Set<String> REMITENTES_PRIORITARIOS = Set.of(
+            "nu@nu.com.co",
+            "efacturahomecenter@homecenter.co",
+            "serviciopse@achcolombia.com.co",
+            "people@pasteur.com.co",
+            "alertasynotificaciones@an.notificacionesbancolombia.com"
+    );
     private static final Logger LOGGER = LoggerFactory.getLogger(CGmail.class);
 
     private volatile RestClient clienteHttp;
@@ -608,8 +616,12 @@ public class CGmail {
         if (direcciones.isEmpty()) direcciones = List.of(cuenta.getContenido());
         String consulta = direcciones.stream().map(d -> "to:" + d + " cc:" + d + " deliveredto:" + d)
                 .collect(java.util.stream.Collectors.joining(" "));
+        String consultaRemitentesPrioritarios = REMITENTES_PRIORITARIOS.stream()
+                .map(remitente -> "from:" + remitente)
+                .collect(java.util.stream.Collectors.joining(" "));
         java.util.Set<String> mensajesProcesados = new java.util.HashSet<>();
-        recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d {" + consulta + "}",
+        recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d {" + consulta + " "
+                        + consultaRemitentesPrioritarios + " is:important}",
                 resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
         recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d {category:promotions category:updates}",
                 resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
@@ -721,6 +733,11 @@ public class CGmail {
     private boolean mensajePerteneceACache(MFuente cuenta, JsonNode mensaje) {
         if (mensaje == null) return false;
         JsonNode headers = mensaje.path("payload").path("headers");
+        if (esRemitentePrioritario(header(headers, "From"))) return true;
+        JsonNode labels = mensaje.path("labelIds");
+        if (labels != null && labels.isArray()) {
+            for (JsonNode label : labels) if ("IMPORTANT".equals(label.asText())) return true;
+        }
         List<String> direcciones = new ArrayList<>(fuentes.findByUsuario_IdUsuario(cuenta.getUsuario().getIdUsuario()).stream()
                 .filter(f -> "CORREO".equalsIgnoreCase(f.getTipo()) && f.isEstado() && direccionCorreoValida(f.getContenido()))
                 .map(f -> f.getContenido().trim()).toList());
@@ -730,7 +747,6 @@ public class CGmail {
                         .map(nombre -> header(headers, nombre)).collect(java.util.stream.Collectors.joining(", ")), d))) {
             return true;
         }
-        JsonNode labels = mensaje.path("labelIds");
         if (labels == null || !labels.isArray()) return false;
         boolean esPromocionOActualizacion = false;
         for (JsonNode label : labels) {
@@ -741,6 +757,16 @@ public class CGmail {
             }
         }
         return esPromocionOActualizacion && !header(headers, "List-Unsubscribe").isBlank();
+    }
+
+    private boolean esRemitentePrioritario(String remitente) {
+        if (remitente == null || remitente.isBlank()) return false;
+        var matcher = java.util.regex.Pattern.compile("(?i)[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\\.[A-Z]{2,}")
+                .matcher(remitente);
+        while (matcher.find()) {
+            if (REMITENTES_PRIORITARIOS.contains(matcher.group().toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
     }
 
     private void persistirMensajeGmail(MFuente cuenta, JsonNode mensaje) throws IOException, GeneralSecurityException {

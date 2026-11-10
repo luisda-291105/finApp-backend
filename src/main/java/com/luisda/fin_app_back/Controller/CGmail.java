@@ -412,6 +412,66 @@ public class CGmail {
                 "cuentasConsultadas", cuentas.size()));
     }
 
+    /** Lista los mensajes cacheados del remitente de una suscripción activa de la cuenta indicada. */
+    @GetMapping("/cuentas/{cuentaId}/suscripciones/mensajes")
+    public ResponseEntity<?> listarMensajesSuscripcion(
+            @org.springframework.web.bind.annotation.PathVariable String cuentaId,
+            @org.springframework.web.bind.annotation.RequestParam String correo,
+            HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
+        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("message", "No hay una sesión activa."));
+        MFuente cuenta = fuentes.findByIdFuenteAndUsuario_IdUsuario(cuentaId, usuario.getIdUsuario()).orElse(null);
+        if (cuenta == null || !"CORREO".equalsIgnoreCase(cuenta.getTipo()) || !cuenta.tieneConexionGmail()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "No se encontró esa cuenta Gmail conectada."));
+        }
+        String remitente = correo == null ? "" : correo.trim().toLowerCase(Locale.ROOT);
+        if (!direccionCorreoValida(remitente)) return ResponseEntity.badRequest()
+                .body(Map.of("message", "La dirección del remitente no es válida."));
+        if (suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(cuentaId, remitente).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "No se encontró una suscripción activa para ese remitente."));
+        }
+
+        try {
+            String token = tokenAccesoActual(cuenta);
+            java.util.Set<String> consultados = new java.util.HashSet<>();
+            recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d from:" + remitente, resumen -> {
+                String id = resumen.path("id").asText("");
+                if (id.isBlank() || !consultados.add(id)
+                        || mensajes.findByCuenta_IdFuenteAndGoogleMessageId(cuentaId, id).isPresent()) return;
+                guardarMensajeGmail(cuenta, token, id);
+            });
+
+            Instant desde = Instant.now().minus(java.time.Duration.ofDays(RETENCION_CORREOS_DIAS));
+            List<GmailMensajeDTO> resultado = mensajes
+                    .findByCuenta_IdFuenteAndFechaInternaAfterOrderByFechaInternaDesc(cuentaId, desde).stream()
+                    .filter(mensaje -> remitente.equals(extraerDireccionRemitente(mensaje.getRemitente())))
+                    .map(mensaje -> {
+                        try {
+                            return new GmailMensajeDTO(mensaje.getGoogleMessageId(), valorSeguro(mensaje.getRemitente()),
+                                    valorSeguro(mensaje.getDestinatario()), valorSeguro(mensaje.getAsunto()),
+                                    java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
+                                            .format(mensaje.getFechaInterna().atZone(java.time.ZoneOffset.UTC)),
+                                    valorSeguro(mensaje.getFragmento()), leerListaJson(mensaje.getEtiquetasJson()),
+                                    leerListaJson(mensaje.getNombresEtiquetasJson()));
+                        } catch (IOException error) {
+                            throw new IllegalStateException("No se pudieron leer las etiquetas del correo.", error);
+                        }
+                    }).toList();
+            return ResponseEntity.ok(resultado);
+        } catch (RestClientResponseException error) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", mensajeErrorGoogle(error, "No se pudieron sincronizar los mensajes de esta suscripción.")));
+        } catch (CuentaGmailRequiereReconectarException error) {
+            return respuestaReconexionRequerida();
+        } catch (IOException | GeneralSecurityException error) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "No se pudieron sincronizar los mensajes de esta suscripción."));
+        }
+    }
+
     @GetMapping("/movimientos/notificaciones")
     public ResponseEntity<?> listarNotificacionesMovimientos(HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
@@ -625,6 +685,18 @@ public class CGmail {
                 resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
         recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d {category:promotions category:updates}",
                 resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
+        List<String> remitentesSuscritos = suscripciones.findByCuenta_IdFuenteOrderByUltimaActividadDesc(cuenta.getIdFuente()).stream()
+                .map(MGmailSuscripcion::getCorreoRemitente)
+                .filter(this::direccionCorreoValida)
+                .distinct()
+                .map(remitente -> "from:" + remitente)
+                .toList();
+        for (int inicio = 0; inicio < remitentesSuscritos.size(); inicio += 25) {
+            String consultaRemitentesSuscritos = String.join(" ", remitentesSuscritos.subList(
+                    inicio, Math.min(inicio + 25, remitentesSuscritos.size())));
+            recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d {" + consultaRemitentesSuscritos + "}",
+                    resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
+        }
         purgarMensajesAntiguos(cuenta);
         cuenta.setGmailSincronizadoEn(Instant.now());
         fuentes.save(cuenta);
@@ -733,7 +805,10 @@ public class CGmail {
     private boolean mensajePerteneceACache(MFuente cuenta, JsonNode mensaje) {
         if (mensaje == null) return false;
         JsonNode headers = mensaje.path("payload").path("headers");
-        if (esRemitentePrioritario(header(headers, "From"))) return true;
+        String remitente = extraerDireccionRemitente(header(headers, "From"));
+        if (esRemitentePrioritario(remitente)
+                || (!remitente.isBlank() && suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(
+                        cuenta.getIdFuente(), remitente).isPresent())) return true;
         JsonNode labels = mensaje.path("labelIds");
         if (labels != null && labels.isArray()) {
             for (JsonNode label : labels) if ("IMPORTANT".equals(label.asText())) return true;
@@ -761,12 +836,14 @@ public class CGmail {
 
     private boolean esRemitentePrioritario(String remitente) {
         if (remitente == null || remitente.isBlank()) return false;
+        return REMITENTES_PRIORITARIOS.contains(remitente.toLowerCase(Locale.ROOT));
+    }
+
+    private String extraerDireccionRemitente(String remitente) {
+        if (remitente == null || remitente.isBlank()) return "";
         var matcher = java.util.regex.Pattern.compile("(?i)[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\\.[A-Z]{2,}")
                 .matcher(remitente);
-        while (matcher.find()) {
-            if (REMITENTES_PRIORITARIOS.contains(matcher.group().toLowerCase(Locale.ROOT))) return true;
-        }
-        return false;
+        return matcher.find() ? matcher.group().toLowerCase(Locale.ROOT) : "";
     }
 
     private void persistirMensajeGmail(MFuente cuenta, JsonNode mensaje) throws IOException, GeneralSecurityException {
@@ -1036,6 +1113,7 @@ public class CGmail {
     private boolean direccionCorreoValida(String valor) {
         return valor != null && valor.trim().matches("(?i)^[^\\s@{}]+@[^\\s@{}]+\\.[^\\s@{}]+$");
     }
+
 
     private String mensajeErrorGoogle(RestClientResponseException error, String predeterminado) {
         if (error.getStatusCode().value() == 401) return "La autorización de Gmail venció. Conecta Gmail de nuevo.";

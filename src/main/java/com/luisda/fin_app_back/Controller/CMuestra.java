@@ -32,6 +32,11 @@ public class CMuestra {
         try { return ResponseEntity.ok(RespuestaModalDTO.exito("Muestra cargada.", muestras.buscar(user.get().getIdUsuario(), id))); }
         catch (java.util.NoSuchElementException e) { return ResponseEntity.status(404).body(RespuestaModalDTO.error(e.getMessage(), null)); }
     }
+    @PutMapping("/orden") public ResponseEntity<?> reordenar(@RequestBody MuestraOrdenDTO dto, HttpServletRequest request) {
+        var user = usuarioActivo.obtenerUsuario(request); if (user.isEmpty()) return ResponseEntity.status(401).body(RespuestaModalDTO.error("Inicia sesión para continuar.", null));
+        try { muestras.reordenar(user.get().getIdUsuario(), dto == null ? null : dto.ids()); return ResponseEntity.ok(RespuestaModalDTO.exito("Orden de muestras actualizado.", null)); }
+        catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(RespuestaModalDTO.error(e.getMessage(), null)); }
+    }
     @PutMapping("/{id}") public ResponseEntity<?> actualizar(@PathVariable Long id, @RequestBody MuestraCrearDTO dto, HttpServletRequest request) {
         var user = usuarioActivo.obtenerUsuario(request); if (user.isEmpty()) return ResponseEntity.status(401).body(RespuestaModalDTO.error("Inicia sesión para continuar.", null));
         try { return ResponseEntity.ok(RespuestaModalDTO.exito("Muestra actualizada.", muestras.actualizar(user.get().getIdUsuario(), id, dto))); }

@@ -5,9 +5,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.luisda.fin_app_back.DTO.GoogleOAuthStateDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.Services.SAuthGoogle;
+import com.luisda.fin_app_back.Services.JwtTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -25,11 +27,15 @@ import java.util.Arrays;
 @RequestMapping("/api/auth/google")
 public class CAuthGoogle {
     private final SAuthGoogle authGoogle;
+    private final JwtTokenService tokens;
 
     @Value("${finapp.cors.allowed-origins:http://localhost:5173}") private String origenesPermitidos;
     @Value("${finapp.web.base-url:${WEB_APP_URL:http://localhost:5173}}") private String webBaseUrl;
 
-    public CAuthGoogle(SAuthGoogle authGoogle) { this.authGoogle = authGoogle; }
+    public CAuthGoogle(SAuthGoogle authGoogle, JwtTokenService tokens) {
+        this.authGoogle = authGoogle;
+        this.tokens = tokens;
+    }
 
     @GetMapping("/state")
     public ResponseEntity<?> crearEstado(
@@ -52,12 +58,14 @@ public class CAuthGoogle {
             HttpServletRequest request
     ) {
         String destino;
+        ResponseCookie cookie = null;
         try {
             if (error != null && !error.isBlank()) {
                 authGoogle.cancelar(state, request);
                 destino = urlLogin("cancelled");
             } else {
-                authGoogle.autenticar(code, state, request);
+                var usuario = authGoogle.autenticar(code, state, request);
+                cookie = tokens.cookie(tokens.emitir(usuario.getIdUsuario()));
                 destino = urlLogin("success");
             }
         } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -65,7 +73,9 @@ public class CAuthGoogle {
         } catch (RuntimeException exception) {
             destino = urlLogin("failed");
         }
-        return ResponseEntity.status(302).location(URI.create(destino)).build();
+        ResponseEntity.BodyBuilder respuesta = ResponseEntity.status(302).location(URI.create(destino));
+        if (cookie != null) respuesta.header(HttpHeaders.SET_COOKIE, cookie.toString());
+        return respuesta.build();
     }
 
     private String urlLogin(String resultado) {

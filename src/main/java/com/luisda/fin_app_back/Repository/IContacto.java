@@ -1,10 +1,9 @@
 package com.luisda.fin_app_back.Repository;
 import com.luisda.fin_app_back.Model.MContacto;
-import com.luisda.fin_app_back.Model.MUsuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+
 
 import java.util.List;
 import java.util.Optional;
@@ -19,10 +18,12 @@ import java.util.Optional;
  * @dependencias      MContacto, Spring Data JPA
  * @usadoPor          SContacto
  */
-@Repository
+
 public interface IContacto extends JpaRepository<MContacto ,String> {
     List<MContacto> findByUsuario_IdUsuario(String idUsuario);
+    List<MContacto> findTop25ByUsuario_IdUsuarioAndNombreContainingIgnoreCaseOrderByNombreAsc(String idUsuario, String nombre);
     Optional<MContacto> findByIdContactoAndUsuario_IdUsuario(String idContacto, String idUsuario);
+    Optional<MContacto> findByOrigenAndUsuario_IdUsuario(String origen, String idUsuario);
     // consultas
     @Query("SELECT c FROM MContacto c WHERE c.nombre = :nombre")
     List<MContacto> buscarPorNombre(

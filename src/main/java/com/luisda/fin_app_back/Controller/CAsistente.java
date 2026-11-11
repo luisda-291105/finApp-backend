@@ -67,7 +67,7 @@ public class CAsistente {
                     .body(Map.of("mensaje", "Alcanzaste el límite temporal del asistente. Inténtalo más tarde."));
         }
         try {
-            RespuestaChat respuesta = servicio.responderPublico(peticion);
+            RespuestaChat respuesta = servicio.responder(peticion, idUsuario.get());
             return ResponseEntity.ok(respuesta);
         } catch (ServicioChatException error) {
             System.err.println("[Asistente] ServicioChatException: " + error.getMessage());
@@ -86,8 +86,20 @@ public class CAsistente {
     @PostMapping("/confirmar")
     public ResponseEntity<?> confirmar(@RequestBody ConfirmacionAccionAsistente confirmacion,
                                        HttpServletRequest request) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("mensaje", "El asistente solo responde preguntas informativas y no realiza operaciones."));
+        Optional<String> idUsuario = usuarioActivo.obtenerIdUsuario(request);
+        if (idUsuario.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("mensaje", "Inicia sesión para confirmar esta operación."));
+        }
+        try {
+            return ResponseEntity.ok(servicio.confirmarAccion(idUsuario.get(), confirmacion.token()));
+        } catch (ServicioChatException error) {
+            return ResponseEntity.status(error.getEstado())
+                    .body(Map.of("mensaje", error.getMessage() != null ? error.getMessage() : "No se pudo confirmar la operación."));
+        } catch (Exception error) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("mensaje", "No se pudo completar la operación. Inténtalo de nuevo."));
+        }
     }
 
     private boolean superoLimite(String direccion) {

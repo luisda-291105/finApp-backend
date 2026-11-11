@@ -4,7 +4,6 @@ import com.luisda.fin_app_back.Model.MGrupo;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
@@ -18,7 +17,6 @@ import java.util.List;
  * @usadoPor          Capas consumidoras de repositorios
  */
 
-@Repository
 public interface IGrupo extends JpaRepository<MGrupo, String>{
 
     List<MGrupo> findByUsuario_IdUsuario(String idUsuario);

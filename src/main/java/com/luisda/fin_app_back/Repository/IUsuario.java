@@ -4,7 +4,7 @@ import com.luisda.fin_app_back.Model.MUsuario;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+
 
 import java.util.List;
 
@@ -18,12 +18,13 @@ import java.util.List;
  * @usadoPor          SUsuario
  */
 
-@Repository
 public interface IUsuario extends JpaRepository<MUsuario , String> {
 
     java.util.Optional<MUsuario> findByGoogleSubject(String googleSubject);
 
     java.util.Optional<MUsuario> findByCorreoGoogleIgnoreCase(String correoGoogle);
+
+    java.util.Optional<MUsuario> findByTelegramChatId(String telegramChatId);
 
     java.util.Optional<MUsuario> findByCorreoIgnoreCase(String correo);
 

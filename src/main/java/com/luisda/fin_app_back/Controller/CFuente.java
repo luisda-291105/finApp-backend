@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Services.SFuente;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,8 +23,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/fuente")
 public class CFuente {
 
-    @Autowired
-    SFuente SFuente;
+    private final SFuente SFuente;
+
+    public CFuente(SFuente SFuente) {
+        this.SFuente = SFuente;
+    }
 
     /** crear un registro  */
     @PostMapping

@@ -99,7 +99,7 @@ public class MBolsillo {
         String limpio = tipo.trim().replaceAll("\\s+", " ");
         String normalizado = limpio.toUpperCase(Locale.ROOT);
         this.tipo = switch (normalizado) {
-            case "INGRESO", "GASTO", "AHORRO" -> normalizado;
+            case "INGRESO", "GASTO", "AHORRO", "OTROS", "POR_REVISAR" -> normalizado;
             default -> limpio;
         };
     }

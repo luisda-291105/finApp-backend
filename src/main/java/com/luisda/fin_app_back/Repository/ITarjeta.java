@@ -4,7 +4,8 @@ import com.luisda.fin_app_back.Model.MTarjeta;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Pageable;
+
 
 import java.util.List;
 import java.util.Optional;
@@ -17,9 +18,13 @@ import java.util.Optional;
  * @dependencias      MUsuario, Spring Data JPA
  * @usadoPor          SUsuario
  */
-@Repository
+
 public interface ITarjeta extends JpaRepository<MTarjeta,String> {
     List<MTarjeta> findByUsuario_IdUsuario(String idUsuario);
+    @Query("SELECT t FROM MTarjeta t WHERE t.usuario.idUsuario = :idUsuario AND " +
+            "(LOWER(t.titular) LIKE LOWER(CONCAT('%', :termino, '%')) OR LOWER(t.entidad) LIKE LOWER(CONCAT('%', :termino, '%'))) " +
+            "ORDER BY t.entidad ASC")
+    List<MTarjeta> buscarPropias(@Param("idUsuario") String idUsuario, @Param("termino") String termino, Pageable pageable);
     Optional<MTarjeta> findByIdTarjetaAndUsuario_IdUsuario(String idTarjeta, String idUsuario);
 
     @Query("SELECT t FROM MTarjeta t WHERE t.titular = :titular ")

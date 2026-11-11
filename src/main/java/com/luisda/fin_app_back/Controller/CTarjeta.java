@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 
-/** Endpoints de tarjetas con autorización por usuario de sesión y respuestas sin CVV/PAN completo. */
+/** Endpoints de tarjetas con autorización por usuario autenticado y respuestas sin CVV/PAN completo. */
 @RestController
 @Tag(name = "Tarjetas", description = "Administración de tarjetas de pago.")
 @RequestMapping("/tarjeta")

@@ -8,6 +8,7 @@ import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
 import com.luisda.fin_app_back.DTO.PeticionChat;
 import com.luisda.fin_app_back.DTO.RespuestaChat;
 import com.luisda.fin_app_back.DTO.TurnoChat;
+import com.luisda.fin_app_back.Filtrado.PromptClasificador;
 import com.luisda.fin_app_back.Model.MContacto;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGrupo;
@@ -242,6 +243,12 @@ public class SAsistenteChat {
 
     public RespuestaChat responder(PeticionChat peticion) {
         return responderPublico(peticion);
+    }
+
+    /** Ejecuta el prompt de clasificación reutilizando el cliente NVIDIA y su configuración existentes. */
+    public String clasificarFiltro(String contenidoNoConfiable) {
+        PeticionChat peticion = new PeticionChat(contenidoNoConfiable, List.of());
+        return generarRespuesta(peticion, List.of(), PromptClasificador.PROMPT);
     }
 
     /** El asistente de landing solo explica funciones documentadas y nunca accede a datos ni operaciones. */

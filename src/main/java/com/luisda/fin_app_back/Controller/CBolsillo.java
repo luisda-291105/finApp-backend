@@ -33,6 +33,17 @@ public class CBolsillo {
         return ResponseEntity.ok(bolsillos.listar(usuario.get().getIdUsuario()));
     }
 
+    /** El bolsillo interno de revisión se consulta por una ruta separada del listado del usuario. */
+    @GetMapping("/por-revisar")
+    public ResponseEntity<?> obtenerPorRevisar(HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        return bolsillos.obtenerPorRevisar(usuario.get().getIdUsuario())
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(RespuestaModalDTO.error("Todavía no existe un bolsillo Por revisar.", null)));
+    }
+
     @PostMapping
     public ResponseEntity<?> crear(@RequestBody BolsilloSolicitudDTO solicitud, HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request);

@@ -10,6 +10,7 @@ import com.luisda.fin_app_back.DTO.GmailContenidoDTO;
 import com.luisda.fin_app_back.DTO.GmailMensajeDTO;
 import com.luisda.fin_app_back.DTO.GmailMovimientoAlertaDTO;
 import com.luisda.fin_app_back.DTO.GmailSuscripcionDTO;
+import com.luisda.fin_app_back.DTO.ImportacionLoteGmailDTO;
 import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
 import com.luisda.fin_app_back.DTO.SolicitudAlertasGmailDTO;
 import com.luisda.fin_app_back.Model.MFuente;
@@ -20,6 +21,8 @@ import com.luisda.fin_app_back.Repository.IGmailMensajes;
 import com.luisda.fin_app_back.Repository.IGmailSuscripciones;
 import com.luisda.fin_app_back.Services.ParserMovimientoBancolombia;
 import com.luisda.fin_app_back.Services.SMovimientoContable;
+import com.luisda.fin_app_back.Services.SClasificadorMovimiento;
+import com.luisda.fin_app_back.Services.SImportacionLoteGmail;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.google.auth.oauth2.TokenVerifier;
 import jakarta.servlet.http.HttpServletRequest;
@@ -86,7 +89,7 @@ public class CGmail {
             "efacturahomecenter@homecenter.co",
             "serviciopse@achcolombia.com.co",
             "people@pasteur.com.co",
-            "alertasynotificaciones@an.notificacionesbancolombia.com"
+            SImportacionLoteGmail.REMITENTE_OFICIAL
     );
     private static final Logger LOGGER = LoggerFactory.getLogger(CGmail.class);
 
@@ -97,6 +100,8 @@ public class CGmail {
     private final IGmailSuscripciones suscripciones;
     private final SUsuarioActivo usuarioActivo;
     private final SMovimientoContable movimientosContables;
+    private final SClasificadorMovimiento clasificadorMovimientos;
+    private final SImportacionLoteGmail importacionLote;
     private final ParserMovimientoBancolombia parserMovimiento = new ParserMovimientoBancolombia();
     private final SecureRandom random = new SecureRandom();
 
@@ -110,12 +115,15 @@ public class CGmail {
     @Value("${finapp.google.pubsub.service-account:}") private String cuentaServicioPubSub;
 
     public CGmail(IFuentes fuentes, IGmailMensajes mensajes, IGmailSuscripciones suscripciones,
-                  SUsuarioActivo usuarioActivo, SMovimientoContable movimientosContables) {
+                  SUsuarioActivo usuarioActivo, SMovimientoContable movimientosContables,
+                  SClasificadorMovimiento clasificadorMovimientos, SImportacionLoteGmail importacionLote) {
         this.fuentes = fuentes;
         this.mensajes = mensajes;
         this.suscripciones = suscripciones;
         this.usuarioActivo = usuarioActivo;
         this.movimientosContables = movimientosContables;
+        this.clasificadorMovimientos = clasificadorMovimientos;
+        this.importacionLote = importacionLote;
     }
 
     private RestClient clienteHttp() {
@@ -429,7 +437,9 @@ public class CGmail {
         String remitente = correo == null ? "" : correo.trim().toLowerCase(Locale.ROOT);
         if (!direccionCorreoValida(remitente)) return ResponseEntity.badRequest()
                 .body(Map.of("message", "La dirección del remitente no es válida."));
-        if (suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(cuentaId, remitente).isEmpty()) {
+        boolean tieneSuscripcionOficial = suscripciones.findByCuenta_IdFuenteOrderByUltimaActividadDesc(cuentaId).stream()
+                .anyMatch(suscripcion -> remitente.equalsIgnoreCase(suscripcion.getCorreoRemitente()));
+        if (!tieneSuscripcionOficial) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "No se encontró una suscripción activa para ese remitente."));
         }
@@ -470,6 +480,76 @@ public class CGmail {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("message", "No se pudieron sincronizar los mensajes de esta suscripción."));
         }
+    }
+
+    /** Inicia una importación no bloqueante de los mensajes recientes del remitente oficial. */
+    @PostMapping("/cuentas/{cuentaId}/suscripciones/importar-lote")
+    public ResponseEntity<?> importarLoteSuscripcion(@org.springframework.web.bind.annotation.PathVariable String cuentaId,
+                                                      HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
+        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("message", "No hay una sesión activa."));
+        MFuente cuenta = fuentes.findByIdFuenteAndUsuario_IdUsuario(cuentaId, usuario.getIdUsuario()).orElse(null);
+        if (cuenta == null || !"CORREO".equalsIgnoreCase(cuenta.getTipo()) || !cuenta.tieneConexionGmail()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "No se encontró esa cuenta Gmail conectada."));
+        }
+        String remitente = SImportacionLoteGmail.REMITENTE_OFICIAL;
+        if (suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(cuentaId, remitente).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "No se encontró la suscripción activa del remitente oficial."));
+        }
+        CredencialesOAuth credenciales;
+        try {
+            credenciales = resolverCredenciales();
+        } catch (IOException error) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "No se pudieron preparar las credenciales para leer los mensajes."));
+        }
+        Instant desde = Instant.now().minus(java.time.Duration.ofDays(RETENCION_CORREOS_DIAS));
+        List<ImportacionLoteGmailDTO.Mensaje> lote = mensajes
+                .findByCuenta_IdFuenteAndFechaInternaAfterOrderByFechaInternaDesc(cuentaId, desde).stream()
+                .filter(mensaje -> SImportacionLoteGmail.esRemitenteImportable(
+                        extraerDireccionRemitente(mensaje.getRemitente())))
+                .map(mensaje -> {
+                    try {
+                        return new ImportacionLoteGmailDTO.Mensaje(mensaje.getGoogleMessageId(),
+                                extraerDireccionRemitente(mensaje.getRemitente()), mensaje.getAsunto(),
+                                LocalDate.ofInstant(mensaje.getFechaInterna(), java.time.ZoneId.of("America/Bogota")),
+                                descifrar(mensaje.getContenidoCifrado(), credenciales.clientSecret()), null);
+                    } catch (GeneralSecurityException | RuntimeException error) {
+                        return new ImportacionLoteGmailDTO.Mensaje(mensaje.getGoogleMessageId(),
+                                extraerDireccionRemitente(mensaje.getRemitente()), mensaje.getAsunto(),
+                                LocalDate.ofInstant(mensaje.getFechaInterna(), java.time.ZoneId.of("America/Bogota")),
+                                "", "No se pudo descifrar el contenido del mensaje.");
+                    }
+                }).toList();
+        try {
+            ImportacionLoteGmailDTO.Inicio inicio = importacionLote.iniciar(usuario.getIdUsuario(), cuentaId, remitente, lote);
+            return ResponseEntity.accepted().body(inicio);
+        } catch (java.util.concurrent.RejectedExecutionException error) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "La cola de importación está ocupada. Inténtalo de nuevo."));
+        }
+    }
+
+    /** Devuelve progreso y resultados por mensaje de un lote propiedad del usuario activo. */
+    @GetMapping("/cuentas/{cuentaId}/suscripciones/lotes/{loteId}")
+    public ResponseEntity<?> consultarLoteSuscripcion(
+            @org.springframework.web.bind.annotation.PathVariable String cuentaId,
+            @org.springframework.web.bind.annotation.PathVariable String loteId,
+            HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
+        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("message", "No hay una sesión activa."));
+        if (fuentes.findByIdFuenteAndUsuario_IdUsuario(cuentaId, usuario.getIdUsuario()).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "No se encontró esa cuenta Gmail."));
+        }
+        return importacionLote.consultar(usuario.getIdUsuario(), cuentaId, loteId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "No se encontró el lote de importación.")));
     }
 
     @GetMapping("/movimientos/notificaciones")
@@ -593,8 +673,11 @@ public class CGmail {
                 .filter(f -> "CORREO".equalsIgnoreCase(f.getTipo()) && f.tieneConexionGmail())
                 .toList();
         for (MFuente cuenta : cuentas) {
+            if (!fuentes.existsById(cuenta.getIdFuente())) {
+                LOGGER.warn("Se omite la sincronización Gmail: la fuente {} ya no existe.", cuenta.getIdFuente());
+                continue;
+            }
             try {
-                sincronizarSuscripcionesGuardadas(cuenta);
                 String token = tokenAccesoActual(cuenta);
                 if (cuenta.getGmailHistoryId() == null || cuenta.getGmailHistoryId().isBlank()
                         || cuenta.getGmailSincronizadoEn() == null) {
@@ -610,6 +693,7 @@ public class CGmail {
                             || cuenta.getGmailWatchExpiraEn().isBefore(Instant.now().plusSeconds(
                                     TimeUnit.DAYS.toSeconds(1))))) registrarWatch(cuenta, token);
                 }
+                sincronizarSuscripcionesGuardadas(cuenta);
                 procesarMovimientosGmailPendientes(cuenta);
             } catch (CuentaGmailRequiereReconectarException error) {
                 LOGGER.warn("La cuenta Gmail {} requiere reconexión.", cuenta.getIdFuente());
@@ -706,7 +790,13 @@ public class CGmail {
                                        java.util.Set<String> mensajesProcesados)
             throws IOException, GeneralSecurityException {
         String id = resumen.path("id").asText("");
-        if (!id.isBlank() && mensajesProcesados.add(id)) guardarMensajeGmail(cuenta, token, id);
+        if (id.isBlank() || !mensajesProcesados.add(id)) return;
+        if (!fuentes.existsById(cuenta.getIdFuente())) {
+            LOGGER.warn("Se omite mensaje Gmail porque falta la fuente: id_fuente={}, google_message_id={}",
+                    cuenta.getIdFuente(), id);
+            return;
+        }
+        guardarMensajeGmail(cuenta, token, id);
     }
 
     private void recorrerMensajes(String token, String consulta, ProcesadorMensajeListado procesador)
@@ -849,6 +939,11 @@ public class CGmail {
     private void persistirMensajeGmail(MFuente cuenta, JsonNode mensaje) throws IOException, GeneralSecurityException {
         if (mensaje == null || mensaje.path("id").asText("").isBlank()) return;
         String mensajeId = mensaje.path("id").asText("");
+        if (!fuentes.existsById(cuenta.getIdFuente())) {
+            LOGGER.warn("Se omite mensaje Gmail porque falta la fuente: id_fuente={}, google_message_id={}",
+                    cuenta.getIdFuente(), mensajeId);
+            return;
+        }
         long timestamp = mensaje.path("internalDate").asLong(System.currentTimeMillis());
         Instant fecha = Instant.ofEpochMilli(timestamp);
         if (fecha.isBefore(Instant.now().minus(java.time.Duration.ofDays(RETENCION_CORREOS_DIAS)))) {
@@ -908,12 +1003,15 @@ public class CGmail {
             String origenId = (cuenta.getIdFuente() + ":" + mensaje.getGoogleMessageId());
             if (origenId.length() > 180) origenId = origenId.substring(0, 180);
             var sugerencia = movimiento.get();
+            String remitente = mensaje.getRemitente() == null || mensaje.getRemitente().isBlank()
+                    ? "Bancolombia" : mensaje.getRemitente();
+            var clasificacion = clasificadorMovimientos.clasificar(cuenta.getUsuario().getIdUsuario(), remitente,
+                    mensaje.getAsunto() + "\n" + contenido);
             var registrado = movimientosContables.crearAutomaticamenteDesdeGmail(
                     cuenta.getUsuario().getIdUsuario(), sugerencia.tipo(),
                     LocalDate.ofInstant(mensaje.getFechaInterna(), java.time.ZoneId.of("America/Bogota")),
                     sugerencia.monto(), sugerencia.categoria(), sugerencia.concepto(), origenId,
-                    mensaje.getRemitente() == null || mensaje.getRemitente().isBlank()
-                            ? "Bancolombia" : mensaje.getRemitente());
+                    remitente, clasificacion);
             if (registrado.isEmpty()) {
                 mensaje.setMovimientoAutomaticoEstado("PENDIENTE_BOLSILLO");
             } else {
@@ -1012,7 +1110,6 @@ public class CGmail {
     }
 
     private void sincronizarSuscripcionesGuardadas(MFuente cuenta) throws IOException {
-        if (!suscripciones.findByCuenta_IdFuenteOrderByUltimaActividadDesc(cuenta.getIdFuente()).isEmpty()) return;
         Instant desde = Instant.now().minus(java.time.Duration.ofDays(RETENCION_CORREOS_DIAS));
         for (MGmailMensaje mensaje : mensajes.findByCuenta_IdFuenteAndFechaInternaAfterAndListUnsubscribeIsNotNullOrderByFechaInternaDesc(
                 cuenta.getIdFuente(), desde)) {

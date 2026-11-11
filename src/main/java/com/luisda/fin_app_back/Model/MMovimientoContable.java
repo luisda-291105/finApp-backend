@@ -12,9 +12,12 @@ public class MMovimientoContable {
     @Column(length = 36, nullable = false)
     private String idMovimiento;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id_bolsillo", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_bolsillo", nullable = true)
     private MBolsillo bolsillo;
+
+    @Column(name = "id_usuario", length = 36)
+    private String idUsuario;
 
     @Column(nullable = false)
     private LocalDate fecha;
@@ -41,10 +44,16 @@ public class MMovimientoContable {
     @Column(name = "origen_nombre", length = 120)
     private String origenNombre;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_revision", length = 20)
+    private EstadoRevisionMovimiento estadoRevision;
+
     public String getIdMovimiento() { return idMovimiento; }
     public void setIdMovimiento(String idMovimiento) { this.idMovimiento = idMovimiento; }
     public MBolsillo getBolsillo() { return bolsillo; }
     public void setBolsillo(MBolsillo bolsillo) { this.bolsillo = bolsillo; }
+    public String getIdUsuario() { return idUsuario; }
+    public void setIdUsuario(String idUsuario) { this.idUsuario = idUsuario; }
     public LocalDate getFecha() { return fecha; }
     public void setFecha(LocalDate fecha) { this.fecha = fecha; }
     public BigDecimal getMonto() { return monto; }
@@ -61,4 +70,6 @@ public class MMovimientoContable {
     public void setOrigenId(String origenId) { this.origenId = origenId; }
     public String getOrigenNombre() { return origenNombre; }
     public void setOrigenNombre(String origenNombre) { this.origenNombre = origenNombre; }
+    public EstadoRevisionMovimiento getEstadoRevision() { return estadoRevision; }
+    public void setEstadoRevision(EstadoRevisionMovimiento estadoRevision) { this.estadoRevision = estadoRevision; }
 }

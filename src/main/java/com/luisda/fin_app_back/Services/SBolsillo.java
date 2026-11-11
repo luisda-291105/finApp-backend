@@ -21,7 +21,7 @@ import java.util.UUID;
 /** CRUD de bolsillos privados del usuario autenticado. */
 @Service
 public class SBolsillo {
-    private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO");
+    private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO", "POR_REVISAR");
     private final IBolsillo bolsillos;
     private final IContabilidad contabilidades;
     private final IUsuario usuarios;
@@ -36,6 +36,15 @@ public class SBolsillo {
     }
 
     public List<MBolsillo> listar(String idUsuario) {
+        return listarTodos(idUsuario).stream().filter(bolsillo -> !esPorRevisar(bolsillo)).toList();
+    }
+
+    /** Devuelve el bolsillo interno por separado, sin incluirlo en el listado normal. */
+    public java.util.Optional<MBolsillo> obtenerPorRevisar(String idUsuario) {
+        return listarTodos(idUsuario).stream().filter(SBolsillo::esPorRevisar).findFirst();
+    }
+
+    private List<MBolsillo> listarTodos(String idUsuario) {
         MContabilidad contabilidad = obtenerContabilidad(idUsuario);
         List<MBolsillo> lista = bolsillos.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc(contabilidad.getIdContabilidad());
         boolean actualizados = false;
@@ -54,12 +63,22 @@ public class SBolsillo {
                 bolsillo.setTipo(inferirTipo(bolsillo.getNombre()));
                 actualizados = true;
             }
+            if ("Por revisar".equalsIgnoreCase(bolsillo.getNombre())
+                    && "OTROS".equalsIgnoreCase(bolsillo.getTipo())) {
+                bolsillo.setTipo("POR_REVISAR");
+                actualizados = true;
+            }
         }
         return actualizados ? bolsillos.saveAll(lista) : lista;
     }
 
     public MBolsillo crear(String idUsuario, BolsilloSolicitudDTO solicitud) {
         validar(solicitud);
+        validarTipoAhorroUsuario(solicitud.tipo());
+        return persistirNuevo(idUsuario, solicitud);
+    }
+
+    private MBolsillo persistirNuevo(String idUsuario, BolsilloSolicitudDTO solicitud) {
         MContabilidad contabilidad = obtenerContabilidad(idUsuario);
         MBolsillo bolsillo = new MBolsillo();
         bolsillo.setIdBolsillo(UUID.randomUUID().toString());
@@ -73,11 +92,22 @@ public class SBolsillo {
         return bolsillos.save(bolsillo);
     }
 
+    /** Reutiliza o crea el bolsillo de sistema usado para movimientos que requieren revisión. */
+    @Transactional
+    public MBolsillo obtenerOCrearPorRevisar(String idUsuario) {
+        return obtenerPorRevisar(idUsuario).orElseGet(() -> persistirNuevo(idUsuario,
+                new BolsilloSolicitudDTO("Por revisar", true, BigDecimal.ZERO, "POR_REVISAR")));
+    }
+
     @Transactional
     public MBolsillo actualizar(String idUsuario, String idBolsillo, BolsilloSolicitudDTO solicitud) {
         validar(solicitud);
+        validarTipoAhorroUsuario(solicitud.tipo());
         MBolsillo bolsillo = propio(idUsuario, idBolsillo);
-        String tipoNuevo = solicitud.tipo() == null ? bolsillo.getTipo() : normalizarTipo(solicitud.tipo());
+        if (esPorRevisar(bolsillo)) {
+            throw new IllegalArgumentException("El bolsillo «Por revisar» es interno y no se puede editar desde esta operación.");
+        }
+        String tipoNuevo = normalizarTipo(solicitud.tipo());
         if (!tipoNuevo.equalsIgnoreCase(bolsillo.getTipo())) {
             bolsillo.setTipo(tipoNuevo);
         }
@@ -89,6 +119,9 @@ public class SBolsillo {
 
     public void eliminar(String idUsuario, String idBolsillo) {
         MBolsillo bolsillo = propio(idUsuario, idBolsillo);
+        if (esPorRevisar(bolsillo)) {
+            throw new IllegalStateException("No puedes eliminar el bolsillo interno «Por revisar».");
+        }
         if (movimientos.existsByBolsillo_IdBolsillo(bolsillo.getIdBolsillo())) {
             throw new IllegalStateException("No puedes eliminar un bolsillo que ya tiene movimientos.");
         }
@@ -144,6 +177,18 @@ public class SBolsillo {
         }
     }
 
+    private static void validarTipoAhorroUsuario(String tipo) {
+        if (tipo == null || !"AHORRO".equals(tipo.trim().toUpperCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("Los bolsillos del usuario solo pueden ser de tipo AHORRO.");
+        }
+    }
+
+    private static boolean esPorRevisar(MBolsillo bolsillo) {
+        return bolsillo != null && "Por revisar".equalsIgnoreCase(bolsillo.getNombre())
+                && bolsillo.getTipo() != null
+                && ("OTROS".equalsIgnoreCase(bolsillo.getTipo()) || "POR_REVISAR".equalsIgnoreCase(bolsillo.getTipo()));
+    }
+
     private static String normalizarTipo(String tipo) {
         if (tipo == null) return "";
         String limpio = tipo.trim().replaceAll("\\s+", " ");
@@ -153,6 +198,7 @@ public class SBolsillo {
 
     private static String inferirTipo(String nombre) {
         String limpio = nombre == null ? "" : nombre.toLowerCase(Locale.ROOT);
+        if (limpio.contains("revis")) return "POR_REVISAR";
         if (limpio.contains("ingres")) return "INGRESO";
         if (limpio.contains("ahorr")) return "AHORRO";
         return "GASTO";

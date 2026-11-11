@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
+import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
 import com.luisda.fin_app_back.Services.SMovimientoContable;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 
 @RestController
 @Tag(name = "Movimientos", description = "Registro y consulta de movimientos contables.")
@@ -27,12 +30,16 @@ public class CMovimientoContable {
     }
 
     @GetMapping
-    public ResponseEntity<?> listar(@RequestParam(required = false) String idBolsillo, @RequestParam(defaultValue = "TODOS") String tipo,
+    public ResponseEntity<?> listar(@RequestParam(required = false) String idBolsillo,
+                                    @RequestParam(defaultValue = "TODOS") String tipo,
+                                    @RequestParam(required = false) String estadoRevision,
                                     HttpServletRequest request) {
         var usuario = usuarioActivo.obtenerUsuario(request);
         if (usuario.isEmpty()) return noAutorizado();
         try {
-            return ResponseEntity.ok(movimientos.listar(usuario.get().getIdUsuario(), idBolsillo, tipo));
+            EstadoRevisionMovimiento estado = estadoRevision == null || estadoRevision.isBlank()
+                    ? null : EstadoRevisionMovimiento.valueOf(estadoRevision.trim().toUpperCase(java.util.Locale.ROOT));
+            return ResponseEntity.ok(movimientos.listar(usuario.get().getIdUsuario(), idBolsillo, tipo, estado));
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), "tipo"));
         } catch (NoSuchElementException error) {
@@ -47,6 +54,20 @@ public class CMovimientoContable {
         var usuario = usuarioActivo.obtenerUsuario(request);
         if (usuario.isEmpty()) return noAutorizado();
         return ResponseEntity.ok(movimientos.resumir(usuario.get().getIdUsuario()));
+    }
+
+    @GetMapping("/resumen-global")
+    public ResponseEntity<?> resumenGlobal(@RequestParam(required = false) String mes,
+                                           HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        try {
+            YearMonth periodo = mes == null || mes.isBlank() ? YearMonth.now() : YearMonth.parse(mes.trim());
+            return ResponseEntity.ok(movimientos.resumenGlobal(usuario.get().getIdUsuario(), periodo));
+        } catch (DateTimeParseException | IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(
+                    "El mes debe tener formato YYYY-MM.", "mes"));
+        }
     }
 
     @GetMapping("/recurrentes")
@@ -76,6 +97,36 @@ public class CMovimientoContable {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
         } catch (IllegalStateException error) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(RespuestaModalDTO.error(error.getMessage(), null));
+        }
+    }
+
+    @PostMapping("/gmail/por-revisar")
+    public ResponseEntity<?> guardarCorreoPorRevisar(@RequestBody MovimientoContableSolicitudDTO solicitud,
+                                                     HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(movimientos.crearGmailPorRevisar(usuario.get().getIdUsuario(), solicitud));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(RespuestaModalDTO.error(error.getMessage(), null));
+        }
+    }
+
+    @PostMapping("/{idMovimiento}/confirmar-global")
+    public ResponseEntity<?> confirmarGmailGlobal(@PathVariable String idMovimiento, HttpServletRequest request) {
+        var usuario = usuarioActivo.obtenerUsuario(request);
+        if (usuario.isEmpty()) return noAutorizado();
+        try {
+            return ResponseEntity.ok(movimientos.confirmarGmailGlobal(usuario.get().getIdUsuario(), idMovimiento));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(RespuestaModalDTO.error(error.getMessage(), null));
         }
     }
 

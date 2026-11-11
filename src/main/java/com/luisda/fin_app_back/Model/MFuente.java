@@ -1,8 +1,12 @@
 package com.luisda.fin_app_back.Model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @uso               Representa una fuente externa asociada a un usuario
@@ -38,6 +42,38 @@ public class MFuente {
     @JoinColumn(name = "idUsuario", nullable = false)
     //@JsonManagedReference
     private MUsuario usuario;
+
+    @JsonIgnore
+    @Column(name = "access_token_cifrado", columnDefinition = "TEXT")
+    private String accessTokenCifrado;
+
+    @JsonIgnore
+    @Column(name = "refresh_token_cifrado", columnDefinition = "TEXT")
+    private String refreshTokenCifrado;
+
+    @JsonIgnore
+    @Column(name = "expira_en")
+    private Instant expiraEn;
+
+    @JsonIgnore
+    @Column(name = "gmail_history_id", length = 80)
+    private String gmailHistoryId;
+
+    @JsonIgnore
+    @Column(name = "gmail_watch_expira_en")
+    private Instant gmailWatchExpiraEn;
+
+    @JsonIgnore
+    @Column(name = "gmail_sincronizado_en")
+    private Instant gmailSincronizadoEn;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "cuenta", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<MGmailMensaje> mensajesGmail = new ArrayList<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "cuenta", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<MGmailSuscripcion> suscripcionesGmail = new ArrayList<>();
 
 
     public MFuente(String idFuente, String tipo, String contenido, boolean estado, LocalDate fechaCreacion) {
@@ -94,4 +130,33 @@ public class MFuente {
     public MUsuario getUsuario() { return usuario; }
 
     public void setUsuario(MUsuario usuario) { this.usuario = usuario; }
+
+    @JsonIgnore
+    public boolean tieneConexionGmail() {
+        boolean renovable = refreshTokenCifrado != null && !refreshTokenCifrado.isBlank();
+        boolean accesoVigente = accessTokenCifrado != null && !accessTokenCifrado.isBlank()
+                && expiraEn != null && expiraEn.isAfter(Instant.now());
+        return renovable || accesoVigente;
+    }
+
+    public String getAccessTokenCifrado() { return accessTokenCifrado; }
+    public void setAccessTokenCifrado(String accessTokenCifrado) { this.accessTokenCifrado = accessTokenCifrado; }
+    public String getRefreshTokenCifrado() { return refreshTokenCifrado; }
+    public void setRefreshTokenCifrado(String refreshTokenCifrado) { this.refreshTokenCifrado = refreshTokenCifrado; }
+    public Instant getExpiraEn() { return expiraEn; }
+    public void setExpiraEn(Instant expiraEn) { this.expiraEn = expiraEn; }
+    public String getGmailHistoryId() { return gmailHistoryId; }
+    public void setGmailHistoryId(String gmailHistoryId) { this.gmailHistoryId = gmailHistoryId; }
+    public Instant getGmailWatchExpiraEn() { return gmailWatchExpiraEn; }
+    public void setGmailWatchExpiraEn(Instant gmailWatchExpiraEn) { this.gmailWatchExpiraEn = gmailWatchExpiraEn; }
+    public Instant getGmailSincronizadoEn() { return gmailSincronizadoEn; }
+    public void setGmailSincronizadoEn(Instant gmailSincronizadoEn) { this.gmailSincronizadoEn = gmailSincronizadoEn; }
+    public void desconectarGmail() {
+        accessTokenCifrado = null;
+        refreshTokenCifrado = null;
+        expiraEn = null;
+        gmailHistoryId = null;
+        gmailWatchExpiraEn = null;
+        gmailSincronizadoEn = null;
+    }
 }

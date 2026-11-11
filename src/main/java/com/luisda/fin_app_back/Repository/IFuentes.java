@@ -4,7 +4,8 @@ import com.luisda.fin_app_back.Model.MFuente;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Pageable;
+
 
 import java.util.List;
 
@@ -17,10 +18,17 @@ import java.util.List;
  * @dependencias      MFuente, Spring Data JPA
  * @usadoPor          Capas de servicio consumidoras
  */
-@Repository
+
 public interface IFuentes extends JpaRepository<MFuente , String> {
 
     List<MFuente> findByUsuario_IdUsuario(String idUsuario);
+    @Query("SELECT f FROM MFuente f WHERE f.usuario.idUsuario = :idUsuario AND " +
+            "(LOWER(f.contenido) LIKE LOWER(CONCAT('%', :termino, '%')) OR LOWER(f.tipo) LIKE LOWER(CONCAT('%', :termino, '%'))) " +
+            "ORDER BY f.contenido ASC")
+    List<MFuente> buscarPropias(@Param("idUsuario") String idUsuario, @Param("termino") String termino, Pageable pageable);
+    List<MFuente> findByUsuario_IdUsuarioAndTipoIgnoreCaseAndContenidoIgnoreCase(String idUsuario, String tipo, String contenido);
+    java.util.Optional<MFuente> findByIdFuenteAndUsuario_IdUsuario(String idFuente, String idUsuario);
+    List<MFuente> findByTipoIgnoreCaseAndContenidoIgnoreCase(String tipo, String contenido);
 
     @Query("SELECT COUNT(f) FROM MFuente f WHERE f.usuario.idUsuario = :idUsuario AND UPPER(f.tipo) = UPPER(:tipo) AND LOWER(TRIM(f.contenido)) = LOWER(TRIM(:contenido))")
     long contarDuplicadas(@Param("idUsuario") String idUsuario, @Param("tipo") String tipo, @Param("contenido") String contenido);

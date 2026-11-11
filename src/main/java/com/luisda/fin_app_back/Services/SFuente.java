@@ -154,6 +154,10 @@ public class SFuente {
                             ? "Este correo ya está registrado en tu cuenta"
                             : "Esta fuente ya está registrada en tu cuenta");
                 }
+                if (nuevaFuente.tieneConexionGmail()
+                        && (!"CORREO".equalsIgnoreCase(tipo) || !nuevaFuente.getContenido().equalsIgnoreCase(contenido))) {
+                    throw new IllegalArgumentException("Desconecta Gmail antes de cambiar la dirección vinculada.");
+                }
                 nuevaFuente.setIdFuente(idFuente);
                 nuevaFuente.setTipo(tipo);
                 nuevaFuente.setContenido(contenido);

@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.luisda.fin_app_back.Model.MGrupo;
 
 import com.luisda.fin_app_back.Services.SGrupo;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,8 +23,12 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Grupos", description = "Creación y administración de grupos.")
 @RequestMapping("/grupo")
 public class CGrupo {
-    @Autowired
-    SGrupo SGrupo;
+
+    private final SGrupo SGrupo;
+
+    public CGrupo(SGrupo SGrupo) {
+        this.SGrupo = SGrupo;
+    }
 
     /** crear un registro  */
     @PostMapping

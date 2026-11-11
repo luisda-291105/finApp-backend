@@ -2,12 +2,16 @@ package com.luisda.fin_app_back;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @SpringBootApplication
+@EnableScheduling
 public class FinAppBackApplication {
 
 	public static void main(String[] args) {
@@ -16,16 +20,27 @@ public class FinAppBackApplication {
 	}
 
 	private static void cargarDotEnv() {
-		List<Path> rutas = List.of(
-				Path.of(".env"),
-				Path.of("../.env"),
-				Path.of("finApp-backend/.env"),
-				Path.of(System.getProperty("user.dir", "."), ".env")
-		);
+		Path directorioTrabajo = Path.of(System.getProperty("user.dir", ".")).toAbsolutePath().normalize();
+		Set<Path> rutas = new LinkedHashSet<>();
+		rutas.add(directorioTrabajo.resolve("finApp-backend").resolve(".env"));
+		try {
+			Path clases = Path.of(FinAppBackApplication.class.getProtectionDomain()
+					.getCodeSource().getLocation().toURI()).toAbsolutePath().normalize();
+			if (!Files.isDirectory(clases)) clases = clases.getParent();
+			for (int nivel = 0; nivel < 3 && clases != null; nivel++, clases = clases.getParent()) {
+				rutas.add(clases.resolve(".env"));
+			}
+		} catch (Exception e) {
+			System.err.println("[FinApp] No se pudo resolver la ubicación del backend para cargar .env: " + e.getMessage());
+		}
+		rutas.add(directorioTrabajo.resolve(".env"));
+		if (directorioTrabajo.getParent() != null) {
+			rutas.add(directorioTrabajo.getParent().resolve(".env"));
+		}
 		for (Path ruta : rutas) {
 			try {
 				if (Files.exists(ruta) && Files.isRegularFile(ruta)) {
-					for (String linea : Files.readAllLines(ruta)) {
+					for (String linea : Files.readAllLines(ruta, StandardCharsets.UTF_8)) {
 						String limpia = linea.trim();
 						if (limpia.isEmpty() || limpia.startsWith("#")) continue;
 						int idx = limpia.indexOf('=');
@@ -36,8 +51,18 @@ public class FinAppBackApplication {
 								(valor.startsWith("'") && valor.endsWith("'"))) {
 								valor = valor.substring(1, valor.length() - 1);
 							}
-							if (System.getProperty(clave) == null && System.getenv(clave) == null) {
+							String valorSistema = System.getProperty(clave);
+							String valorEntorno = System.getenv(clave);
+							boolean usarArchivo = (valorSistema == null || valorSistema.isBlank())
+									&& (valorEntorno == null || valorEntorno.isBlank());
+							if (usarArchivo) {
 								System.setProperty(clave, valor);
+								if ("FINAPP_JWT_SECRET".equals(clave)) {
+									String clavePropiedad = System.getProperty("finapp.jwt.secret");
+									if (clavePropiedad == null || clavePropiedad.isBlank()) {
+										System.setProperty("finapp.jwt.secret", valor);
+									}
+								}
 							}
 						}
 					}

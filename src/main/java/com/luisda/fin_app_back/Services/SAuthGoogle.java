@@ -26,7 +26,7 @@ import java.nio.file.Path;
 import java.util.Base64;
 import java.util.UUID;
 
-/** OAuth authorization-code exchange and FinApp session creation for Google sign-in. */
+/** OAuth authorization-code exchange for Google sign-in. */
 @Service
 public class SAuthGoogle {
     private static final String URL_TOKEN_GOOGLE = "https://oauth2.googleapis.com/token";
@@ -41,7 +41,7 @@ public class SAuthGoogle {
     @Value("${finapp.google.client-id:${GOOGLE_CLIENT_ID:}}") private String clientId;
     @Value("${finapp.google.client-secret:${GOOGLE_CLIENT_SECRET:}}") private String clientSecret;
     @Value("${finapp.google.auth-redirect-uri:${GOOGLE_AUTH_REDIRECT_URI:http://localhost:8080/api/auth/google/callback}}") private String redirectUri;
-    @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:../client_secret_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}") private String archivoCredenciales;
+    @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:client_secret_2_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}") private String archivoCredenciales;
 
     public SAuthGoogle(IUsuario usuarios, SVerificadorContrasena verificador) {
         this.usuarios = usuarios;
@@ -71,7 +71,7 @@ public class SAuthGoogle {
 
     public MUsuario autenticar(String code, String state, HttpServletRequest request) {
         if (code == null || code.isBlank()) throw new IllegalArgumentException("Google no devolvió un código de autorización.");
-        HttpSession sesion = consumirEstadoValido(state, request);
+        consumirEstadoValido(state, request);
         GoogleOAuthTokenDTO tokens;
         try {
             CredencialesOAuth credenciales = resolverCredenciales();
@@ -109,10 +109,6 @@ public class SAuthGoogle {
         }
 
         MUsuario usuario = usuarios.findByGoogleSubject(subject).orElseGet(() -> crearUsuarioGoogle(subject, correo, nombre));
-        request.changeSessionId();
-        sesion = request.getSession(true);
-        sesion.removeAttribute(ATRIBUTO_STATE);
-        sesion.setAttribute(SUsuarioActivo.CLAVE_SESION, usuario.getIdUsuario());
         return usuario;
     }
 
@@ -130,15 +126,14 @@ public class SAuthGoogle {
         return usuarios.save(usuario);
     }
 
-    private HttpSession consumirEstadoValido(String state, HttpServletRequest request) {
+    private void consumirEstadoValido(String state, HttpServletRequest request) {
         HttpSession sesion = request.getSession(false);
         Object esperado = sesion == null ? null : sesion.getAttribute(ATRIBUTO_STATE);
         if (!(esperado instanceof String valor) || state == null || !MessageDigest.isEqual(
                 valor.getBytes(StandardCharsets.UTF_8), state.getBytes(StandardCharsets.UTF_8))) {
             throw new IllegalArgumentException("La verificación de seguridad de Google expiró o no coincide. Intenta de nuevo.");
         }
-        sesion.removeAttribute(ATRIBUTO_STATE);
-        return sesion;
+        sesion.invalidate();
     }
 
     private static String requerido(String valor, String mensaje) {
@@ -154,8 +149,8 @@ public class SAuthGoogle {
         try {
             Path ruta = Path.of(archivoCredenciales);
             if (!Files.isRegularFile(ruta)) {
-                Path desdeRaiz = Path.of("client_secret_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json");
-                if (Files.isRegularFile(desdeRaiz)) ruta = desdeRaiz;
+                Path desdeCarpetaBackend = Path.of("finApp-backend").resolve(ruta.getFileName());
+                if (Files.isRegularFile(desdeCarpetaBackend)) ruta = desdeCarpetaBackend;
             }
             JsonNode web;
             try (var entrada = Files.newInputStream(ruta)) {

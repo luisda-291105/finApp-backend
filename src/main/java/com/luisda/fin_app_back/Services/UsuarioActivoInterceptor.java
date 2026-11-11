@@ -7,14 +7,21 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 @Component
 public class UsuarioActivoInterceptor implements HandlerInterceptor {
+    private final SUsuarioActivo usuarioActivo;
+
+    public UsuarioActivoInterceptor(SUsuarioActivo usuarioActivo) {
+        this.usuarioActivo = usuarioActivo;
+    }
+
     @Override public boolean preHandle(HttpServletRequest req, HttpServletResponse res, Object handler) throws Exception {
         String method = req.getMethod();
         if (!(method.equals("POST") || method.equals("PUT") || method.equals("PATCH") || method.equals("DELETE"))) return true;
         String path = req.getRequestURI();
         if (path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
                 || path.startsWith("/api/auth/google") || path.equals("/api/gmail/callback")
+                || path.equals("/api/gmail/webhook/pubsub")
                 || path.startsWith("/asistente")) return true;
-        if (req.getSession(false) != null && req.getSession(false).getAttribute(SUsuarioActivo.CLAVE_SESION) != null) return true;
+        if (usuarioActivo.obtenerIdUsuario(req).isPresent()) return true;
         res.setStatus(401); res.setContentType("application/json;charset=UTF-8");
         res.getWriter().write("{\"tipo\":\"error\",\"mensaje\":\"Inicia sesión para continuar.\",\"campo\":null,\"datos\":null}");
         return false;

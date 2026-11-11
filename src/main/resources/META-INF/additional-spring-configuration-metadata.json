@@ -1,0 +1,87 @@
+{"properties": [
+  {
+    "name": "finapp.jwt.secret",
+    "type": "java.lang.String",
+    "description": "Clave Base64 de al menos 256 bits para firmar los JWT de FinApp."
+  },
+  {
+    "name": "finapp.jwt.expiration-seconds",
+    "type": "java.lang.Long",
+    "description": "Duración de los JWT de FinApp en segundos."
+  },
+  {
+    "name": "finapp.jwt.cookie-secure",
+    "type": "java.lang.Boolean",
+    "description": "Indica si la cookie JWT requiere HTTPS."
+  },
+  {
+    "name": "finapp.chat.nvidia.model",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.nvidia.model'"
+  },
+  {
+    "name": "finapp.chat.nvidia.api-key",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.nvidia.api-key'"
+  },
+  {
+    "name": "finapp.chat.nvidia.url",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.nvidia.url'"
+  },
+  {
+    "name": "finapp.chat.tavily.api-key",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.tavily.api-key'"
+  },
+  {
+    "name": "finapp.chat.tavily.url",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.chat.tavily.url'"
+  },
+  {
+    "name": "finapp.cors.allowed-origins",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.cors.allowed-origins'"
+  },
+  {
+    "name": "finapp.google.client-id",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.client-id'"
+  },
+  {
+    "name": "finapp.google.client-secret",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.client-secret'"
+  },
+  {
+    "name": "finapp.google.auth-redirect-uri",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.auth-redirect-uri'"
+  },
+  {
+    "name": "finapp.web.base-url",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.web.base-url'"
+  },
+  {
+    "name": "finapp.google.credentials-file",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.credentials-file'"
+  },
+  {
+    "name": "finapp.google.pubsub.topic",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.pubsub.topic'"
+  },
+  {
+    "name": "finapp.google.pubsub.audience",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.pubsub.audience'"
+  },
+  {
+    "name": "finapp.google.pubsub.service-account",
+    "type": "java.lang.String",
+    "description": "A description for 'finapp.google.pubsub.service-account'"
+  }
+]}

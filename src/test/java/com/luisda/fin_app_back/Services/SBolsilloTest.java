@@ -3,6 +3,7 @@ package com.luisda.fin_app_back.Services;
 import com.luisda.fin_app_back.DTO.BolsilloSolicitudDTO;
 import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MContabilidad;
+import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IContabilidad;
@@ -113,6 +114,41 @@ class SBolsilloTest {
         assertEquals("POR_REVISAR", resultado.getTipo());
         verify(repositorio).saveAll(any());
         verify(repositorio, never()).save(any(MBolsillo.class));
+    }
+
+    @Test
+    void listarAdoptaUnHomonimoDeTipoDistintoSinMoverSusMovimientos() {
+        MBolsillo legado = bolsillo("fijo-legado", "Ingresos", "AHORRO");
+        when(repositorio.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc("contabilidad-1"))
+                .thenReturn(List.of(legado));
+
+        List<MBolsillo> listado = servicio.listar(USUARIO);
+
+        assertEquals(2, listado.size());
+        assertEquals("fijo-legado", listado.get(0).getIdBolsillo());
+        assertEquals("INGRESO", listado.get(0).getTipo());
+        verify(repositorio).save(legado);
+        verify(repositorio, never()).delete(any(MBolsillo.class));
+        verify(movimientos, never()).save(any(MMovimientoContable.class));
+    }
+
+    @Test
+    void listarConsolidaUnDuplicadoHomonimoEnElCanonicoYLoElimina() {
+        MBolsillo canonico = bolsillo("fijo-can", "Gastos", "GASTO");
+        MBolsillo duplicado = bolsillo("fijo-dup", "Gastos", "AHORRO");
+        MMovimientoContable movimiento = new MMovimientoContable();
+        when(repositorio.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc("contabilidad-1"))
+                .thenReturn(List.of(duplicado, canonico));
+        when(movimientos.findByBolsillo_IdBolsilloOrderByFechaDesc("fijo-dup")).thenReturn(List.of(movimiento));
+
+        List<MBolsillo> listado = servicio.listar(USUARIO);
+
+        assertEquals(2, listado.size());
+        assertTrue(listado.contains(canonico));
+        verify(movimientos).save(movimiento);
+        assertEquals(canonico, movimiento.getBolsillo());
+        verify(repositorio).delete(duplicado);
+        verify(repositorio, never()).delete(canonico);
     }
 
     @Test

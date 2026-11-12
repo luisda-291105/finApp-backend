@@ -3,6 +3,7 @@ package com.luisda.fin_app_back.Services;
 import com.luisda.fin_app_back.DTO.BolsilloSolicitudDTO;
 import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MContabilidad;
+import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Repository.IContabilidad;
 import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
@@ -45,17 +46,12 @@ public class SBolsillo {
                 listarTodos(idUsuario).stream().filter(bolsillo -> !esPorRevisar(bolsillo)).toList());
     }
 
-    /** Garantiza que los bolsillos fijos «Ingresos» y «Gastos» existan y estén activos; los lista primero. */
+    /** Garantiza que los bolsillos fijos «Ingresos» y «Gastos» existan, consoliden duplicados y estén activos; los lista primero. */
     private List<MBolsillo> asegurarBolsillosFijos(String idUsuario, List<MBolsillo> lista) {
         List<MBolsillo> resultado = new ArrayList<>(lista);
         List<MBolsillo> fijos = new ArrayList<>();
         for (String[] definicion : new String[][] {{NOMBRE_FIJO_INGRESO, "INGRESO"}, {NOMBRE_FIJO_GASTO, "GASTO"}}) {
-            MBolsillo fijo = resultado.stream()
-                    .filter(bolsillo -> definicion[0].equalsIgnoreCase(bolsillo.getNombre())
-                            && definicion[1].equalsIgnoreCase(bolsillo.getTipo()))
-                    .findFirst()
-                    .orElseGet(() -> persistirNuevo(idUsuario,
-                            new BolsilloSolicitudDTO(definicion[0], true, BigDecimal.ZERO, definicion[1])));
+            MBolsillo fijo = resolverBolsilloFijo(idUsuario, resultado, definicion[0], definicion[1]);
             if (!resultado.contains(fijo)) resultado.add(fijo);
             if (!fijo.isEstado()) {
                 fijo.setEstado(true);
@@ -66,6 +62,41 @@ public class SBolsillo {
         resultado.removeAll(fijos);
         fijos.addAll(resultado);
         return fijos;
+    }
+
+    /**
+     * Resuelve el bolsillo fijo canónico para un nombre y tipo: reutiliza el existente del tipo correcto,
+     * adopta uno del mismo nombre con otro tipo (normalizando su tipo) o crea uno nuevo. Los duplicados
+     * del mismo nombre se consolidan: sus movimientos pasan al canónico y el duplicado se elimina.
+     */
+    private MBolsillo resolverBolsilloFijo(String idUsuario, List<MBolsillo> lista, String nombre, String tipo) {
+        List<MBolsillo> homonimos = lista.stream()
+                .filter(bolsillo -> nombre.equalsIgnoreCase(bolsillo.getNombre()))
+                .toList();
+        MBolsillo canonico = homonimos.stream()
+                .filter(bolsillo -> tipo.equalsIgnoreCase(bolsillo.getTipo()))
+                .findFirst()
+                .orElseGet(() -> {
+                    if (!homonimos.isEmpty()) {
+                        // El usuario creó antes un bolsillo con ese nombre pero tipo distinto (p. ej. AHORRO): adóptalo.
+                        MBolsillo adoptado = homonimos.get(0);
+                        adoptado.setTipo(tipo);
+                        return bolsillos.save(adoptado);
+                    }
+                    return persistirNuevo(idUsuario, new BolsilloSolicitudDTO(nombre, true, BigDecimal.ZERO, tipo));
+                });
+        for (MBolsillo duplicado : homonimos) {
+            if (duplicado == canonico || duplicado.getIdBolsillo().equals(canonico.getIdBolsillo())) continue;
+            List<MMovimientoContable> movimientosDuplicado =
+                    movimientos.findByBolsillo_IdBolsilloOrderByFechaDesc(duplicado.getIdBolsillo());
+            for (MMovimientoContable movimiento : movimientosDuplicado) {
+                movimiento.setBolsillo(canonico);
+                movimientos.save(movimiento);
+            }
+            bolsillos.delete(duplicado);
+            lista.remove(duplicado);
+        }
+        return canonico;
     }
 
     /** Devuelve el bolsillo interno por separado, sin incluirlo en el listado normal. */

@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
@@ -22,6 +23,9 @@ import java.util.UUID;
 @Service
 public class SBolsillo {
     private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO", "POR_REVISAR");
+    /** Nombres deterministas de los bolsillos fijos de ingreso y gasto que siempre existen. */
+    static final String NOMBRE_FIJO_INGRESO = "Ingresos";
+    static final String NOMBRE_FIJO_GASTO = "Gastos";
     private final IBolsillo bolsillos;
     private final IContabilidad contabilidades;
     private final IUsuario usuarios;
@@ -35,8 +39,33 @@ public class SBolsillo {
         this.movimientos = movimientos;
     }
 
+    @Transactional
     public List<MBolsillo> listar(String idUsuario) {
-        return listarTodos(idUsuario).stream().filter(bolsillo -> !esPorRevisar(bolsillo)).toList();
+        return asegurarBolsillosFijos(idUsuario,
+                listarTodos(idUsuario).stream().filter(bolsillo -> !esPorRevisar(bolsillo)).toList());
+    }
+
+    /** Garantiza que los bolsillos fijos «Ingresos» y «Gastos» existan y estén activos; los lista primero. */
+    private List<MBolsillo> asegurarBolsillosFijos(String idUsuario, List<MBolsillo> lista) {
+        List<MBolsillo> resultado = new ArrayList<>(lista);
+        List<MBolsillo> fijos = new ArrayList<>();
+        for (String[] definicion : new String[][] {{NOMBRE_FIJO_INGRESO, "INGRESO"}, {NOMBRE_FIJO_GASTO, "GASTO"}}) {
+            MBolsillo fijo = resultado.stream()
+                    .filter(bolsillo -> definicion[0].equalsIgnoreCase(bolsillo.getNombre())
+                            && definicion[1].equalsIgnoreCase(bolsillo.getTipo()))
+                    .findFirst()
+                    .orElseGet(() -> persistirNuevo(idUsuario,
+                            new BolsilloSolicitudDTO(definicion[0], true, BigDecimal.ZERO, definicion[1])));
+            if (!resultado.contains(fijo)) resultado.add(fijo);
+            if (!fijo.isEstado()) {
+                fijo.setEstado(true);
+                bolsillos.save(fijo);
+            }
+            fijos.add(fijo);
+        }
+        resultado.removeAll(fijos);
+        fijos.addAll(resultado);
+        return fijos;
     }
 
     /** Devuelve el bolsillo interno por separado, sin incluirlo en el listado normal. */
@@ -107,6 +136,9 @@ public class SBolsillo {
         if (esPorRevisar(bolsillo)) {
             throw new IllegalArgumentException("El bolsillo «Por revisar» es interno y no se puede editar desde esta operación.");
         }
+        if (esFijo(bolsillo)) {
+            throw new IllegalArgumentException("Los bolsillos fijos «Ingresos» y «Gastos» no se pueden editar.");
+        }
         String tipoNuevo = normalizarTipo(solicitud.tipo());
         if (!tipoNuevo.equalsIgnoreCase(bolsillo.getTipo())) {
             bolsillo.setTipo(tipoNuevo);
@@ -121,6 +153,9 @@ public class SBolsillo {
         MBolsillo bolsillo = propio(idUsuario, idBolsillo);
         if (esPorRevisar(bolsillo)) {
             throw new IllegalStateException("No puedes eliminar el bolsillo interno «Por revisar».");
+        }
+        if (esFijo(bolsillo)) {
+            throw new IllegalStateException("No puedes eliminar los bolsillos fijos «Ingresos» y «Gastos».");
         }
         if (movimientos.existsByBolsillo_IdBolsillo(bolsillo.getIdBolsillo())) {
             throw new IllegalStateException("No puedes eliminar un bolsillo que ya tiene movimientos.");
@@ -187,6 +222,15 @@ public class SBolsillo {
         return bolsillo != null && "Por revisar".equalsIgnoreCase(bolsillo.getNombre())
                 && bolsillo.getTipo() != null
                 && ("OTROS".equalsIgnoreCase(bolsillo.getTipo()) || "POR_REVISAR".equalsIgnoreCase(bolsillo.getTipo()));
+    }
+
+    /** Regla compartida con el frontend: bolsillo fijo por nombre y tipo («Ingresos»/INGRESO, «Gastos»/GASTO). */
+    static boolean esFijo(MBolsillo bolsillo) {
+        if (bolsillo == null) return false;
+        String nombre = bolsillo.getNombre() == null ? "" : bolsillo.getNombre().trim();
+        String tipo = bolsillo.getTipo() == null ? "" : bolsillo.getTipo().trim().toUpperCase(Locale.ROOT);
+        return (NOMBRE_FIJO_INGRESO.equalsIgnoreCase(nombre) && "INGRESO".equals(tipo))
+                || (NOMBRE_FIJO_GASTO.equalsIgnoreCase(nombre) && "GASTO".equals(tipo));
     }
 
     private static String normalizarTipo(String tipo) {

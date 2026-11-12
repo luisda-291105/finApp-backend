@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -85,16 +86,19 @@ class SBolsilloTest {
     void bolsilloPorRevisarSeExcluyeDelListadoNormalYSeConsultaAparte() {
         MBolsillo ahorro = bolsillo("ahorro-1", "Emergencias", "AHORRO");
         MBolsillo porRevisar = bolsillo("revisar-1", "Por revisar", "OTROS");
+        MBolsillo ingresos = bolsillo("fijo-ingreso", "Ingresos", "INGRESO");
+        MBolsillo gastos = bolsillo("fijo-gasto", "Gastos", "GASTO");
         when(repositorio.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc("contabilidad-1"))
-                .thenReturn(List.of(porRevisar, ahorro));
+                .thenReturn(List.of(porRevisar, ingresos, gastos, ahorro));
 
         List<MBolsillo> listado = servicio.listar(USUARIO);
         Optional<MBolsillo> interno = servicio.obtenerPorRevisar(USUARIO);
 
-        assertEquals(List.of(ahorro), listado);
+        assertEquals(List.of(ingresos, gastos, ahorro), listado);
         assertTrue(interno.isPresent());
         assertEquals("revisar-1", interno.orElseThrow().getIdBolsillo());
         assertEquals("POR_REVISAR", interno.orElseThrow().getTipo());
+        verify(repositorio, never()).save(any(MBolsillo.class));
     }
 
     @Test
@@ -112,6 +116,49 @@ class SBolsilloTest {
     }
 
     @Test
+    void listarCreaLosBolsillosFijosCuandoNoExistenYLosListaPrimero() {
+        when(repositorio.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc("contabilidad-1"))
+                .thenReturn(List.of());
+
+        List<MBolsillo> listado = servicio.listar(USUARIO);
+
+        assertEquals(2, listado.size());
+        assertEquals("Ingresos", listado.get(0).getNombre());
+        assertEquals("INGRESO", listado.get(0).getTipo());
+        assertTrue(listado.get(0).isEstado());
+        assertEquals("Gastos", listado.get(1).getNombre());
+        assertEquals("GASTO", listado.get(1).getTipo());
+        verify(repositorio, times(2)).save(any(MBolsillo.class));
+    }
+
+    @Test
+    void listarReactivaUnBolsilloFijoInactivo() {
+        MBolsillo ingresos = bolsillo("fijo-ingreso", "Ingresos", "INGRESO");
+        ingresos.setEstado(false);
+        when(repositorio.findByContabilidad_IdContabilidadOrderByFechaCreacionDesc("contabilidad-1"))
+                .thenReturn(List.of(ingresos));
+
+        List<MBolsillo> listado = servicio.listar(USUARIO);
+
+        assertEquals("Ingresos", listado.get(0).getNombre());
+        assertTrue(listado.get(0).isEstado());
+        assertEquals("Gastos", listado.get(1).getNombre());
+        verify(repositorio, times(2)).save(any(MBolsillo.class));
+    }
+
+    @Test
+    void actualizarRechazaUnBolsilloFijo() {
+        when(repositorio.findByIdBolsilloAndIdUsuario("fijo-gasto", USUARIO))
+                .thenReturn(Optional.of(bolsillo("fijo-gasto", "Gastos", "GASTO")));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> servicio.actualizar(USUARIO, "fijo-gasto", solicitud("Gastos", "AHORRO")));
+
+        assertTrue(error.getMessage().contains("no se pueden editar"));
+        verify(repositorio, never()).save(any(MBolsillo.class));
+    }
+
+    @Test
     void eliminarRechazaBolsilloInternoPorRevisarAunqueEsteVacio() {
         MBolsillo porRevisar = bolsillo("revisar-1", "Por revisar", "OTROS");
         when(repositorio.findByIdBolsilloAndIdUsuario("revisar-1", USUARIO)).thenReturn(Optional.of(porRevisar));
@@ -123,6 +170,19 @@ class SBolsilloTest {
         assertTrue(error.getMessage().contains("bolsillo interno «Por revisar»"));
         verify(repositorio, never()).delete(any(MBolsillo.class));
         verify(movimientos, never()).existsByBolsillo_IdBolsillo("revisar-1");
+    }
+
+    @Test
+    void eliminarRechazaUnBolsilloFijo() {
+        when(repositorio.findByIdBolsilloAndIdUsuario("fijo-ingreso", USUARIO))
+                .thenReturn(Optional.of(bolsillo("fijo-ingreso", "Ingresos", "INGRESO")));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> servicio.eliminar(USUARIO, "fijo-ingreso"));
+
+        assertTrue(error.getMessage().contains("No puedes eliminar los bolsillos fijos"));
+        verify(repositorio, never()).delete(any(MBolsillo.class));
+        verify(movimientos, never()).existsByBolsillo_IdBolsillo("fijo-ingreso");
     }
 
     private static BolsilloSolicitudDTO solicitud(String nombre, String tipo) {

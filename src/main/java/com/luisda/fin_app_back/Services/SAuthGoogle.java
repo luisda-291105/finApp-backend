@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.luisda.fin_app_back.DTO.GoogleCompletarRegistroDTO;
 import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
 import com.luisda.fin_app_back.DTO.GoogleUserInfoDTO;
 import com.luisda.fin_app_back.Model.MUsuario;
@@ -16,22 +17,35 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.io.IOException;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDate;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Base64;
-import java.util.UUID;
+import java.util.Optional;
 
-/** OAuth authorization-code exchange for Google sign-in. */
+/** OAuth authorization-code exchange for Google sign-in and sign-up with credential completion. */
 @Service
 public class SAuthGoogle {
     private static final String URL_TOKEN_GOOGLE = "https://oauth2.googleapis.com/token";
     private static final String URL_PERFIL_GOOGLE = "https://openidconnect.googleapis.com/v1/userinfo";
     private static final String ATRIBUTO_STATE = "googleLoginOAuthState";
+    private static final String ATRIBUTO_MODO = "googleOAuthModo";
+    private static final String ATRIBUTO_REGISTRO_PENDIENTE = "googleRegistroPendiente";
+
+    public record RegistroGooglePendiente(String googleSubject, String correo, String nombre) implements Serializable {}
+
+    public sealed interface ResultadoCallbackGoogle {
+        record LoginExitoso(MUsuario usuario) implements ResultadoCallbackGoogle {}
+        record NoRegistrado(String correo) implements ResultadoCallbackGoogle {}
+        record YaRegistrado() implements ResultadoCallbackGoogle {}
+        record CorreoYaRegistrado(String correo) implements ResultadoCallbackGoogle {}
+        record RegistroPendiente(String correo, String nombre) implements ResultadoCallbackGoogle {}
+    }
 
     private final IUsuario usuarios;
     private final SVerificadorContrasena verificador;
@@ -40,7 +54,7 @@ public class SAuthGoogle {
 
     @Value("${finapp.google.client-id:${GOOGLE_CLIENT_ID:}}") private String clientId;
     @Value("${finapp.google.client-secret:${GOOGLE_CLIENT_SECRET:}}") private String clientSecret;
-    @Value("${finapp.google.auth-redirect-uri:${GOOGLE_AUTH_REDIRECT_URI:http://localhost:8080/api/auth/google/callback}}") private String redirectUri;
+    @Value("${finapp.google.auth-redirect-uri:${GOOGLE_AUTH_REDIRECT_URI:http://localhost:8081/api/auth/google/callback}}") private String redirectUri;
     @Value("${finapp.google.credentials-file:${GOOGLE_OAUTH_CREDENTIALS_FILE:client_secret_2_1064872593009-3arpd7098fqkrutcp5ut8pr2i7225jbk.apps.googleusercontent.com.json}}") private String archivoCredenciales;
 
     public SAuthGoogle(IUsuario usuarios, SVerificadorContrasena verificador) {
@@ -57,11 +71,14 @@ public class SAuthGoogle {
         }
     }
 
-    public String crearEstado(HttpServletRequest request) {
+    public String crearEstado(String modo, HttpServletRequest request) {
+        String modoNormalizado = "registro".equalsIgnoreCase(modo) ? "registro" : "login";
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        request.getSession(true).setAttribute(ATRIBUTO_STATE, state);
+        HttpSession sesion = request.getSession(true);
+        sesion.setAttribute(ATRIBUTO_STATE, state);
+        sesion.setAttribute(ATRIBUTO_MODO, modoNormalizado);
         return state;
     }
 
@@ -69,9 +86,9 @@ public class SAuthGoogle {
         consumirEstadoValido(state, request);
     }
 
-    public MUsuario autenticar(String code, String state, HttpServletRequest request) {
+    public ResultadoCallbackGoogle procesarCallback(String code, String state, HttpServletRequest request) {
         if (code == null || code.isBlank()) throw new IllegalArgumentException("Google no devolvió un código de autorización.");
-        consumirEstadoValido(state, request);
+        String modo = consumirEstadoValido(state, request);
         GoogleOAuthTokenDTO tokens;
         try {
             CredencialesOAuth credenciales = resolverCredenciales();
@@ -108,32 +125,91 @@ public class SAuthGoogle {
             throw new IllegalArgumentException("La cuenta de Google no tiene un correo verificado disponible.");
         }
 
-        MUsuario usuario = usuarios.findByGoogleSubject(subject).orElseGet(() -> crearUsuarioGoogle(subject, correo, nombre));
-        return usuario;
-    }
-
-    private MUsuario crearUsuarioGoogle(String subject, String correo, String nombre) {
-        if (usuarios.findByCorreoIgnoreCase(correo).isPresent()) {
-            throw new IllegalArgumentException("Este correo ya está vinculado a otra cuenta de FinApp.");
+        if ("registro".equals(modo)) {
+            if (usuarios.findByGoogleSubject(subject).isPresent()) {
+                return new ResultadoCallbackGoogle.YaRegistrado();
+            }
+            if (usuarios.findByCorreoIgnoreCase(correo).isPresent()) {
+                return new ResultadoCallbackGoogle.CorreoYaRegistrado(correo);
+            }
+            RegistroGooglePendiente pendiente = new RegistroGooglePendiente(subject, correo, nombre);
+            request.getSession(true).setAttribute(ATRIBUTO_REGISTRO_PENDIENTE, pendiente);
+            return new ResultadoCallbackGoogle.RegistroPendiente(correo, nombre);
         }
-        MUsuario usuario = new MUsuario();
-        usuario.setIdUsuario(UUID.nameUUIDFromBytes(("finapp-google:" + subject).getBytes(StandardCharsets.UTF_8)).toString());
-        usuario.setNombre(nombre.isBlank() ? correo.substring(0, correo.indexOf('@')) : nombre);
-        usuario.setContrasena(verificador.codificar(UUID.randomUUID() + "-" + UUID.randomUUID()));
-        usuario.setFechaCreacion(LocalDate.now());
-        usuario.setGoogleSubject(subject);
-        usuario.setCorreo(correo);
-        return usuarios.save(usuario);
+
+        // Modo login
+        Optional<MUsuario> porSubject = usuarios.findByGoogleSubject(subject);
+        if (porSubject.isPresent()) {
+            return new ResultadoCallbackGoogle.LoginExitoso(porSubject.get());
+        }
+        Optional<MUsuario> porCorreo = usuarios.findByCorreoIgnoreCase(correo);
+        if (porCorreo.isPresent()) {
+            MUsuario usuario = porCorreo.get();
+            if (usuario.getGoogleSubject() == null || usuario.getGoogleSubject().isBlank()) {
+                usuario.setGoogleSubject(subject);
+                usuarios.save(usuario);
+            }
+            return new ResultadoCallbackGoogle.LoginExitoso(usuario);
+        }
+        return new ResultadoCallbackGoogle.NoRegistrado(correo);
     }
 
-    private void consumirEstadoValido(String state, HttpServletRequest request) {
+    public RegistroGooglePendiente obtenerRegistroPendiente(HttpServletRequest request) {
+        HttpSession sesion = request.getSession(false);
+        if (sesion == null) return null;
+        Object pendiente = sesion.getAttribute(ATRIBUTO_REGISTRO_PENDIENTE);
+        return pendiente instanceof RegistroGooglePendiente r ? r : null;
+    }
+
+    public MUsuario completarRegistro(GoogleCompletarRegistroDTO datos, HttpServletRequest request) {
+        RegistroGooglePendiente pendiente = obtenerRegistroPendiente(request);
+        if (pendiente == null) {
+            throw new IllegalStateException("No hay un registro de Google pendiente o la sesión expiró. Inicia el registro de nuevo.");
+        }
+        if (datos == null || datos.idUsuario() == null || datos.idUsuario().isBlank()) {
+            throw new IllegalArgumentException("La identificación es obligatoria.");
+        }
+        String idUsuario = datos.idUsuario().trim();
+        if (usuarios.existsById(idUsuario)) {
+            throw new IllegalStateException("Ya existe un usuario con esta identificación.");
+        }
+        if (datos.contrasena() == null || datos.contrasena().length() < 8) {
+            throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
+        }
+        if (usuarios.findByCorreoIgnoreCase(pendiente.correo()).isPresent()) {
+            throw new IllegalStateException("Ya existe una cuenta con este correo.");
+        }
+        String nombre = datos.nombre() != null && !datos.nombre().isBlank() ? datos.nombre().trim() : pendiente.nombre();
+        String telefono = datos.telefono() != null && !datos.telefono().isBlank() ? datos.telefono().trim() : null;
+
+        MUsuario usuario = new MUsuario();
+        usuario.setIdUsuario(idUsuario);
+        usuario.setNombre(nombre.isBlank() ? pendiente.correo().substring(0, pendiente.correo().indexOf('@')) : nombre);
+        usuario.setCorreo(pendiente.correo());
+        usuario.setTelefono(telefono);
+        usuario.setContrasena(verificador.codificar(datos.contrasena()));
+        usuario.setGoogleSubject(pendiente.googleSubject());
+        usuario.setFechaCreacion(LocalDate.now());
+
+        MUsuario guardado = usuarios.save(usuario);
+        HttpSession sesion = request.getSession(false);
+        if (sesion != null) {
+            sesion.removeAttribute(ATRIBUTO_REGISTRO_PENDIENTE);
+        }
+        return guardado;
+    }
+
+    private String consumirEstadoValido(String state, HttpServletRequest request) {
         HttpSession sesion = request.getSession(false);
         Object esperado = sesion == null ? null : sesion.getAttribute(ATRIBUTO_STATE);
         if (!(esperado instanceof String valor) || state == null || !MessageDigest.isEqual(
                 valor.getBytes(StandardCharsets.UTF_8), state.getBytes(StandardCharsets.UTF_8))) {
             throw new IllegalArgumentException("La verificación de seguridad de Google expiró o no coincide. Intenta de nuevo.");
         }
-        sesion.invalidate();
+        String modo = (String) sesion.getAttribute(ATRIBUTO_MODO);
+        sesion.removeAttribute(ATRIBUTO_STATE);
+        sesion.removeAttribute(ATRIBUTO_MODO);
+        return modo != null ? modo : "login";
     }
 
     private static String requerido(String valor, String mensaje) {

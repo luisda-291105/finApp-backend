@@ -83,10 +83,13 @@ public class CAlmacenamiento {
                 .body(Map.of("message", "Inicia sesión en FinApp antes de conectar almacenamiento."));
         if (!origenValido(request)) return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
+        String origen = request.getHeader(HttpHeaders.ORIGIN);
         try {
             return ResponseEntity.ok(conexiones.completarOAuth(usuario,
+                    solicitud == null ? "" : solicitud.proveedor(),
                     solicitud == null ? null : solicitud.code(),
-                    solicitud == null ? null : solicitud.state()));
+                    solicitud == null ? null : solicitud.state(),
+                    origen));
         } catch (SAlmacenamientoConexiones.EstadoInvalidoException | SAlmacenamientoConexiones.ProveedorNoSoportadoException error) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", error.getMessage()));
         } catch (IllegalStateException error) {
@@ -141,5 +144,5 @@ public class CAlmacenamiento {
     }
 
     public record SolicitudIniciar(String proveedor) { }
-    public record SolicitudCallback(String code, String state) { }
+    public record SolicitudCallback(String proveedor, String code, String state) { }
 }

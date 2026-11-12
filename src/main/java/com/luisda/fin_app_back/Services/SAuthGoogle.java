@@ -113,8 +113,8 @@ public class SAuthGoogle {
     }
 
     private MUsuario crearUsuarioGoogle(String subject, String correo, String nombre) {
-        if (usuarios.findByCorreoGoogleIgnoreCase(correo).isPresent()) {
-            throw new IllegalArgumentException("Este correo ya está vinculado a otra identidad de Google.");
+        if (usuarios.findByCorreoIgnoreCase(correo).isPresent()) {
+            throw new IllegalArgumentException("Este correo ya está vinculado a otra cuenta de FinApp.");
         }
         MUsuario usuario = new MUsuario();
         usuario.setIdUsuario(UUID.nameUUIDFromBytes(("finapp-google:" + subject).getBytes(StandardCharsets.UTF_8)).toString());
@@ -122,7 +122,7 @@ public class SAuthGoogle {
         usuario.setContrasena(verificador.codificar(UUID.randomUUID() + "-" + UUID.randomUUID()));
         usuario.setFechaCreacion(LocalDate.now());
         usuario.setGoogleSubject(subject);
-        usuario.setCorreoGoogle(correo);
+        usuario.setCorreo(correo);
         return usuarios.save(usuario);
     }
 

@@ -47,9 +47,6 @@ public class MUsuario implements Persistable<String> {
     @Column(name = "google_subject", unique = true, length = 255)
     private String googleSubject;
 
-    @Column(name = "correo_google", unique = true, length = 255)
-    private String correoGoogle;
-
     @Column(name = "telegram_chat_id", unique = true, length = 64)
     private String telegramChatId;
 
@@ -127,11 +124,6 @@ public class MUsuario implements Persistable<String> {
     public String getGoogleSubject() { return googleSubject; }
 
     public void setGoogleSubject(String googleSubject) { this.googleSubject = googleSubject; }
-
-    @JsonIgnore
-    public String getCorreoGoogle() { return correoGoogle; }
-
-    public void setCorreoGoogle(String correoGoogle) { this.correoGoogle = correoGoogle; }
 
     @JsonIgnore
     public String getTelegramChatId() { return telegramChatId; }

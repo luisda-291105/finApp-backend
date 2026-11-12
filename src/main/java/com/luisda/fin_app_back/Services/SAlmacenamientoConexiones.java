@@ -142,22 +142,29 @@ public class SAlmacenamientoConexiones {
         return new AlmacenamientoInicioDTO(proveedorNormalizado, uri);
     }
 
-    /** Completa el flujo OAuth validando el state de un solo uso y guardando tokens cifrados.
-     *  El proveedor se resuelve desde el state registrado; el cliente no lo declara. */
-    public AlmacenamientoConexionDTO completarOAuth(MUsuario usuario, String code, String state)
-            throws GeneralSecurityException {
-        if (code == null || code.isBlank() || state == null || state.isBlank()) {
-            throw new EstadoInvalidoException("La autorización no incluye código ni estado válidos.");
+    /** Completa el flujo OAuth: con state (OneDrive, redirección) o sin state (Google Drive, popup GIS).
+     *  El proveedor se valida contra el state registrado; el cliente no lo decide por su cuenta. */
+    public AlmacenamientoConexionDTO completarOAuth(MUsuario usuario, String proveedor, String code, String state,
+                                                    String redirectUri) throws GeneralSecurityException {
+        String proveedorNormalizado = state == null || state.isBlank()
+                ? normalizarProveedor(proveedor)
+                : null;
+        if (code == null || code.isBlank()) {
+            throw new EstadoInvalidoException("La autorización no incluye un código válido.");
         }
-        RegistroState registro = estadosPendientes.remove(state);
-        if (registro == null) throw new EstadoInvalidoException("El estado de autorización no es válido o ya se usó.");
-        if (registro.expiracion().isBefore(Instant.now())) throw new EstadoInvalidoException("La autorización expiró; vuelve a intentarlo.");
-        if (!registro.idUsuario().equals(usuario.getIdUsuario())) {
-            throw new EstadoInvalidoException("La autorización no corresponde a esta sesión.");
+        if (state != null && !state.isBlank()) {
+            RegistroState registro = estadosPendientes.remove(state);
+            if (registro == null) throw new EstadoInvalidoException("El estado de autorización no es válido o ya se usó.");
+            if (registro.expiracion().isBefore(Instant.now())) throw new EstadoInvalidoException("La autorización expiró; vuelve a intentarlo.");
+            if (!registro.idUsuario().equals(usuario.getIdUsuario())) {
+                throw new EstadoInvalidoException("La autorización no corresponde a esta sesión.");
+            }
+            proveedorNormalizado = registro.proveedor();
         }
-        return switch (registro.proveedor()) {
-            case PROVEEDOR_GOOGLE_DRIVE -> completarGoogleDrive(usuario, code.trim());
-            case PROVEEDOR_ONEDRIVE -> completarOneDrive(usuario, code.trim());
+        String proveedorFinal = normalizarProveedor(proveedorNormalizado);
+        return switch (proveedorFinal) {
+            case PROVEEDOR_GOOGLE_DRIVE -> completarGoogleDrive(usuario, code.trim(), redirectUri);
+            case PROVEEDOR_ONEDRIVE -> completarOneDrive(usuario, code.trim(), redirectUri);
             default -> throw new ProveedorNoSoportadoException("Proveedor OAuth no soportado.");
         };
     }
@@ -209,11 +216,12 @@ public class SAlmacenamientoConexiones {
         return revocacionFallida;
     }
 
-    private AlmacenamientoConexionDTO completarGoogleDrive(MUsuario usuario, String code) throws GeneralSecurityException {
+    private AlmacenamientoConexionDTO completarGoogleDrive(MUsuario usuario, String code, String redirectUri)
+            throws GeneralSecurityException {
         if (clientIdGoogle.isBlank() || clientSecretGoogle.isBlank()) {
             throw new IllegalStateException("Configura GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en el backend.");
         }
-        JsonNode tokens = canjearToken(URL_TOKEN_GOOGLE, clientIdGoogle.trim(), clientSecretGoogle.trim(), code, SCOPE_GOOGLE);
+        JsonNode tokens = canjearToken(URL_TOKEN_GOOGLE, clientIdGoogle.trim(), clientSecretGoogle.trim(), code, null, redirectUri);
         String accessToken = tokens.path("access_token").asText("");
         if (accessToken.isBlank()) throw new IllegalStateException("Google no devolvió un token de acceso.");
         String refreshToken = tokens.path("refresh_token").asText("");
@@ -238,11 +246,13 @@ public class SAlmacenamientoConexiones {
         return aDto(conexiones.save(conexion));
     }
 
-    private AlmacenamientoConexionDTO completarOneDrive(MUsuario usuario, String code) throws GeneralSecurityException {
+    private AlmacenamientoConexionDTO completarOneDrive(MUsuario usuario, String code, String redirectUri)
+            throws GeneralSecurityException {
         if (clientIdMicrosoft.isBlank() || clientSecretMicrosoft.isBlank()) {
             throw new IllegalStateException("Configura MICROSOFT_CLIENT_ID y MICROSOFT_CLIENT_SECRET en el backend.");
         }
-        JsonNode tokens = canjearToken(URL_TOKEN_MICROSOFT, clientIdMicrosoft.trim(), clientSecretMicrosoft.trim(), code, SCOPE_MICROSOFT);
+        JsonNode tokens = canjearToken(URL_TOKEN_MICROSOFT, clientIdMicrosoft.trim(), clientSecretMicrosoft.trim(), code,
+                SCOPE_MICROSOFT, redirectUri);
         String accessToken = tokens.path("access_token").asText("");
         if (accessToken.isBlank()) throw new IllegalStateException("Microsoft no devolvió un token de acceso.");
         String refreshToken = tokens.path("refresh_token").asText("");
@@ -268,14 +278,15 @@ public class SAlmacenamientoConexiones {
         return aDto(conexiones.save(conexion));
     }
 
-    private JsonNode canjearToken(String urlToken, String clientId, String clientSecret, String code, String scope) {
+    private JsonNode canjearToken(String urlToken, String clientId, String clientSecret, String code, String scope,
+                                  String redirectUri) {
         MultiValueMap<String, String> formulario = new LinkedMultiValueMap<>();
         formulario.add("code", code);
         formulario.add("client_id", clientId);
         formulario.add("client_secret", clientSecret);
-        formulario.add("redirect_uri", uriRetorno());
+        formulario.add("redirect_uri", redirectUri == null || redirectUri.isBlank() ? uriRetorno() : redirectUri);
         formulario.add("grant_type", "authorization_code");
-        if (scope != null && scope.startsWith("openid profile email")) formulario.add("scope", scope);
+        if (scope != null && !scope.isBlank()) formulario.add("scope", scope);
         try {
             JsonNode respuesta = respuestaJson(clienteHttp().post().uri(URI.create(urlToken))
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED).body(formulario), JsonNode.class);

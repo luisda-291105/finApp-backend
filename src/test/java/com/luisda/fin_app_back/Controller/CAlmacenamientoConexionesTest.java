@@ -57,7 +57,7 @@ class CAlmacenamientoConexionesTest {
         SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
 
         assertThrows(SAlmacenamientoConexiones.EstadoInvalidoException.class,
-                () -> servicio.completarOAuth(usuario, "codigo", "state-falso"));
+                () -> servicio.completarOAuth(usuario, "", "codigo", "state-falso", null));
         verify(repositorio, never()).save(any());
     }
 
@@ -72,7 +72,7 @@ class CAlmacenamientoConexionesTest {
         // El state real es opaco; un atacante solo puede reutilizar el suyo u otro. Cualquier
         // state que no esté registrado para esta sesión debe rechazarse sin crear conexiones.
         assertThrows(SAlmacenamientoConexiones.EstadoInvalidoException.class,
-                () -> servicio.completarOAuth(atacante, "codigo", "state-desconocido"));
+                () -> servicio.completarOAuth(atacante, "", "codigo", "state-desconocido", null));
         verify(repositorio, never()).save(any());
     }
 
@@ -143,10 +143,10 @@ class CAlmacenamientoConexionesTest {
         HttpServletRequest sinCabecera = mock(HttpServletRequest.class);
         when(usuarioActivo.obtenerUsuario(sinCabecera)).thenReturn(Optional.of(usuario("u1")));
         when(sinCabecera.getHeader("Origin")).thenReturn("http://localhost:5173");
-        assertEquals(403, controller.completarConexion(new CAlmacenamiento.SolicitudCallback("c", "s"), sinCabecera).getStatusCode().value());
+        assertEquals(403, controller.completarConexion(new CAlmacenamiento.SolicitudCallback("", "c", "s"), sinCabecera).getStatusCode().value());
         verify(servicioConexiones, never()).iniciar(any(), any());
         try {
-            verify(servicioConexiones, never()).completarOAuth(any(), any(), any());
+            verify(servicioConexiones, never()).completarOAuth(any(), any(), any(), any(), any());
         } catch (GeneralSecurityException noEsperada) {
             throw new IllegalStateException(noEsperada);
         }

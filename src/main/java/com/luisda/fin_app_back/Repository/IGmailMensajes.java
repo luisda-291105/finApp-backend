@@ -42,7 +42,12 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
     List<MGmailMensaje> findByCuenta_Usuario_IdUsuarioAndMovimientoAlertaPendienteTrueOrderByFechaInternaDesc(String idUsuario);
     Optional<MGmailMensaje> findByIdAndCuenta_Usuario_IdUsuario(String id, String idUsuario);
     Optional<MGmailMensaje> findByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
+
+    boolean existsByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
+    @org.springframework.transaction.annotation.Transactional
     long deleteByCuenta_IdFuente(String idFuente);
+    @org.springframework.transaction.annotation.Transactional
     long deleteByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
+    @org.springframework.transaction.annotation.Transactional
     long deleteByCuenta_IdFuenteAndFechaInternaBefore(String idFuente, Instant fecha);
 }

@@ -9,5 +9,6 @@ import java.util.Optional;
 public interface IGmailSuscripciones extends JpaRepository<MGmailSuscripcion, String> {
     List<MGmailSuscripcion> findByCuenta_IdFuenteOrderByUltimaActividadDesc(String idFuente);
     Optional<MGmailSuscripcion> findByCuenta_IdFuenteAndCorreoRemitente(String idFuente, String correoRemitente);
+    @org.springframework.transaction.annotation.Transactional
     long deleteByCuenta_IdFuente(String idFuente);
 }

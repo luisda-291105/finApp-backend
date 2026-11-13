@@ -22,8 +22,6 @@ public interface IUsuario extends JpaRepository<MUsuario , String> {
 
     java.util.Optional<MUsuario> findByGoogleSubject(String googleSubject);
 
-    java.util.Optional<MUsuario> findByCorreoGoogleIgnoreCase(String correoGoogle);
-
     java.util.Optional<MUsuario> findByTelegramChatId(String telegramChatId);
 
     java.util.Optional<MUsuario> findByCorreoIgnoreCase(String correo);

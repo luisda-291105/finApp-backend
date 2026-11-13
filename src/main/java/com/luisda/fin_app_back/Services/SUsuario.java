@@ -73,8 +73,7 @@ public  class SUsuario {
         if (correo != null && !CORREO_VALIDO.matcher(correo).matches()) {
             throw new IllegalArgumentException("Ingresa un correo electrónico válido.");
         }
-        if (correo != null && (IUsuario.findByCorreoIgnoreCase(correo).isPresent()
-                || IUsuario.findByCorreoGoogleIgnoreCase(correo).isPresent())) {
+        if (correo != null && IUsuario.findByCorreoIgnoreCase(correo).isPresent()) {
             throw new IllegalStateException("Ya existe una cuenta con este correo.");
         }
         String telefono = normalizarTelefono(MUsuario.getTelefono());
@@ -99,7 +98,6 @@ public  class SUsuario {
         IUsuario.findById(valor).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
         if (valor.contains("@")) {
             IUsuario.findByCorreoIgnoreCase(valor).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
-            IUsuario.findByCorreoGoogleIgnoreCase(valor).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
         }
         String telefono = normalizarTelefono(valor);
         if (telefono != null && TELEFONO_VALIDO.matcher(telefono).matches()) {
@@ -204,8 +202,7 @@ public  class SUsuario {
                     throw new IllegalArgumentException("Ingresa un correo electrónico válido.");
                 }
                 if (correoNuevo != null && !correoNuevo.equalsIgnoreCase(anterior.getCorreo())
-                        && (IUsuario.findByCorreoIgnoreCase(correoNuevo).isPresent()
-                        || IUsuario.findByCorreoGoogleIgnoreCase(correoNuevo).isPresent())) {
+                        && IUsuario.findByCorreoIgnoreCase(correoNuevo).isPresent()) {
                     throw new IllegalStateException("Ya existe una cuenta con este correo.");
                 }
 
@@ -257,7 +254,6 @@ public  class SUsuario {
                 nuevoUsuario.setCorreo(correoNuevo);
                 nuevoUsuario.setTelefono(telefonoNuevo);
                 nuevoUsuario.setGoogleSubject(anterior.getGoogleSubject());
-                nuevoUsuario.setCorreoGoogle(anterior.getCorreoGoogle());
                 IUsuario.save(nuevoUsuario);
                 return nuevoUsuario;
             }

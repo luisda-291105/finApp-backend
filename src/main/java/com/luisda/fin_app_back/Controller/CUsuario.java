@@ -84,7 +84,7 @@ public class CUsuario {
     }
 
     private UsuarioActivoDTO dtoActivo(MUsuario usuario) {
-        String correo = usuario.getCorreo() != null ? usuario.getCorreo() : usuario.getCorreoGoogle();
+        String correo = usuario.getCorreo();
         return new UsuarioActivoDTO(usuario.getIdUsuario(), usuario.getNombre(), usuario.getFechaCreacion(), correo, usuario.getTelefono());
     }
 

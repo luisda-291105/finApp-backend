@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -84,6 +85,9 @@ public class CGmail {
     private static final int MARGEN_RENOVACION_SEGUNDOS = 60;
     private static final int RETENCION_CORREOS_DIAS = 90;
     private static final int TAMANO_PAGINA_GMAIL = 500;
+    private static final long PAUSA_GMAIL_MS = 100;
+    private static final long PAUSA_BASE_REINTENTO_GMAIL_MS = 15000;
+    private static final int INTENTOS_GMAIL = 6;
     private static final Set<String> REMITENTES_PRIORITARIOS = Set.of(
             "nu@nu.com.co",
             "efacturahomecenter@homecenter.co",
@@ -791,6 +795,7 @@ public class CGmail {
             throws IOException, GeneralSecurityException {
         String id = resumen.path("id").asText("");
         if (id.isBlank() || !mensajesProcesados.add(id)) return;
+        if (mensajes.existsByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), id)) return;
         if (!fuentes.existsById(cuenta.getIdFuente())) {
             LOGGER.warn("Se omite mensaje Gmail porque falta la fuente: id_fuente={}, google_message_id={}",
                     cuenta.getIdFuente(), id);
@@ -884,12 +889,44 @@ public class CGmail {
             throws IOException, GeneralSecurityException {
         URI uri = UriComponentsBuilder.fromUriString("https://gmail.googleapis.com/gmail/v1/users/me/messages")
                 .pathSegment(mensajeId).queryParam("format", "full").build().encode().toUri();
-        JsonNode mensaje = respuestaJson(clienteHttp().get().uri(uri).headers(h -> h.setBearerAuth(token)), JsonNode.class);
+        JsonNode mensaje = respuestaJsonConReintentos(uri, token);
         if (!mensajePerteneceACache(cuenta, mensaje)) {
             mensajes.deleteByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId);
             return;
         }
         persistirMensajeGmail(cuenta, mensaje);
+    }
+
+    private JsonNode respuestaJsonConReintentos(URI uri, String token) {
+        for (int intento = 0; intento < INTENTOS_GMAIL; intento++) {
+            try {
+                JsonNode mensaje = respuestaJson(clienteHttp().get().uri(uri)
+                        .headers(h -> h.setBearerAuth(token)), JsonNode.class);
+                Thread.sleep(PAUSA_GMAIL_MS);
+                return mensaje;
+            } catch (HttpStatusCodeException error) {
+                int estado = error.getStatusCode().value();
+                if (estado != 429 && estado != 403) throw error;
+                if (intento == INTENTOS_GMAIL - 1) throw error;
+                long pausa = PAUSA_BASE_REINTENTO_GMAIL_MS * (1L << intento);
+                LOGGER.warn("Límite de cuota de Gmail alcanzado (HTTP {}); reintento {}/{} en {} ms.",
+                        estado, intento + 1, INTENTOS_GMAIL, pausa);
+                dormir(pausa);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new RestClientException("Sincronización Gmail interrumpida.", error);
+            }
+        }
+        throw new RestClientException("No se pudo obtener el mensaje de Gmail tras agotar los reintentos.");
+    }
+
+    private void dormir(long milisegundos) {
+        try {
+            Thread.sleep(milisegundos);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new RestClientException("Sincronización Gmail interrumpida.", error);
+        }
     }
 
     private boolean mensajePerteneceACache(MFuente cuenta, JsonNode mensaje) {

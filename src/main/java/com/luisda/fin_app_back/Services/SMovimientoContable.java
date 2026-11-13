@@ -266,10 +266,14 @@ public class SMovimientoContable {
         }
         MBolsillo bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
         if (!bolsillo.isEstado()) throw new IllegalArgumentException("Activa el bolsillo para registrar movimientos.");
-        if (tipoMovimiento == null && !"AHORRO".equalsIgnoreCase(normalizarTipo(bolsillo.getTipo()))) {
-            throw new IllegalArgumentException("Los movimientos manuales solo pueden asignarse a un bolsillo AHORRO.");
+        // Allow manual registration on AHORRO, GASTO, and INGRESO pockets
+        if (tipoMovimiento == null) {
+            String tipoBolsilloNorm = normalizarTipo(bolsillo.getTipo());
+            if (!Set.of("AHORRO", "GASTO", "INGRESO").contains(tipoBolsilloNorm)) {
+                throw new IllegalArgumentException("Los movimientos manuales solo pueden asignarse a un bolsillo de tipo AHORRO, GASTO o INGRESO.");
+            }
         }
-        String tipo = tipoMovimiento == null ? tipoManual(solicitud.tipo()) : normalizarTipo(tipoMovimiento);
+        String tipo = tipoMovimiento == null ? normalizarTipo(bolsillo.getTipo()) : normalizarTipo(tipoMovimiento);
         Origen origen = resolverOrigen(idUsuario, solicitud, tipo, null);
         if (!omitirSaldo) validarSaldoDisponible(origen.bolsillo(), tipo, solicitud.monto(), null);
         MMovimientoContable movimiento = new MMovimientoContable();
@@ -474,7 +478,10 @@ public class SMovimientoContable {
         if ("TRANSFERENCIA".equalsIgnoreCase(tipo) && !"BOLSILLO".equals(origenTipo)) {
             throw new IllegalArgumentException("Una transferencia requiere origen en otro bolsillo.");
         }
-        if ("INGRESO".equalsIgnoreCase(tipo) && !"GMAIL".equals(origenTipo)) return new Origen(null, "", null, "");
+        // For INGRESO or GASTO without an explicit origin, skip origin resolution
+        if (("INGRESO".equalsIgnoreCase(tipo) || "GASTO".equalsIgnoreCase(tipo)) && !"GMAIL".equals(origenTipo) && !"EFECTIVO".equals(origenTipo) && !"BOLSILLO".equals(origenTipo) && !"CUENTA".equals(origenTipo)) {
+            return new Origen(null, "", null, "");
+        }
         return switch (origenTipo) {
             case "EFECTIVO" -> new Origen(null, "EFECTIVO", null, "Efectivo");
             case "GMAIL" -> {

@@ -18,7 +18,7 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         if (!(method.equals("POST") || method.equals("PUT") || method.equals("PATCH") || method.equals("DELETE"))) return true;
         String path = req.getRequestURI();
         if (path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
-                || path.startsWith("/api/auth/google") || path.equals("/api/gmail/callback")
+                || path.equals("/api/gmail/callback")
                 || path.equals("/api/gmail/webhook/pubsub")
                 || path.startsWith("/asistente")) return true;
         if (usuarioActivo.obtenerIdUsuario(req).isPresent()) return true;

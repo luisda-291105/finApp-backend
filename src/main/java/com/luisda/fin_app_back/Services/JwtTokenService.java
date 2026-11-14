@@ -25,7 +25,7 @@ public class JwtTokenService {
     @Value("${finapp.jwt.expiration-seconds:28800}")
     private long expirationSeconds;
 
-    @Value("${finapp.jwt.cookie-secure:false}")
+    @Value("${finapp.jwt.cookie-secure:true}")
     private boolean secureCookie;
 
     public String emitir(String idUsuario) {

@@ -7,6 +7,8 @@ FinApp publica su especificación OpenAPI y la interfaz interactiva de Swagger U
 - Swagger UI: `http://localhost:8081/docs`
 - Especificación OpenAPI en JSON: `http://localhost:8081/api-docs`
 
+Sin sesión activa, la especificación JSON devuelve **solo las rutas públicas**; con sesión devuelve la API completa.
+
 Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asistente, bolsillos, contactos, fuentes, grupos, movimientos, muestras y tarjetas.
 
 ## Probar operaciones
@@ -16,6 +18,11 @@ Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asisten
 3. Usa **Try it out** en la operación deseada. Las rutas protegidas necesitan autenticación; las públicas se pueden probar sin iniciar sesión.
 
 ## Autenticarse en Swagger UI
+
+> **Las rutas protegidas están ocultas y bloqueadas sin credenciales.**
+> Sin una sesión activa, `/api-docs` solo devuelve las rutas públicas (`/usuario/login`,
+> `/usuario/admin-login`, `/usuario` y `/asistente/publico`) y cualquier endpoint de datos
+> responde `401`. Al iniciar sesión, la especificación completa (76 rutas) queda visible.
 
 La API usa JWT. Hay tres vías:
 
@@ -30,6 +37,9 @@ La API usa JWT. Hay tres vías:
 
 3. La respuesta trae la cookie `FINAPP_AUTH` (`Set-Cookie`). Como Swagger UI se sirve desde el mismo origen del backend,
    el navegador la guarda automáticamente y **todas las demás operaciones quedan autenticadas**.
+
+   Tras el login, recarga `/docs` para que la interfaz muestre **la API completa** (con sesión,
+   `/api-docs` ya no filtra las rutas).
 
    Las credenciales salen de `.env` (ignorado por git):
 

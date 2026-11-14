@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.util.List;
+
 /**
  * @uso               dar puntos de coneccion con la api
  * @capa              controlador
@@ -116,10 +118,15 @@ public class CUsuario {
         return "idUsuario";
     }
 
-    /** consultar general */
+    /** consultar general (solo autenticado) */
     @GetMapping
-    public ResponseEntity<?> consultaGeneral() throws Exception{
+    public ResponseEntity<?> consultaGeneral(HttpServletRequest solicitud) throws Exception{
         try {
+            java.util.Optional<String> idUsuario = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idUsuario.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SUsuario.buscarTodos().stream().map(UsuarioDTO::desde).toList());
@@ -130,10 +137,19 @@ public class CUsuario {
         }
     }
 
-    /** consulta individual por id */
+    /** consulta individual por id (solo para el propio usuario autenticado) */
     @GetMapping("/id/{idUsuario}")
-    public ResponseEntity<?> consultaPorId(@PathVariable String idUsuario) throws Exception{
+    public ResponseEntity<?> consultaPorId(@PathVariable String idUsuario, HttpServletRequest solicitud) throws Exception{
         try {
+            java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idSesion.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+            }
+            if (!idUsuario.equals(idSesion.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(RespuestaModalDTO.error("No tienes acceso a este usuario.", null));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SUsuario.buscarPorId(idUsuario).map(UsuarioDTO::desde));
@@ -144,13 +160,24 @@ public class CUsuario {
         }
     }
 
-    /** consultar por nombre */
+    /** consultar por nombre (solo para el propio usuario autenticado) */
     @GetMapping("/nombre/{nombre}")
-    public ResponseEntity<?> buscarPorNombre(@PathVariable String nombre) throws Exception{
+    public ResponseEntity<?> buscarPorNombre(@PathVariable String nombre, HttpServletRequest solicitud) throws Exception{
         try {
+            java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idSesion.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+            }
+            List<MUsuario> usuarios = this.SUsuario.buscarPorNombre(nombre);
+            boolean accesoConcedido = usuarios.stream().anyMatch(usuario -> usuario.getIdUsuario().equals(idSesion.get()));
+            if (!accesoConcedido) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(RespuestaModalDTO.error("No tienes acceso a este usuario.", null));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SUsuario.buscarPorNombre(nombre).stream().map(UsuarioDTO::desde).toList());
+                    .body(usuarios.stream().map(UsuarioDTO::desde).toList());
         } catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -158,9 +185,18 @@ public class CUsuario {
         }
     }
 
-    /** eliminar por id */
+    /** eliminar por id (solo el propio usuario autenticado) */
     @DeleteMapping("/{idUsuario}")
-    public ResponseEntity<?> eliminar(@PathVariable String idUsuario) throws Exception{
+    public ResponseEntity<?> eliminar(@PathVariable String idUsuario, HttpServletRequest solicitud) throws Exception{
+        java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+        if (idSesion.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+        }
+        if (!idUsuario.equals(idSesion.get())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(RespuestaModalDTO.error("No puedes eliminar esta cuenta.", null));
+        }
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
@@ -173,7 +209,6 @@ public class CUsuario {
     }
 
     /** modificar usuario por id */
-
     @PutMapping("/{idUsuario}")
     public ResponseEntity<?> modificar(@PathVariable String idUsuario, @RequestBody MUsuario cambios,
                                        HttpServletRequest solicitud) throws Exception{

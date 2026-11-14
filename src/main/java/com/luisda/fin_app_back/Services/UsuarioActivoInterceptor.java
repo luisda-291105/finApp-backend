@@ -1,6 +1,7 @@
 package com.luisda.fin_app_back.Services;
 
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -10,6 +11,10 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class UsuarioActivoInterceptor implements HandlerInterceptor {
     private final JwtTokenService tokens;
+
+    /** Permite dejar la documentación (Swagger UI y OpenAPI) consultable sin sesión. */
+    @Value("${finapp.docs.publico:true}")
+    private boolean docsPublicas;
 
     public UsuarioActivoInterceptor(JwtTokenService tokens) {
         this.tokens = tokens;
@@ -23,8 +28,9 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         boolean exento = path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
                 || path.equals("/usuario/admin-login")
                 || path.equals("/api/gmail/callback") || path.equals("/api/gmail/webhook/pubsub")
-                || path.equals("/asistente/publico") || path.equals("/api-docs") || path.equals("/docs");
-        if (exento) return true;
+                || path.equals("/asistente/publico");
+        boolean esDocumentacion = path.equals("/api-docs") || path.equals("/docs") || path.startsWith("/swagger-ui");
+        if (exento || (esDocumentacion && docsPublicas)) return true;
         Optional<String> idUsuario = this.tokens.sesionActiva(req, res);
         if (idUsuario.isEmpty()) {
             res.setStatus(401);

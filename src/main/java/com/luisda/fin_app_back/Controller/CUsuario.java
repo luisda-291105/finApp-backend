@@ -6,6 +6,8 @@ import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.luisda.fin_app_back.Services.SVerificadorContrasena;
 import com.luisda.fin_app_back.Services.JwtTokenService;
 import com.luisda.fin_app_back.Services.SIntentosRateLimit;
+import com.luisda.fin_app_back.Services.SAccesoAdmin;
+import io.swagger.v3.oas.annotations.Operation;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
 import com.luisda.fin_app_back.DTO.UsuarioDTO;
@@ -18,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.List;
@@ -42,14 +45,17 @@ public class CUsuario {
     private final SVerificadorContrasena verificadorContrasena;
     private final JwtTokenService tokens;
     private final SIntentosRateLimit rateLimit;
+    private final SAccesoAdmin accesoAdmin;
 
     public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena,
-                    SUsuario SUsuario, JwtTokenService tokens, SIntentosRateLimit rateLimit) {
+                    SUsuario SUsuario, JwtTokenService tokens, SIntentosRateLimit rateLimit,
+                    SAccesoAdmin accesoAdmin) {
         this.usuarioActivo = usuarioActivo;
         this.verificadorContrasena = verificadorContrasena;
         this.SUsuario = SUsuario;
         this.tokens = tokens;
         this.rateLimit = rateLimit;
+        this.accesoAdmin = accesoAdmin;
     }
 
     @PostMapping("/login")
@@ -72,6 +78,7 @@ public class CUsuario {
                         .body(RespuestaModalDTO.error("El usuario o la contraseña no son correctos.", "credenciales"));
             }
             LOGGER.info("Inicio de sesión exitoso para usuario {}", usuario.getIdUsuario());
+            this.rateLimit.limpiar(clave);
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, tokens.cookie(tokens.emitir(usuario.getIdUsuario())).toString())
                     .body(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
@@ -84,6 +91,42 @@ public class CUsuario {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(RespuestaModalDTO.error("No se pudo iniciar sesión.", null));
         }
+    }
+
+    /**
+     * Inicio de sesión administrativo para operación y pruebas (Swagger UI).
+     * Las credenciales se validan contra ADMIN_USER y ADMIN_PASSWORD definidos en el entorno.
+     */
+    @PostMapping("/admin-login")
+    @Operation(summary = "Inicio de sesión administrativo", description = "Valida las credenciales administrativas del entorno (ADMIN_USER / ADMIN_PASSWORD) y abre una sesión.")
+    public ResponseEntity<?> iniciarSesionAdmin(@RequestBody UsuarioLoginDTO credenciales, HttpServletRequest solicitud) {
+        if (!this.accesoAdmin.disponible()) {
+            LOGGER.warn("Intento de acceso administrativo sin configuración en el entorno (IP {})", solicitud.getRemoteAddr());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(RespuestaModalDTO.error("El acceso administrativo no está habilitado.", null));
+        }
+        if (credenciales == null || credenciales.identificador() == null || credenciales.contrasena() == null) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa el usuario y la contraseña de administrador.", "credenciales"));
+        }
+        String ip = solicitud.getRemoteAddr() == null ? "ip-desconocida" : solicitud.getRemoteAddr();
+        String clave = "admin:" + ip + ":" + credenciales.identificador().trim().toLowerCase(java.util.Locale.ROOT);
+        if (!this.rateLimit.registrar(clave, false)) {
+            LOGGER.warn("Acceso administrativo bloqueado por rate limit desde IP {}", ip);
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(RespuestaModalDTO.error("Demasiados intentos fallidos de acceso administrativo. Espera unos minutos e inténtalo de nuevo.", "credenciales"));
+        }
+        java.util.Optional<MUsuario> usuario = this.accesoAdmin.autenticar(credenciales.identificador(), credenciales.contrasena());
+        if (usuario.isEmpty()) {
+            this.rateLimit.registrar(clave, true);
+            LOGGER.warn("Intento de acceso administrativo fallido para usuario {} desde IP {}", credenciales.identificador(), ip);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(RespuestaModalDTO.error("El usuario o la contraseña de administrador no son correctos.", "credenciales"));
+        }
+        this.rateLimit.limpiar(clave);
+        LOGGER.info("Inicio de sesión administrativo exitoso para usuario {}", usuario.get().getIdUsuario());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, tokens.cookie(tokens.emitir(usuario.get().getIdUsuario())).toString())
+                .body(RespuestaModalDTO.exito("Sesión administrativa iniciada.", dtoActivo(usuario.get())));
     }
 
     @PostMapping("/logout")

@@ -17,9 +17,37 @@ Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asisten
 
 ## Autenticarse en Swagger UI
 
-La API usa JWT. Hay dos vías:
+La API usa JWT. Hay tres vías:
 
-### Opción A — Botón **Authorize** (Bearer) ✅ recomendado
+### Opción A — Login administrativo (recomendado para entrar a Swagger) ✅
+
+1. Abre `http://localhost:8081/docs`.
+2. Ejecuta **`POST /usuario/admin-login`** con el cuerpo:
+
+   ```json
+   { "identificador": "admin", "contrasena": "<LOGIN_PASSWORD del .env>" }
+   ```
+
+3. La respuesta trae la cookie `FINAPP_AUTH` (`Set-Cookie`). Como Swagger UI se sirve desde el mismo origen del backend,
+   el navegador la guarda automáticamente y **todas las demás operaciones quedan autenticadas**.
+
+   Las credenciales salen de `.env` (ignorado por git):
+
+   ```properties
+   LOGIN_USER=admin                  # alias del operador
+   LOGIN_PASSWORD=<secreto>          # secreto compartido
+   FINAPP_ADMIN_USER_ID=1101383776   # cuenta que representa la sesión
+   ```
+
+   - Si `LOGIN_USER` o `LOGIN_PASSWORD` están vacíos, el endpoint responde `404` (acceso deshabilitado).
+   - La comparación de credenciales es en tiempo constante, los intentos fallidos se limitan por IP
+     (5 por 15 min) y quedan registrados en el log de seguridad.
+
+> ⚠️ Este acceso **omite la contraseña de la cuenta** y abre una sesión con los permisos de
+> `FINAPP_ADMIN_USER_ID`. Mantén `LOGIN_PASSWORD` fuera del repositorio, cámbialo con frecuencia
+> y desactívalo (dejando las variables vacías) en entornos que no lo necesiten.
+
+### Opción B — Botón **Authorize** (Bearer)
 
 1. Genera un token de sesión para tu usuario:
 
@@ -39,7 +67,7 @@ La API usa JWT. Hay dos vías:
 2. En Swagger UI pulsa **Authorize**, elige el esquema `JwtFinAppBearer` y pega el token **sin** la palabra `Bearer`.
 3. Todas las operaciones protegidas se ejecutan ya autenticadas (`Authorization: Bearer <token>`).
 
-### Opción B — Cookie de sesión
+### Opción C — Cookie de sesión
 
 1. Ejecuta `POST /usuario/login` con tus credenciales desde Swagger.
 2. Copia el valor de `FINAPP_AUTH` del header `Set-Cookie` de la respuesta y pégalo en **Authorize** → esquema `JwtFinApp` (cookie).

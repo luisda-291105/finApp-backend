@@ -2,9 +2,7 @@ package com.luisda.fin_app_back;
 
 import java.util.Set;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -23,6 +21,7 @@ public class ValidacionOrigenInterceptor implements HandlerInterceptor {
             "/api/gmail/webhook/pubsub",
             "/asistente/publico",
             "/usuario/login",
+            "/usuario/admin-login",
             "/usuario"
     );
 
@@ -40,7 +39,7 @@ public class ValidacionOrigenInterceptor implements HandlerInterceptor {
             return true;
         }
         String path = request.getRequestURI();
-        boolean exento = RUTAS_EXENTAS.stream().anyMatch(path::startsWith);
+        boolean exento = RUTAS_EXENTAS.contains(path);
         if (exento) return true;
         String origen = request.getHeader(HttpHeaders.ORIGIN);
         String referer = request.getHeader("Referer");

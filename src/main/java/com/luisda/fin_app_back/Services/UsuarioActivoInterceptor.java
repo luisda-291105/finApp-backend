@@ -21,6 +21,7 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
         String path = req.getRequestURI();
         boolean exento = path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
+                || path.equals("/usuario/admin-login")
                 || path.equals("/api/gmail/callback") || path.equals("/api/gmail/webhook/pubsub")
                 || path.equals("/asistente/publico") || path.equals("/api-docs") || path.equals("/docs");
         if (exento) return true;

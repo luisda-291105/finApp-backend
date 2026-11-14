@@ -32,4 +32,9 @@ public class SIntentosRateLimit {
         if (historial.size() > 100) historial.clear();
         return permitido;
     }
+
+    /** Limpia el historial de fallos de una clave (por ejemplo tras un inicio de sesión correcto). */
+    public void limpiar(String clave) {
+        if (clave != null) intentos.remove(clave);
+    }
 }

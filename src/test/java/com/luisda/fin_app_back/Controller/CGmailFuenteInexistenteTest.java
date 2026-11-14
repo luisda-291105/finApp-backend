@@ -4,10 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGmailMensajes;
-import com.luisda.fin_app_back.Repository.IGmailSuscripciones;
 import com.luisda.fin_app_back.Services.SClasificadorMovimiento;
 import com.luisda.fin_app_back.Services.SImportacionLoteGmail;
 import com.luisda.fin_app_back.Services.SMovimientoContable;
+import com.luisda.fin_app_back.Services.SSuscripcionGmail;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +27,7 @@ class CGmailFuenteInexistenteTest {
     void omiteFuenteInexistenteYContinuaConLosSiguientesMensajes() throws Exception {
         IFuentes fuentes = mock(IFuentes.class);
         IGmailMensajes mensajes = mock(IGmailMensajes.class);
-        CGmail gmail = new CGmail(fuentes, mensajes, mock(IGmailSuscripciones.class),
+        CGmail gmail = new CGmail(fuentes, mensajes, mock(SSuscripcionGmail.class),
                 mock(SUsuarioActivo.class), mock(SMovimientoContable.class),
                 mock(SClasificadorMovimiento.class), mock(SImportacionLoteGmail.class));
         MFuente fuente = new MFuente();

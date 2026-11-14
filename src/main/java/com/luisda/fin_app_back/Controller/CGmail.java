@@ -15,14 +15,14 @@ import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
 import com.luisda.fin_app_back.DTO.SolicitudAlertasGmailDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGmailMensaje;
-import com.luisda.fin_app_back.Model.MGmailSuscripcion;
+import com.luisda.fin_app_back.Model.MSuscripcion;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGmailMensajes;
-import com.luisda.fin_app_back.Repository.IGmailSuscripciones;
 import com.luisda.fin_app_back.Services.ParserMovimientoBancolombia;
 import com.luisda.fin_app_back.Services.SMovimientoContable;
 import com.luisda.fin_app_back.Services.SClasificadorMovimiento;
 import com.luisda.fin_app_back.Services.SImportacionLoteGmail;
+import com.luisda.fin_app_back.Services.SSuscripcionGmail;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.google.auth.oauth2.TokenVerifier;
 import jakarta.servlet.http.HttpServletRequest;
@@ -101,7 +101,7 @@ public class CGmail {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final IFuentes fuentes;
     private final IGmailMensajes mensajes;
-    private final IGmailSuscripciones suscripciones;
+    private final SSuscripcionGmail suscripcionesGmail;
     private final SUsuarioActivo usuarioActivo;
     private final SMovimientoContable movimientosContables;
     private final SClasificadorMovimiento clasificadorMovimientos;
@@ -118,12 +118,12 @@ public class CGmail {
     @Value("${finapp.google.pubsub.audience:}") private String audienciaPubSub;
     @Value("${finapp.google.pubsub.service-account:}") private String cuentaServicioPubSub;
 
-    public CGmail(IFuentes fuentes, IGmailMensajes mensajes, IGmailSuscripciones suscripciones,
+    public CGmail(IFuentes fuentes, IGmailMensajes mensajes, SSuscripcionGmail suscripcionesGmail,
                   SUsuarioActivo usuarioActivo, SMovimientoContable movimientosContables,
                   SClasificadorMovimiento clasificadorMovimientos, SImportacionLoteGmail importacionLote) {
         this.fuentes = fuentes;
         this.mensajes = mensajes;
-        this.suscripciones = suscripciones;
+        this.suscripcionesGmail = suscripcionesGmail;
         this.usuarioActivo = usuarioActivo;
         this.movimientosContables = movimientosContables;
         this.clasificadorMovimientos = clasificadorMovimientos;
@@ -441,7 +441,7 @@ public class CGmail {
         String remitente = correo == null ? "" : correo.trim().toLowerCase(Locale.ROOT);
         if (!direccionCorreoValida(remitente)) return ResponseEntity.badRequest()
                 .body(Map.of("message", "La dirección del remitente no es válida."));
-        boolean tieneSuscripcionOficial = suscripciones.findByCuenta_IdFuenteOrderByUltimaActividadDesc(cuentaId).stream()
+        boolean tieneSuscripcionOficial = suscripcionesGmail.listarPorCuenta(cuentaId).stream()
                 .anyMatch(suscripcion -> remitente.equalsIgnoreCase(suscripcion.getCorreoRemitente()));
         if (!tieneSuscripcionOficial) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -499,7 +499,7 @@ public class CGmail {
                     .body(Map.of("message", "No se encontró esa cuenta Gmail conectada."));
         }
         String remitente = SImportacionLoteGmail.REMITENTE_OFICIAL;
-        if (suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(cuentaId, remitente).isEmpty()) {
+        if (!suscripcionesGmail.existeEnCuenta(cuentaId, remitente)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "No se encontró la suscripción activa del remitente oficial."));
         }
@@ -773,8 +773,8 @@ public class CGmail {
                 resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
         recorrerMensajes(token, "newer_than:" + RETENCION_CORREOS_DIAS + "d {category:promotions category:updates}",
                 resumen -> guardarMensajeListado(cuenta, token, resumen, mensajesProcesados));
-        List<String> remitentesSuscritos = suscripciones.findByCuenta_IdFuenteOrderByUltimaActividadDesc(cuenta.getIdFuente()).stream()
-                .map(MGmailSuscripcion::getCorreoRemitente)
+        List<String> remitentesSuscritos = suscripcionesGmail.listarPorCuenta(cuenta.getIdFuente()).stream()
+                .map(MSuscripcion::getCorreoRemitente)
                 .filter(this::direccionCorreoValida)
                 .distinct()
                 .map(remitente -> "from:" + remitente)
@@ -934,8 +934,8 @@ public class CGmail {
         JsonNode headers = mensaje.path("payload").path("headers");
         String remitente = extraerDireccionRemitente(header(headers, "From"));
         if (esRemitentePrioritario(remitente)
-                || (!remitente.isBlank() && suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(
-                        cuenta.getIdFuente(), remitente).isPresent())) return true;
+                || (!remitente.isBlank() && suscripcionesGmail.existeEnCuenta(
+                        cuenta.getIdFuente(), remitente))) return true;
         JsonNode labels = mensaje.path("labelIds");
         if (labels != null && labels.isArray()) {
             for (JsonNode label : labels) if ("IMPORTANT".equals(label.asText())) return true;
@@ -1176,8 +1176,7 @@ public class CGmail {
 
     private List<GmailSuscripcionDTO> suscripcionesCacheadas(MFuente cuenta) throws IOException {
         List<GmailSuscripcionDTO> resultado = new ArrayList<>();
-        for (MGmailSuscripcion suscripcion : suscripciones.findByCuenta_IdFuenteOrderByUltimaActividadDesc(
-                cuenta.getIdFuente())) {
+        for (MSuscripcion suscripcion : suscripcionesGmail.listarPorCuenta(cuenta.getIdFuente())) {
             String correo = suscripcion.getCorreoRemitente();
             String unsubscribe = valorSeguro(suscripcion.getListUnsubscribe());
             String from = valorSeguro(suscripcion.getNombre());
@@ -1205,32 +1204,10 @@ public class CGmail {
                 etiquetas, Instant.ofEpochMilli(timestamp));
     }
 
+    /** Delega el guardado de la suscripción detectada en los encabezados del correo. */
     private void guardarSuscripcion(MFuente cuenta, String from, String unsubscribe, String unsubscribePost,
                                     List<String> etiquetas, Instant actividad) throws IOException {
-        if (unsubscribe == null || unsubscribe.isBlank()) return;
-        if (etiquetas.stream().noneMatch(etiqueta -> etiqueta.equals("CATEGORY_PROMOTIONS")
-                || etiqueta.equals("CATEGORY_UPDATES"))) return;
-        String correo = from.matches(".*<[^>]+>.*")
-                ? from.replaceAll(".*<([^>]+)>.*", "$1").trim() : from.trim();
-        if (correo.isBlank() || correo.length() > 254) return;
-        String key = correo.toLowerCase(Locale.ROOT);
-        String nombre = from.replaceAll("<[^>]+>", "").replaceAll("[\"']", "").trim();
-        MGmailSuscripcion suscripcion = suscripciones.findByCuenta_IdFuenteAndCorreoRemitente(
-                        cuenta.getIdFuente(), key)
-                .orElseGet(() -> new MGmailSuscripcion(UUID.randomUUID().toString(), cuenta, key, actividad));
-
-        if (!nombre.isBlank()) suscripcion.setNombre(nombre);
-        if (!unsubscribe.isBlank()) suscripcion.setListUnsubscribe(unsubscribe);
-        if (unsubscribePost != null && !unsubscribePost.isBlank()) suscripcion.setListUnsubscribePost(unsubscribePost);
-
-        List<String> categorias = new ArrayList<>(leerListaJson(suscripcion.getCategoriasJson()));
-        for (String categoria : etiquetas) {
-            if ((categoria.equals("CATEGORY_PROMOTIONS") || categoria.equals("CATEGORY_UPDATES"))
-                    && !categorias.contains(categoria)) categorias.add(categoria);
-        }
-        suscripcion.setCategoriasJson(objectMapper.writeValueAsString(categorias));
-        if (actividad.isAfter(suscripcion.getUltimaActividad())) suscripcion.setUltimaActividad(actividad);
-        suscripciones.save(suscripcion);
+        this.suscripcionesGmail.guardar(cuenta, from, unsubscribe, unsubscribePost, etiquetas, actividad);
     }
 
     private String header(JsonNode headers, String nombre) {
@@ -1382,7 +1359,7 @@ public class CGmail {
         MFuente fuente = fuentes.findByIdFuenteAndUsuario_IdUsuario(cuentaId, usuario.getIdUsuario()).orElse(null);
         if (fuente == null || !"CORREO".equalsIgnoreCase(fuente.getTipo())) return ResponseEntity.notFound().build();
         mensajes.deleteByCuenta_IdFuente(fuente.getIdFuente());
-        suscripciones.deleteByCuenta_IdFuente(fuente.getIdFuente());
+        suscripcionesGmail.eliminarPorCuenta(fuente.getIdFuente());
         fuente.desconectarGmail();
         fuentes.save(fuente);
         return ResponseEntity.noContent().build();
@@ -1407,7 +1384,7 @@ public class CGmail {
                 .filter(fuente -> "CORREO".equalsIgnoreCase(fuente.getTipo())).toList();
         fuentesCorreo.forEach(fuente -> {
             mensajes.deleteByCuenta_IdFuente(fuente.getIdFuente());
-            suscripciones.deleteByCuenta_IdFuente(fuente.getIdFuente());
+            suscripcionesGmail.eliminarPorCuenta(fuente.getIdFuente());
             fuente.desconectarGmail();
         });
         fuentes.saveAll(fuentesCorreo);

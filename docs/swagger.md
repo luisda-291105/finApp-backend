@@ -9,7 +9,9 @@ FinApp publica su especificación OpenAPI y la interfaz interactiva de Swagger U
 
 Sin sesión activa, la especificación JSON devuelve **solo las rutas públicas**; con sesión devuelve la API completa.
 
-Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asistente, bolsillos, contactos, fuentes, grupos, movimientos, muestras y tarjetas.
+Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asistente, bolsillos, contactos, fuentes, grupos, movimientos, muestras, tarjetas y suscripciones.
+
+El CRUD de suscripciones manuales (tabla única `suscripcion`, con `origen` MANUAL/GMAIL) está documentado en [`docs/suscripciones.md`](suscripciones.md).
 
 ## Probar operaciones
 

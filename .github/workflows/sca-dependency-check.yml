@@ -1,0 +1,35 @@
+name: SCA - OWASP Dependency Check
+
+on:
+  push:
+    branches: [ develop, main ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Ejecutar OWASP Dependency Check
+        uses: dependency-check/dependency-check-action@v4
+        with:
+          project-type: 'java'
+          fail-build-on-vulnerability: true
+          output-directory: target/dependency-check-report
+
+      - name: Subir reporte de dependencias
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report
+          if-no-files-found: ignore

@@ -5,10 +5,13 @@ import com.luisda.fin_app_back.Services.SUsuario;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import com.luisda.fin_app_back.Services.SVerificadorContrasena;
 import com.luisda.fin_app_back.Services.JwtTokenService;
+import com.luisda.fin_app_back.Services.SIntentosRateLimit;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
 import com.luisda.fin_app_back.DTO.UsuarioDTO;
 import com.luisda.fin_app_back.DTO.UsuarioActivoDTO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +19,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
+import java.util.List;
 
 /**
  * @uso               dar puntos de coneccion con la api
@@ -30,18 +35,21 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "Usuarios y sesión", description = "Registro, inicio y cierre de sesión JWT y administración del perfil.")
 @RequestMapping("/usuario")
 public class CUsuario {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CUsuario.class);
     final SUsuario SUsuario;
 
     private final SUsuarioActivo usuarioActivo;
     private final SVerificadorContrasena verificadorContrasena;
     private final JwtTokenService tokens;
+    private final SIntentosRateLimit rateLimit;
 
     public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena,
-                    SUsuario SUsuario, JwtTokenService tokens) {
+                    SUsuario SUsuario, JwtTokenService tokens, SIntentosRateLimit rateLimit) {
         this.usuarioActivo = usuarioActivo;
         this.verificadorContrasena = verificadorContrasena;
         this.SUsuario = SUsuario;
         this.tokens = tokens;
+        this.rateLimit = rateLimit;
     }
 
     @PostMapping("/login")
@@ -49,19 +57,30 @@ public class CUsuario {
         if (credenciales == null || credenciales.identificador() == null || credenciales.contrasena() == null) {
             return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa tu nombre, identificación, correo o teléfono y contraseña.", "credenciales"));
         }
+        String clave = "login:" + (solicitud.getRemoteAddr() == null ? "ip-desconocida" : solicitud.getRemoteAddr())
+                + ":" + credenciales.identificador().trim().toLowerCase(java.util.Locale.ROOT);
+        if (!this.rateLimit.registrar(clave, false)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(RespuestaModalDTO.error("Demasiados intentos fallidos de inicio de sesión. Espera unos minutos e inténtalo de nuevo.", "credenciales"));
+        }
         try {
             MUsuario usuario = this.SUsuario.autenticar(credenciales.identificador(), credenciales.contrasena(), verificadorContrasena);
             if (usuario == null) {
+                LOGGER.warn("Intento de inicio de sesión fallido para identificador {} desde IP {}", credenciales.identificador(), solicitud.getRemoteAddr());
+                this.rateLimit.registrar(clave, true);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(RespuestaModalDTO.error("El usuario o la contraseña no son correctos.", "credenciales"));
             }
+            LOGGER.info("Inicio de sesión exitoso para usuario {}", usuario.getIdUsuario());
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, tokens.cookie(tokens.emitir(usuario.getIdUsuario())).toString())
                     .body(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
         } catch (IllegalStateException error) {
+            this.rateLimit.registrar(clave, true);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(RespuestaModalDTO.error(error.getMessage(), null));
         } catch (Exception error) {
+            this.rateLimit.registrar(clave, true);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(RespuestaModalDTO.error("No se pudo iniciar sesión.", null));
         }
@@ -69,6 +88,9 @@ public class CUsuario {
 
     @PostMapping("/logout")
     public ResponseEntity<?> cerrarSesion(HttpServletRequest solicitud) {
+        java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+        if (idSesion.isPresent()) LOGGER.info("Cierre de sesión para usuario {}", idSesion.get());
+        this.tokens.revocarToken(solicitud);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, tokens.cookieExpirado().toString())
                 .body(RespuestaModalDTO.exito("Sesión cerrada.", null));
@@ -90,7 +112,12 @@ public class CUsuario {
 
     /** crear un registro  */
     @PostMapping
-    public ResponseEntity<?> adicionar(@RequestBody MUsuario MUsuario)throws Exception{
+    public ResponseEntity<?> adicionar(@RequestBody MUsuario MUsuario, HttpServletRequest solicitud)throws Exception{
+        String claveRegistro = "registro:" + (solicitud.getRemoteAddr() == null ? "ip-desconocida" : solicitud.getRemoteAddr());
+        if (!this.rateLimit.registrar(claveRegistro, false)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(RespuestaModalDTO.error("Demasiados intentos de registro desde esta red. Espera unos minutos e inténtalo de nuevo.", "credenciales"));
+        }
         try {
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(UsuarioDTO.desde(this.SUsuario.crear(MUsuario)));
@@ -116,10 +143,15 @@ public class CUsuario {
         return "idUsuario";
     }
 
-    /** consultar general */
+    /** consultar general (solo autenticado) */
     @GetMapping
-    public ResponseEntity<?> consultaGeneral() throws Exception{
+    public ResponseEntity<?> consultaGeneral(HttpServletRequest solicitud) throws Exception{
         try {
+            java.util.Optional<String> idUsuario = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idUsuario.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SUsuario.buscarTodos().stream().map(UsuarioDTO::desde).toList());
@@ -130,10 +162,19 @@ public class CUsuario {
         }
     }
 
-    /** consulta individual por id */
+    /** consulta individual por id (solo para el propio usuario autenticado) */
     @GetMapping("/id/{idUsuario}")
-    public ResponseEntity<?> consultaPorId(@PathVariable String idUsuario) throws Exception{
+    public ResponseEntity<?> consultaPorId(@PathVariable String idUsuario, HttpServletRequest solicitud) throws Exception{
         try {
+            java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idSesion.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+            }
+            if (!idUsuario.equals(idSesion.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(RespuestaModalDTO.error("No tienes acceso a este usuario.", null));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SUsuario.buscarPorId(idUsuario).map(UsuarioDTO::desde));
@@ -144,13 +185,24 @@ public class CUsuario {
         }
     }
 
-    /** consultar por nombre */
+    /** consultar por nombre (solo para el propio usuario autenticado) */
     @GetMapping("/nombre/{nombre}")
-    public ResponseEntity<?> buscarPorNombre(@PathVariable String nombre) throws Exception{
+    public ResponseEntity<?> buscarPorNombre(@PathVariable String nombre, HttpServletRequest solicitud) throws Exception{
         try {
+            java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idSesion.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+            }
+            List<MUsuario> usuarios = this.SUsuario.buscarPorNombre(nombre);
+            boolean accesoConcedido = usuarios.stream().anyMatch(usuario -> usuario.getIdUsuario().equals(idSesion.get()));
+            if (!accesoConcedido) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(RespuestaModalDTO.error("No tienes acceso a este usuario.", null));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
-                    .body(this.SUsuario.buscarPorNombre(nombre).stream().map(UsuarioDTO::desde).toList());
+                    .body(usuarios.stream().map(UsuarioDTO::desde).toList());
         } catch (Exception error){
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -158,9 +210,18 @@ public class CUsuario {
         }
     }
 
-    /** eliminar por id */
+    /** eliminar por id (solo el propio usuario autenticado) */
     @DeleteMapping("/{idUsuario}")
-    public ResponseEntity<?> eliminar(@PathVariable String idUsuario) throws Exception{
+    public ResponseEntity<?> eliminar(@PathVariable String idUsuario, HttpServletRequest solicitud) throws Exception{
+        java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+        if (idSesion.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(RespuestaModalDTO.error("No hay una sesión activa.", null));
+        }
+        if (!idUsuario.equals(idSesion.get())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(RespuestaModalDTO.error("No puedes eliminar esta cuenta.", null));
+        }
         try {
             return ResponseEntity
                     .status(HttpStatus.OK)
@@ -173,7 +234,6 @@ public class CUsuario {
     }
 
     /** modificar usuario por id */
-
     @PutMapping("/{idUsuario}")
     public ResponseEntity<?> modificar(@PathVariable String idUsuario, @RequestBody MUsuario cambios,
                                        HttpServletRequest solicitud) throws Exception{

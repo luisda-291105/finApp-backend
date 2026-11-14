@@ -22,10 +22,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /** Separa el asistente público explicativo del asistente personal autenticado. */
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @RestController
 @Tag(name = "Asistente", description = "Consultas informativas de la aplicación y del usuario autenticado.")
 @RequestMapping("/asistente")
 public class CAsistente {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CAsistente.class);
     private static final int MAX_SOLICITUDES_POR_MINUTO = 30;
     private static final ConcurrentHashMap<String, VentanaLimite> VENTANAS = new ConcurrentHashMap<>();
     private final SAsistenteChat servicio;
@@ -70,13 +74,12 @@ public class CAsistente {
             RespuestaChat respuesta = servicio.responder(peticion, idUsuario.get());
             return ResponseEntity.ok(respuesta);
         } catch (ServicioChatException error) {
-            System.err.println("[Asistente] ServicioChatException: " + error.getMessage());
+            LOGGER.warn("[Asistente] ServicioChatException: {}", error.getMessage());
             Map<String, Object> cuerpo = new java.util.HashMap<>();
             cuerpo.put("mensaje", error.getMessage() != null ? error.getMessage() : "Error en el asistente");
             return ResponseEntity.status(error.getEstado()).body(cuerpo);
         } catch (Exception error) {
-            System.err.println("[Asistente] Error inesperado en /asistente/chat:");
-            error.printStackTrace();
+            LOGGER.error("[Asistente] Error inesperado en /asistente/chat:", error);
             Map<String, Object> cuerpo = new java.util.HashMap<>();
             cuerpo.put("mensaje", "Error interno en el asistente: " + error.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(cuerpo);

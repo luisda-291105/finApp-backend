@@ -4,10 +4,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Services.SFuente;
+import com.luisda.fin_app_back.Services.SUsuarioActivo;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Optional;
 
 /**
  * @uso               dar puntos de coneccion con la api
@@ -24,9 +28,11 @@ import org.springframework.web.bind.annotation.*;
 public class CFuente {
 
     private final SFuente SFuente;
+    private final SUsuarioActivo usuarioActivo;
 
-    public CFuente(SFuente SFuente) {
+    public CFuente(SFuente SFuente, SUsuarioActivo usuarioActivo) {
         this.SFuente = SFuente;
+        this.usuarioActivo = usuarioActivo;
     }
 
     /** crear un registro  */
@@ -98,8 +104,17 @@ public class CFuente {
 
     /** eliminar por id. */
     @DeleteMapping("/{idFuente}")
-    public ResponseEntity<?> eliminar(@PathVariable String idFuente, @RequestParam String idUsuario)throws Exception{
+    public ResponseEntity<?> eliminar(@PathVariable String idFuente, @RequestParam String idUsuario, HttpServletRequest solicitud)throws Exception{
         try {
+            java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idSesion.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new ResponseEntity<String>("No hay una sesión activa.", HttpStatus.UNAUTHORIZED));
+            }
+            if (idUsuario == null || !idUsuario.equals(idSesion.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ResponseEntity<String>("No tienes acceso a esta fuente.", HttpStatus.FORBIDDEN));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SFuente.eliminar(idFuente, idUsuario));
@@ -112,8 +127,17 @@ public class CFuente {
 
     /** modificar por id. */
     @PutMapping("/{idFuente}")
-    public ResponseEntity<?> modificar(@RequestBody MFuente MFuente,@PathVariable String idFuente, @RequestParam String idUsuario)throws Exception{
+    public ResponseEntity<?> modificar(@RequestBody MFuente MFuente,@PathVariable String idFuente, @RequestParam String idUsuario, HttpServletRequest solicitud)throws Exception{
         try {
+            java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
+            if (idSesion.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new ResponseEntity<String>("No hay una sesión activa.", HttpStatus.UNAUTHORIZED));
+            }
+            if (idUsuario == null || !idUsuario.equals(idSesion.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ResponseEntity<String>("No tienes acceso a esta fuente.", HttpStatus.FORBIDDEN));
+            }
             return ResponseEntity
                     .status(HttpStatus.OK)
                     .body(this.SFuente.modificar(MFuente , idFuente, idUsuario));

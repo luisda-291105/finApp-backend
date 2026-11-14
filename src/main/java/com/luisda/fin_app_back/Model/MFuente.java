@@ -71,9 +71,10 @@ public class MFuente {
     @OneToMany(mappedBy = "cuenta", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<MGmailMensaje> mensajesGmail = new ArrayList<>();
 
+    /** Suscripciones detectadas en los correos de esta cuenta (tabla unificada `suscripcion`). */
     @JsonIgnore
     @OneToMany(mappedBy = "cuenta", cascade = CascadeType.REMOVE, orphanRemoval = true)
-    private List<MGmailSuscripcion> suscripcionesGmail = new ArrayList<>();
+    private List<MSuscripcion> suscripciones = new ArrayList<>();
 
 
     public MFuente(String idFuente, String tipo, String contenido, boolean estado, LocalDate fechaCreacion) {

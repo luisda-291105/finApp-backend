@@ -84,4 +84,14 @@ class JwtTokenServiceTest {
         assertTrue(idUsuario.isPresent());
         assertEquals("usuario-4", idUsuario.orElseThrow());
     }
+
+    @Test
+    void revocaTokenEnLogout() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(JwtTokenService.COOKIE_NAME, tokens.emitir("usuario-5")));
+
+        assertEquals("usuario-5", tokens.obtenerIdUsuario(request).orElseThrow());
+        tokens.revocarToken(request);
+        assertTrue(tokens.obtenerIdUsuario(request).isEmpty());
+    }
 }

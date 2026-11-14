@@ -90,6 +90,7 @@ public class CUsuario {
     public ResponseEntity<?> cerrarSesion(HttpServletRequest solicitud) {
         java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
         if (idSesion.isPresent()) LOGGER.info("Cierre de sesión para usuario {}", idSesion.get());
+        this.tokens.revocarToken(solicitud);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, tokens.cookieExpirado().toString())
                 .body(RespuestaModalDTO.exito("Sesión cerrada.", null));

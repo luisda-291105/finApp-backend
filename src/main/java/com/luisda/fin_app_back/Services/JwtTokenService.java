@@ -17,6 +17,8 @@ import javax.crypto.SecretKey;
 import java.time.Duration;
 import java.util.Date;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 @Service
 public class JwtTokenService {
@@ -34,6 +36,33 @@ public class JwtTokenService {
     @Value("${finapp.jwt.cookie-secure:true}")
     private boolean secureCookie;
 
+    private final ConcurrentHashMap<String, Date> DENY_LIST = new ConcurrentHashMap<>();
+
+    /** Revoca un token por su identificador (logout). */
+    public void revocar(String jti) {
+        if (jti == null || jti.isBlank()) return;
+        DENY_LIST.put(jti, new Date(System.currentTimeMillis() + Duration.ofSeconds(expirationSeconds).toMillis()));
+    }
+
+    /** Indica si un token (jti) fue revocado (logout). */
+    public boolean estaRevocado(String jti) {
+        return jti != null && DENY_LIST.containsKey(jti);
+    }
+
+    /** Revoca el token activo presente en la request (logout). */
+    public void revocarToken(HttpServletRequest request) {
+        String token = tokenDe(request);
+        if (token == null || token.isBlank()) return;
+        try {
+            Claims claims = Jwts.parser().verifyWith(clave()).build()
+                    .parseSignedClaims(token).getPayload();
+            String jti = claims.getId();
+            if (jti != null) revocar(jti);
+        } catch (JwtException | IllegalArgumentException ignored) {
+            // Token invalido: no hay nada que revocar.
+        }
+    }
+
     public String emitir(String idUsuario) {
         if (idUsuario == null || idUsuario.isBlank()) throw new IllegalArgumentException("El usuario no es válido.");
         if (expirationSeconds <= 0) throw new IllegalStateException("FINAPP_JWT_EXPIRATION_SECONDS debe ser mayor que cero.");
@@ -41,6 +70,7 @@ public class JwtTokenService {
         long expiraEn = ahora.getTime() + Duration.ofSeconds(expirationSeconds).toMillis();
         return Jwts.builder()
                 .subject(idUsuario)
+                .id(UUID.randomUUID().toString())
                 .issuedAt(ahora)
                 .expiration(new Date(expiraEn))
                 .claim("expiraEn", expiraEn)
@@ -58,6 +88,8 @@ public class JwtTokenService {
             Date ahora = new Date();
             Long actividad = claims.get("actividad", Long.class);
             long ultimaActividad = actividad != null ? actividad : (claims.getIssuedAt() != null ? claims.getIssuedAt().getTime() : 0L);
+            String jti = claims.getId();
+            if (jti != null && estaRevocado(jti)) return Optional.empty();
             boolean activa = ultimaActividad > 0 && (ahora.getTime() - ultimaActividad) <= Duration.ofSeconds(inactivitySeconds).toMillis();
             String subject = claims.getSubject();
             if (!activa) return Optional.empty();
@@ -76,6 +108,8 @@ public class JwtTokenService {
             Date ahora = new Date();
             Long actividad = claims.get("actividad", Long.class);
             long ultimaActividad = actividad != null ? actividad : (claims.getIssuedAt() != null ? claims.getIssuedAt().getTime() : 0L);
+            String jti = claims.getId();
+            if (jti != null && estaRevocado(jti)) return Optional.empty();
             boolean activa = ultimaActividad > 0 && (ahora.getTime() - ultimaActividad) <= Duration.ofSeconds(inactivitySeconds).toMillis();
             if (!activa) return Optional.empty();
             String subject = claims.getSubject();

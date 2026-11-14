@@ -58,6 +58,7 @@ import java.util.stream.Collectors;
 @Service
 public class SAsistenteChat {
     private static final int MAX_CARACTERES_PREGUNTA = 2000;
+    private static final int MAX_LONGITUD_CONTENIDO_CLASIFICACION = 2000;
     private static final int MAX_TURNOS_HISTORIAL = 20;
     private static final int MAX_CARACTERES_TURNO = 2000;
     private static final int MAX_CARACTERES_HISTORIAL = 24000;
@@ -247,7 +248,12 @@ public class SAsistenteChat {
 
     /** Ejecuta el prompt de clasificación reutilizando el cliente NVIDIA y su configuración existentes. */
     public String clasificarFiltro(String contenidoNoConfiable) {
-        PeticionChat peticion = new PeticionChat(contenidoNoConfiable, List.of());
+        String contenido = contenidoNoConfiable == null ? "" : contenidoNoConfiable;
+        // SEC-AI-003: el contenido externo (correo) es dato no confiable; se acota antes de enviar al modelo.
+        if (contenido.length() > MAX_LONGITUD_CONTENIDO_CLASIFICACION) {
+            contenido = contenido.substring(0, MAX_LONGITUD_CONTENIDO_CLASIFICACION);
+        }
+        PeticionChat peticion = new PeticionChat(contenido, List.of());
         return generarRespuesta(peticion, List.of(), PromptClasificador.PROMPT);
     }
 

@@ -24,7 +24,7 @@ import org.springframework.context.annotation.Configuration;
         ),
         security = {
                 @SecurityRequirement(name = "JwtFinAppBearer"),
-                @SecurityRequirement(name = "JwtFinAppCookie")
+                @SecurityRequirement(name = "JwtFinApp")
         }
 )
 @SecurityScheme(

@@ -13,6 +13,26 @@ Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asisten
 
 El CRUD de suscripciones manuales (tabla única `suscripcion`, con `origen` MANUAL/GMAIL) está documentado en [`docs/suscripciones.md`](suscripciones.md).
 
+## Cookie de sesión y orígenes permitidos
+
+La sesión viaja en la cookie `FINAPP_AUTH` (`HttpOnly`). Su comportamiento se ajusta con el entorno:
+
+| Variable | Default | Para qué sirve |
+|----------|---------|----------------|
+| `FINAPP_JWT_COOKIE_SECURE` | `true` | `Secure` en la cookie. Chrome y Firefox aceptan cookies `Secure` en `http://localhost`; en producción debe quedar `true` (HTTPS). |
+| `FINAPP_JWT_COOKIE_SAME_SITE` | `Lax` | `Lax` cuando la web y la API comparten sitio. Usa `None` si la web se sirve en otro dominio (por ejemplo `finapp.luisda.org`) y la API en `localhost:8081`; `None` obliga a `Secure`. |
+| `WEB_ALLOWED_ORIGINS` | `http://localhost:5173,...` | Orígenes permitidos para CORS y para validar el origen de las escrituras (protección CSRF). Se comparan **sin distinguir mayúsculas** y sin barra final, pero conviene escribirlos en minúsculas. |
+
+Errores frecuentes:
+
+- `401 {"mensaje":"Inicia sesión para continuar."}` → la petición **no envió cookie**: falta iniciar sesión,
+  la cookie no se guardó (p. ej. `Secure` en un sitio HTTP que no sea `localhost`) o el navegador bloqueó
+  cookies de terceros (la web y la API están en sitios distintos). La solución robusta es servir la API
+  en el **mismo origen** que la web.
+- `401 {"mensaje":"Tu sesión expiró o se cerró. Inicia sesión de nuevo."}` → había cookie, pero la sesión
+  venció (30 min de inactividad por `FINAPP_JWT_INACTIVITY_SECONDS`) o se cerró con `POST /usuario/logout`.
+- `403` en escrituras → el `Origin`/`Referer` no está en `WEB_ALLOWED_ORIGINS`.
+
 ## Probar operaciones
 
 1. Inicia el backend según la guía principal del repositorio.

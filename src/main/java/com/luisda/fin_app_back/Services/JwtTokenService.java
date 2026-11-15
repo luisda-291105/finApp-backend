@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,6 +37,15 @@ public class JwtTokenService {
 
     @Value("${finapp.jwt.cookie-secure:true}")
     private boolean secureCookie;
+
+    /**
+     * SameSite de la cookie de sesión: Lax (same-site), Strict o None (sitios distintos,
+     * por ejemplo la web en un dominio y la API en otro). None exige Secure.
+     */
+    @Value("${finapp.jwt.cookie.same-site:Lax}")
+    private String sameSiteCookie = "Lax";
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JwtTokenService.class);
 
     private final ConcurrentHashMap<String, Date> DENY_LIST = new ConcurrentHashMap<>();
 
@@ -132,10 +143,12 @@ public class JwtTokenService {
     }
 
     public ResponseCookie cookie(String token, long maxAgeSegundos) {
+        String sameSite = normalizarSameSite();
+        boolean seguro = this.secureCookie || "None".equals(sameSite);
         return ResponseCookie.from(COOKIE_NAME, token)
                 .httpOnly(true)
-                .secure(secureCookie)
-                .sameSite("Lax")
+                .secure(seguro)
+                .sameSite(sameSite)
                 .path("/")
                 .maxAge(Duration.ofSeconds(maxAgeSegundos))
                 .build();
@@ -146,13 +159,36 @@ public class JwtTokenService {
     }
 
     public ResponseCookie cookieExpirado() {
+        String sameSite = normalizarSameSite();
+        boolean seguro = this.secureCookie || "None".equals(sameSite);
         return ResponseCookie.from(COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(secureCookie)
-                .sameSite("Lax")
+                .secure(seguro)
+                .sameSite(sameSite)
                 .path("/")
                 .maxAge(Duration.ZERO)
                 .build();
+    }
+
+    /** Normaliza el SameSite configurado; None obliga a Secure porque el navegador lo exige. */
+    private String normalizarSameSite() {
+        String valor = this.sameSiteCookie == null ? "Lax" : this.sameSiteCookie.trim();
+        if (valor.isEmpty()) return "Lax";
+        String normalizado = switch (valor.toLowerCase(java.util.Locale.ROOT)) {
+            case "none" -> "None";
+            case "strict" -> "Strict";
+            default -> "Lax";
+        };
+        if ("None".equals(normalizado) && !this.secureCookie) {
+            LOGGER.warn("La cookie de sesión usa SameSite=None; se activa Secure porque el navegador lo exige. "
+                    + "Sirve solo en HTTPS o en localhost.");
+        }
+        return normalizado;
+    }
+
+    /** Indica si la petición trae algún token (válido o no), para diferenciar el motivo del 401. */
+    public boolean hayToken(HttpServletRequest request) {
+        return !tokenDe(request).isBlank();
     }
 
     private String tokenDe(HttpServletRequest request) {

@@ -55,7 +55,8 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         }
 
         if (!sesionValida(req, res)) {
-            responderNoAutorizado(res);
+            if (this.tokens.hayToken(req)) responderSesionCaducada(res);
+            else responderNoAutorizado(res);
             return false;
         }
         return true;
@@ -82,5 +83,14 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         res.setContentType("application/json;charset=UTF-8");
         res.addHeader(HttpHeaders.SET_COOKIE, this.tokens.cookieExpirado().toString());
         res.getWriter().write("{\"tipo\":\"error\",\"mensaje\":\"Inicia sesión para continuar.\",\"campo\":null,\"datos\":null}");
+    }
+
+    /** Responde 401 cuando la petición traía una sesión que ya no es válida (expirada o cerrada). */
+    private void responderSesionCaducada(HttpServletResponse res) throws java.io.IOException {
+        res.setStatus(401);
+        res.setContentType("application/json;charset=UTF-8");
+        res.addHeader(HttpHeaders.SET_COOKIE, this.tokens.cookieExpirado().toString());
+        res.getWriter().write("{\"tipo\":\"error\",\"mensaje\":\"Tu sesión expiró o se cerró. Inicia sesión de nuevo.\","
+                + "\"campo\":null,\"datos\":null}");
     }
 }

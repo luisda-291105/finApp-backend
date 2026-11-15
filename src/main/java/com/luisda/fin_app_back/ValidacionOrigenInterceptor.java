@@ -1,23 +1,24 @@
 package com.luisda.fin_app_back;
 
-import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.util.List;
+
 /**
  * @uso               Valida el origen de las escrituras con cookie JWT
  * @capa              Web
  * @responsabilidades Rechazar peticiones state-changing sin origen permitido (CSRF de cookie)
- * @datos             Origines permitidos desde finapp.cors.allowed-origins
+ * @datos             Origenes permitidos desde finapp.cors.allowed-origins
  * @dependencias      WebMvc
  * @usadoPor          CorsConfig
  */
 public class ValidacionOrigenInterceptor implements HandlerInterceptor {
 
-    private static final Set<String> RUTAS_EXENTAS = Set.of(
+    private static final List<String> RUTAS_EXENTAS = List.of(
             "/api/gmail/webhook/pubsub",
             "/asistente/publico",
             "/usuario/login",
@@ -25,10 +26,14 @@ public class ValidacionOrigenInterceptor implements HandlerInterceptor {
             "/usuario"
     );
 
-    private final String[] origenesPermitidos;
+    private final List<String> origenesPermitidos;
 
     public ValidacionOrigenInterceptor(String[] origenesPermitidos) {
-        this.origenesPermitidos = origenesPermitidos;
+        this(OrigenesWeb.normalizarLista(String.join(",", origenesPermitidos)));
+    }
+
+    public ValidacionOrigenInterceptor(List<String> origenesPermitidos) {
+        this.origenesPermitidos = origenesPermitidos == null ? List.of() : origenesPermitidos;
     }
 
     @Override
@@ -39,8 +44,7 @@ public class ValidacionOrigenInterceptor implements HandlerInterceptor {
             return true;
         }
         String path = request.getRequestURI();
-        boolean exento = RUTAS_EXENTAS.contains(path);
-        if (exento) return true;
+        if (RUTAS_EXENTAS.contains(path)) return true;
         String origen = request.getHeader(HttpHeaders.ORIGIN);
         String referer = request.getHeader("Referer");
         String origenValido = origen;
@@ -55,16 +59,7 @@ public class ValidacionOrigenInterceptor implements HandlerInterceptor {
                 origenValido = null;
             }
         }
-        boolean autorizado = false;
-        if (origenValido != null) {
-            for (String permitido : origenesPermitidos) {
-                if (permitido != null && permitido.trim().equals(origenValido.trim())) {
-                    autorizado = true;
-                    break;
-                }
-            }
-        }
-        if (!autorizado) {
+        if (!OrigenesWeb.permitido(origenValido, origenesPermitidos)) {
             response.setStatus(HttpStatus.FORBIDDEN.value());
             return false;
         }

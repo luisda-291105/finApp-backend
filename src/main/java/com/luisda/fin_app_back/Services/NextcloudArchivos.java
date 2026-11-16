@@ -52,14 +52,37 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
 
     @Override public String proveedor() { return "NEXTCLOUD"; }
 
+    /**
+     * Resuelve la ruta absoluta de una carpeta (o del "root") en el WebDAV del usuario.
+     * El id puede ser "root" o un id codificado (base64url) que decodifica a una ruta
+     * absoluta completa ("/remote.php/dav/..."), como los que devuelve aDto; en ese caso
+     * no se antepone la base de archivos de nuevo.
+     * Devolvemos siempre la ruta con barra inicial y barra final (los destinos son directorios).
+     */
+    private String rutaCarpeta(MAlmacenamientoConexion conexion, String carpetaId) throws GeneralSecurityException {
+        String base = rutaArchivos(conexion); // /remote.php/dav/files/<usuario>/
+        if (carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId)
+                || "RAIZ".equalsIgnoreCase(carpetaId)) {
+            return base;
+        }
+        String ruta = decodificarId(carpetaId);
+        if (ruta.startsWith("/remote.php/dav")) {
+            String limpia = quitarSlash(ruta);
+            String absoluta = limpia.startsWith("/") ? limpia : "/" + limpia;
+            return absoluta.endsWith("/") ? absoluta : absoluta + "/";
+        }
+        String cola = quitarSlash(ruta);
+        return cola.isBlank() ? base : base + cola + "/";
+    }
+
     @Override
     public PaginaArchivos listar(MAlmacenamientoConexion conexion, String carpetaId, String vista, String busqueda,
                                  String orden, String pagina) throws GeneralSecurityException {
         boolean papelera = "PAPELERA".equalsIgnoreCase(vista);
         validarVista(vista);
-        String carpeta = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId)
-                || "RAIZ".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(decodificarId(carpetaId));
-        String ruta = papelera ? rutaPapelera(conexion) : rutaArchivos(conexion) + carpeta;
+        boolean raiz = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId)
+                || "RAIZ".equalsIgnoreCase(carpetaId);
+        String ruta = papelera ? rutaPapelera(conexion) : rutaCarpeta(conexion, carpetaId);
         List<Element> respuestas = propfind(conexion, ruta, papelera);
         List<AlmacenamientoArchivoDTO> archivos = new ArrayList<>();
         String filtroBusqueda = busqueda == null ? "" : busqueda.toLowerCase(Locale.ROOT);
@@ -72,7 +95,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
             archivos.add(dto);
         }
         ordenar(archivos, orden);
-        String idCarpetaActual = papelera ? "" : (carpeta.isBlank() ? "root" : carpeta);
+        String idCarpetaActual = papelera ? "" : (raiz ? "root" : codificarId("/" + quitarSlash(ruta)));
         return new PaginaArchivos(archivos, null, idCarpetaActual);
     }
 
@@ -98,8 +121,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     public AlmacenamientoArchivoDTO crearCarpeta(MAlmacenamientoConexion conexion, String carpetaId, String nombre)
             throws GeneralSecurityException {
         if (nombre == null || nombre.isBlank()) throw new IllegalArgumentException("Indica el nombre de la carpeta.");
-        String padre = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(decodificarId(carpetaId));
-        String ruta = rutaArchivos(conexion) + (padre.isBlank() ? "" : padre + "/") + UriUtils.encodePathSegment(nombre, StandardCharsets.UTF_8);
+        String ruta = rutaCarpeta(conexion, carpetaId) + UriUtils.encodePathSegment(nombre, StandardCharsets.UTF_8);
         enviar(conexion, HttpMethod.valueOf("MKCOL"), URI.create(urlServidor(conexion) + ruta), null, null);
         return metadatos(conexion, rutaRelativaDe(rutaArchivos(conexion), ruta));
     }
@@ -108,8 +130,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     public AlmacenamientoArchivoDTO subir(MAlmacenamientoConexion conexion, String carpetaId, String nombreArchivo,
                                           String mime, byte[] contenido) throws GeneralSecurityException {
         if (contenido == null || contenido.length == 0) throw new IllegalArgumentException("El archivo está vacío.");
-        String padre = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(decodificarId(carpetaId));
-        String ruta = rutaArchivos(conexion) + (padre.isBlank() ? "" : padre + "/")
+        String ruta = rutaCarpeta(conexion, carpetaId)
                 + UriUtils.encodePathSegment(nombreSeguro(nombreArchivo), StandardCharsets.UTF_8);
         enviar(conexion, HttpMethod.PUT, URI.create(urlServidor(conexion) + ruta), contenido,
                 mime == null || mime.isBlank() ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(mime));
@@ -127,9 +148,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         String origen = rutaDeId(conexion, fileId);
         String nombreFinal = nombre == null || nombre.isBlank()
                 ? nombreDeRuta(fileId) : nombreSeguro(nombre);
-        String destinoRelativo = idNuevoPadre == null || idNuevoPadre.isBlank() || "root".equalsIgnoreCase(idNuevoPadre)
-                ? "" : quitarSlash(decodificarId(idNuevoPadre)) + "/";
-        String destino = rutaArchivos(conexion) + destinoRelativo + UriUtils.encodePathSegment(nombreFinal, StandardCharsets.UTF_8);
+        String destino = rutaCarpeta(conexion, idNuevoPadre) + UriUtils.encodePathSegment(nombreFinal, StandardCharsets.UTF_8);
         mover(conexion, origen, destino);
         return metadatos(conexion, rutaRelativaDe(rutaArchivos(conexion), destino));
     }
@@ -138,9 +157,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     public AlmacenamientoArchivoDTO copiar(MAlmacenamientoConexion conexion, String fileId, String idNuevoPadre)
             throws GeneralSecurityException {
         String origen = rutaDeId(conexion, fileId);
-        String destinoRelativo = idNuevoPadre == null || idNuevoPadre.isBlank() || "root".equalsIgnoreCase(idNuevoPadre)
-                ? "" : quitarSlash(decodificarId(idNuevoPadre)) + "/";
-        String destino = rutaArchivos(conexion) + destinoRelativo + UriUtils.encodePathSegment(
+        String destino = rutaCarpeta(conexion, idNuevoPadre) + UriUtils.encodePathSegment(
                 "copia de " + nombreDeRuta(fileId), StandardCharsets.UTF_8);
         enviar(conexion, HttpMethod.valueOf("COPY"), URI.create(urlServidor(conexion) + origen), null, null,
                 Map.of("Destination", urlServidor(conexion) + destino));
@@ -441,8 +458,9 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         int primeraBarra = dentro.indexOf('/');
         if (primeraBarra < 0) return "";
         String resto = dentro.substring(primeraBarra + 1); // descarta el segmento del usuario
+        if (resto.endsWith("/")) resto = resto.substring(0, resto.length() - 1); // los directorios terminan en /
         int ultimaBarra = resto.lastIndexOf('/');
-        String padre = ultimaBarra <= 0 ? "" : resto.substring(0, ultimaBarra);
+        String padre = ultimaBarra < 0 ? "" : resto.substring(0, ultimaBarra);
         return padre;
     }
 

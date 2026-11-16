@@ -29,6 +29,19 @@
 	<properties>
 		<java.version>25</java.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<!--
+				springdoc 3.2.0 trae swagger-ui 5.34.0, que empaqueta DOMPurify 3.4.16 con CVEs
+				de severidad 10.0 (CVE-2026-116803/116804). La 5.35.0 lo corrige (DOMPurify 3.4.17).
+			-->
+			<dependency>
+				<groupId>org.webjars</groupId>
+				<artifactId>swagger-ui</artifactId>
+				<version>5.35.0</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

@@ -82,6 +82,61 @@
   {
     "name": "finapp.google.pubsub.service-account",
     "type": "java.lang.String",
-    "description": "A description for 'finapp.google.pubsub.service-account'"
+    "description": "Ruta del JSON de cuenta de servicio para verificar eventos Pub/Sub de Gmail."
+  },
+  {
+    "name": "finapp.almacenamiento.cipher-secret",
+    "type": "java.lang.String",
+    "description": "Secreto usado para derivar la clave AES-GCM que cifra los tokens de conexiones de almacenamiento."
+  },
+  {
+    "name": "finapp.docs.publico",
+    "type": "java.lang.String",
+    "description": "Indica si la documentación OpenAPI está disponible sin sesión activa."
+  },
+  {
+    "name": "finapp.jwt.cookie.same-site",
+    "type": "java.lang.String",
+    "description": "Política SameSite de la cookie de sesión FINAPP_AUTH."
+  },
+  {
+    "name": "finapp.jwt.inactivity-seconds",
+    "type": "java.lang.Long",
+    "description": "Segundos de inactividad permitidos antes de invalidar la sesión."
+  },
+  {
+    "name": "finapp.microsoft.client-id",
+    "type": "java.lang.String",
+    "description": "Identificador de cliente OAuth de Microsoft para conexiones de almacenamiento."
+  },
+  {
+    "name": "finapp.microsoft.client-secret",
+    "type": "java.lang.String",
+    "description": "Secreto de cliente OAuth de Microsoft para conexiones de almacenamiento."
+  },
+  {
+    "name": "finapp.telegram.bot-name",
+    "type": "java.lang.String",
+    "description": "Nombre público del bot de Telegram de FinApp."
+  },
+  {
+    "name": "finapp.telegram.bot-token",
+    "type": "java.lang.String",
+    "description": "Token del bot de Telegram de FinApp."
+  },
+  {
+    "name": "finapp.telegram.poll-timeout-seconds",
+    "type": "java.lang.Integer",
+    "description": "Segundos de espera del long-polling contra la API de Telegram."
+  },
+  {
+    "name": "finapp.trm.url",
+    "type": "java.lang.String",
+    "description": "URL del dataset de la TRM en datos.gov.co (Socrata)."
+  },
+  {
+    "name": "finapp.trm.cache-seconds",
+    "type": "java.lang.Long",
+    "description": "TTL en segundos de la caché de la TRM vigente."
   }
 ]}

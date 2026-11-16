@@ -320,10 +320,11 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         return new IllegalStateException("El servidor Nextcloud rechazó la operación (" + estado + ").");
     }
 
+    /** Valor ya codificado (Base64) para la cabecera Authorization Basic. */
     private String autenticacion(MAlmacenamientoConexion conexion) throws GeneralSecurityException {
         String usuario = valor(conexion.getIdentificadorExterno());
         String credencial = cifrado.descifrar(conexion.getCredencialCifrada());
-        return usuario + ":" + credencial;
+        return Base64.getEncoder().encodeToString((usuario + ":" + credencial).getBytes(StandardCharsets.UTF_8));
     }
 
     private String urlServidor(MAlmacenamientoConexion conexion) {

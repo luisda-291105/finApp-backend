@@ -671,6 +671,8 @@ public class CGmail {
                     LOGGER.warn("La cuenta Gmail {} requiere reconexión: Google rechazó el acceso y no se pudo renovar el token.",
                             cuenta.getIdFuente());
                 }
+            } catch (HttpClientErrorException.BadRequest invalidGrant) {
+                LOGGER.warn("La cuenta Gmail {} requiere reconexión: el refresh token expiró o fue revocado.", cuenta.getIdFuente());
             } catch (IOException | GeneralSecurityException | RestClientException | IllegalStateException error) {
                 LOGGER.error("No se pudo renovar watch Gmail para la cuenta {}", cuenta.getIdFuente(), error);
             }
@@ -714,6 +716,9 @@ public class CGmail {
                     LOGGER.warn("La cuenta Gmail {} requiere reconexión: Google rechazó el acceso y no se pudo renovar el token.",
                             cuenta.getIdFuente());
                 }
+            } catch (HttpClientErrorException.BadRequest invalidGrant) {
+                // Refresh token expirado o revocado (invalid_grant): la cuenta debe reconectar.
+                LOGGER.warn("La cuenta Gmail {} requiere reconexión: el refresh token expiró o fue revocado.", cuenta.getIdFuente());
             } catch (IOException | GeneralSecurityException | RestClientException | IllegalStateException error) {
                 LOGGER.error("No se pudo sincronizar en segundo plano la cuenta Gmail {}", cuenta.getIdFuente(), error);
             }

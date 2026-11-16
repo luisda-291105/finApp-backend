@@ -231,6 +231,14 @@ public class GoogleDriveArchivos implements SAlmacenamientoArchivos {
     }
 
     @Override
+    public void eliminarDefinitivo(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
+        URI destino = UriComponentsBuilder.fromUriString(BASE + "/" + fileId)
+                .queryParam("supportsAllDrives", true).build().encode().toUri();
+        ejecutar(conexion, "DELETE", destino, null, null);
+        cache.invalidar(conexion);
+    }
+
+    @Override
     public void vaciarPapelera(MAlmacenamientoConexion conexion) throws GeneralSecurityException {
         URI destino = UriComponentsBuilder.fromUriString(BASE)
                 .queryParam("q", "trashed=true")

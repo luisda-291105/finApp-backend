@@ -102,6 +102,11 @@ public class SArchivosPorConexion implements SAlmacenamientoArchivos {
     }
 
     @Override
+    public void eliminarDefinitivo(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
+        de(conexion).eliminarDefinitivo(conexion, fileId);
+    }
+
+    @Override
     public void vaciarPapelera(MAlmacenamientoConexion conexion) throws GeneralSecurityException {
         de(conexion).vaciarPapelera(conexion);
     }

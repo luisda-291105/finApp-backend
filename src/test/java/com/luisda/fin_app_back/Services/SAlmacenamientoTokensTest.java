@@ -100,4 +100,71 @@ class SAlmacenamientoTokensTest {
         conexion.setExpiraEn(Instant.now().plusSeconds(1800));
         assertThrows(ConexionRequiereReconexionException.class, () -> tokens.tokenVigente(conexion));
     }
+
+    @Test
+    void laRenovacionForzadaDescartaElTokenGuardadoAunqueEsteVigente() throws Exception {
+        conexion.setExpiraEn(Instant.now().plusSeconds(1800));
+        servidor.expect(requestTo("https://oauth2.googleapis.com/token"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"access_token\":\"nuevo-acceso\",\"expires_in\":3600}",
+                        MediaType.APPLICATION_JSON));
+
+        assertEquals("nuevo-acceso", tokens.tokenVigente(conexion, true));
+
+        verify(repositorio).save(any());
+        servidor.verify();
+    }
+
+    @Test
+    void unTokenSinFechaDeCaducidadSeRenuevaPorPrecaucion() throws Exception {
+        conexion.setExpiraEn(null);
+        servidor.expect(requestTo("https://oauth2.googleapis.com/token"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"access_token\":\"nuevo-acceso\",\"expires_in\":3600}",
+                        MediaType.APPLICATION_JSON));
+
+        assertEquals("nuevo-acceso", tokens.tokenVigente(conexion));
+
+        servidor.verify();
+    }
+
+    @Test
+    void unTokenDentroDelMargenDeRenovacionSeRenuevaAntesDeCaducar() throws Exception {
+        conexion.setExpiraEn(Instant.now().plusSeconds(30));
+        servidor.expect(requestTo("https://oauth2.googleapis.com/token"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"access_token\":\"nuevo-acceso\",\"expires_in\":3600}",
+                        MediaType.APPLICATION_JSON));
+
+        assertEquals("nuevo-acceso", tokens.tokenVigente(conexion));
+
+        servidor.verify();
+    }
+
+    @Test
+    void unaRespuestaDeRenovacionSinTokenSeTrataComoFalloYExigeReconexion() {
+        conexion.setExpiraEn(Instant.now().minusSeconds(10));
+        servidor.expect(requestTo("https://oauth2.googleapis.com/token"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        assertThrows(ConexionRequiereReconexionException.class, () -> tokens.tokenVigente(conexion));
+
+        assertEquals("REQUIERE_RECONEXION", conexion.getEstado());
+        servidor.verify();
+    }
+
+    @Test
+    void unaConexionInexistenteExigeReconexion() {
+        ConexionRequiereReconexionException error = assertThrows(ConexionRequiereReconexionException.class,
+                () -> tokens.tokenVigente(null));
+        assertEquals("La conexión no existe.", error.getMessage());
+    }
+
+    @Test
+    void marcarReconexionPersisteElEstadoParaQueElFrontendLoMuestre() {
+        tokens.marcarReconexion(conexion, "motivo de prueba");
+
+        assertEquals("REQUIERE_RECONEXION", conexion.getEstado());
+        verify(repositorio).save(conexion);
+    }
 }

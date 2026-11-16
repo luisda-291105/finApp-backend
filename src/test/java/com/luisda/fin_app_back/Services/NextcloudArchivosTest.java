@@ -115,6 +115,19 @@ class NextcloudArchivosTest {
     }
 
     @Test
+    void eliminarDefinitivamenteBorraLaEntradaConDeleteSobreLaRuta() throws Exception {
+        String id = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("/remote.php/dav/trashbin/luisd/borrado.pdf".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        servidor.expect(requestTo(org.hamcrest.Matchers.containsString("/remote.php/dav/trashbin/luisd/borrado.pdf")))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withSuccess());
+
+        nextcloud.eliminarDefinitivo(conexion, id);
+
+        servidor.verify();
+    }
+
+    @Test
     void contenidoDescargaElArchivoConBasicAuth() throws Exception {
         servidor.expect(requestTo("https://nextcloud.example.org/remote.php/dav/files/luisd/presupuesto.xlsx"))
                 .andExpect(method(HttpMethod.valueOf("PROPFIND")))

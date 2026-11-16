@@ -58,6 +58,9 @@ public interface SAlmacenamientoArchivos {
     /** Saca el archivo de la papelera del proveedor. */
     void restaurar(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException;
 
+    /** Elimina el archivo de forma permanente (no se puede deshacer). */
+    void eliminarDefinitivo(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException;
+
     /** Vacía la papelera del proveedor para esta cuenta. */
     void vaciarPapelera(MAlmacenamientoConexion conexion) throws GeneralSecurityException;
 

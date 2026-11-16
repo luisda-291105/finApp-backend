@@ -237,7 +237,8 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         String ruta = decodificarId(id);
         if (ruta.startsWith("/remote.php/dav")) {
             // El id ya es una ruta completa (archivo, carpeta o papelera).
-            return quitarSlash(ruta);
+            String limpia = quitarSlash(ruta);
+            return limpia.startsWith("/") ? limpia : "/" + limpia;
         }
         return rutaArchivos(conexion) + quitarSlash(ruta);
     }

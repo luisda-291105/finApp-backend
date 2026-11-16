@@ -58,7 +58,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         boolean papelera = "PAPELERA".equalsIgnoreCase(vista);
         validarVista(vista);
         String carpeta = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId)
-                || "RAIZ".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(carpetaId);
+                || "RAIZ".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(decodificarId(carpetaId));
         String ruta = papelera ? rutaPapelera(conexion) : rutaArchivos(conexion) + carpeta;
         List<Element> respuestas = propfind(conexion, ruta, papelera);
         List<AlmacenamientoArchivoDTO> archivos = new ArrayList<>();
@@ -79,7 +79,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     @Override
     public AlmacenamientoArchivoDTO metadatos(MAlmacenamientoConexion conexion, String fileId)
             throws GeneralSecurityException {
-        return propfindUno(conexion, rutaArchivos(conexion) + quitarSlash(fileId));
+        return propfindUno(conexion, rutaArchivos(conexion) + quitarSlash(decodificarId(fileId)));
     }
 
     @Override
@@ -98,7 +98,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     public AlmacenamientoArchivoDTO crearCarpeta(MAlmacenamientoConexion conexion, String carpetaId, String nombre)
             throws GeneralSecurityException {
         if (nombre == null || nombre.isBlank()) throw new IllegalArgumentException("Indica el nombre de la carpeta.");
-        String padre = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(carpetaId);
+        String padre = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(decodificarId(carpetaId));
         String ruta = rutaArchivos(conexion) + (padre.isBlank() ? "" : padre + "/") + UriUtils.encodePathSegment(nombre, StandardCharsets.UTF_8);
         enviar(conexion, HttpMethod.valueOf("MKCOL"), URI.create(urlServidor(conexion) + ruta), null, null);
         return metadatos(conexion, rutaRelativaDe(rutaArchivos(conexion), ruta));
@@ -108,7 +108,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     public AlmacenamientoArchivoDTO subir(MAlmacenamientoConexion conexion, String carpetaId, String nombreArchivo,
                                           String mime, byte[] contenido) throws GeneralSecurityException {
         if (contenido == null || contenido.length == 0) throw new IllegalArgumentException("El archivo está vacío.");
-        String padre = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(carpetaId);
+        String padre = carpetaId == null || carpetaId.isBlank() || "root".equalsIgnoreCase(carpetaId) ? "" : quitarSlash(decodificarId(carpetaId));
         String ruta = rutaArchivos(conexion) + (padre.isBlank() ? "" : padre + "/")
                 + UriUtils.encodePathSegment(nombreSeguro(nombreArchivo), StandardCharsets.UTF_8);
         enviar(conexion, HttpMethod.PUT, URI.create(urlServidor(conexion) + ruta), contenido,
@@ -124,11 +124,11 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         if ((nombre == null || nombre.isBlank()) && (idNuevoPadre == null || idNuevoPadre.isBlank())) {
             throw new IllegalArgumentException("Indica un nombre nuevo o una carpeta destino.");
         }
-        String origen = rutaArchivos(conexion) + quitarSlash(fileId);
+        String origen = rutaArchivos(conexion) + quitarSlash(decodificarId(fileId));
         String nombreFinal = nombre == null || nombre.isBlank()
                 ? nombreDeRuta(fileId) : nombreSeguro(nombre);
         String destinoRelativo = idNuevoPadre == null || idNuevoPadre.isBlank() || "root".equalsIgnoreCase(idNuevoPadre)
-                ? "" : quitarSlash(idNuevoPadre) + "/";
+                ? "" : quitarSlash(decodificarId(idNuevoPadre)) + "/";
         String destino = rutaArchivos(conexion) + destinoRelativo + UriUtils.encodePathSegment(nombreFinal, StandardCharsets.UTF_8);
         mover(conexion, origen, destino);
         return metadatos(conexion, rutaRelativaDe(rutaArchivos(conexion), destino));
@@ -137,9 +137,9 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     @Override
     public AlmacenamientoArchivoDTO copiar(MAlmacenamientoConexion conexion, String fileId, String idNuevoPadre)
             throws GeneralSecurityException {
-        String origen = rutaArchivos(conexion) + quitarSlash(fileId);
+        String origen = rutaArchivos(conexion) + quitarSlash(decodificarId(fileId));
         String destinoRelativo = idNuevoPadre == null || idNuevoPadre.isBlank() || "root".equalsIgnoreCase(idNuevoPadre)
-                ? "" : quitarSlash(idNuevoPadre) + "/";
+                ? "" : quitarSlash(decodificarId(idNuevoPadre)) + "/";
         String destino = rutaArchivos(conexion) + destinoRelativo + UriUtils.encodePathSegment(
                 "copia de " + nombreDeRuta(fileId), StandardCharsets.UTF_8);
         enviar(conexion, HttpMethod.valueOf("COPY"), URI.create(urlServidor(conexion) + origen), null, null,
@@ -150,14 +150,14 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     @Override
     public void aPapelera(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
         // En Nextcloud, DELETE sobre el archivo lo mueve automáticamente a la papelera del usuario.
-        String ruta = rutaArchivos(conexion) + quitarSlash(fileId);
+        String ruta = rutaArchivos(conexion) + quitarSlash(decodificarId(fileId));
         enviar(conexion, HttpMethod.DELETE, URI.create(urlServidor(conexion) + ruta), null, null);
     }
 
     @Override
     public void restaurar(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
-        // fileId es la ruta en la papelera (contiene el sufijo .d<timestamp>); se devuelve a la raíz de archivos.
-        String origen = fileId.startsWith("/") ? fileId : "/" + fileId;
+        // fileId es la ruta en la papelera (codificada; contiene el sufijo .d<timestamp>); se devuelve a la raíz de archivos.
+        String origen = "/" + quitarSlash(decodificarId(fileId));
         String nombre = nombreEntradaPapelera(fileId);
         String destino = rutaArchivos(conexion) + UriUtils.encodePathSegment(nombre, StandardCharsets.UTF_8);
         mover(conexion, origen, destino);
@@ -214,14 +214,39 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
 
     // ---------- Internos WebDAV ----------
 
+    /** Codifica una ruta como id seguro para rutas REST (un solo segmento, sin barras). */
+    static String codificarId(String ruta) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(ruta.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Decodifica ids base64url; los identificadores en claro (p. ej. "root", "a/b.txt") se devuelven tal cual. */
+    static String decodificarId(String id) {
+        if (id == null) return null;
+        if (id.startsWith("/") || id.contains("/") || id.contains("%")) return id;
+        if (!id.matches("[A-Za-z0-9_-]+")) return id;
+        try {
+            String decodificado = new String(Base64.getUrlDecoder().decode(id), StandardCharsets.UTF_8);
+            return decodificado.startsWith("/") ? decodificado : id;
+        } catch (IllegalArgumentException error) {
+            return id;
+        }
+    }
+
     private RecursoContenido flujoArchivo(MAlmacenamientoConexion conexion, String fileId)
             throws GeneralSecurityException {
-        String ruta = fileId.startsWith("/remote.php/dav/trashbin/")
-                ? fileId : rutaArchivos(conexion) + quitarSlash(fileId);
-        byte[] bytes = enviarBytes(conexion, URI.create(urlServidor(conexion) + ruta));
-        String nombre = nombreDeRuta(quitarSlash(fileId));
-        return new RecursoContenido(new ByteArrayInputStream(bytes), bytes.length,
-                bytes.length == 0 ? "application/octet-stream" : "application/octet-stream", nombreSeguro(nombre));
+        String ruta = decodificarId(fileId);
+        boolean enPapelera = ruta.contains("/trashbin/");
+        if (!enPapelera) ruta = rutaArchivos(conexion) + quitarSlash(ruta);
+        if (!ruta.startsWith("/")) ruta = "/" + ruta;
+        byte[] bytes;
+        String mime = "application/octet-stream";
+        if (!enPapelera) {
+            try { mime = valor(metadatos(conexion, fileId).mime(), "application/octet-stream"); }
+            catch (RuntimeException ignorada) { }
+        }
+        bytes = enviarBytes(conexion, URI.create(urlServidor(conexion) + ruta));
+        String nombre = nombreDeRuta(quitarSlash(ruta));
+        return new RecursoContenido(new ByteArrayInputStream(bytes), bytes.length, mime, nombreSeguro(nombre));
     }
 
     /** PROPFIND Depth 1 que devuelve todos los <d:response> del documento. */
@@ -374,7 +399,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         if (tamanoTexto != null && !tamanoTexto.isBlank()) {
             try { tamano = Long.parseLong(tamanoTexto.trim()); } catch (NumberFormatException ignorada) { tamano = 0; }
         }
-        String id = href.startsWith("/") ? href.substring(1) : href;
+        String id = codificarId(href);
         String padre = papelera ? "" : padreDeHref(href);
         return new AlmacenamientoArchivoDTO(
                 id,
@@ -383,7 +408,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
                 valor(textoHijo(respuesta, "getcontenttype"), carpeta ? "directorio" : "application/octet-stream"),
                 carpeta ? null : tamano,
                 valor(textoHijo(respuesta, "getlastmodified"), ""),
-                padre.isBlank() ? "root" : padre,
+                padre.isBlank() ? "root" : codificarId("/" + padre),
                 false,
                 !papelera,
                 false,

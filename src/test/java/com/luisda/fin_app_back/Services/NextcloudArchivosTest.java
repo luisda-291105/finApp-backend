@@ -117,6 +117,9 @@ class NextcloudArchivosTest {
     @Test
     void contenidoDescargaElArchivoConBasicAuth() throws Exception {
         servidor.expect(requestTo("https://nextcloud.example.org/remote.php/dav/files/luisd/presupuesto.xlsx"))
+                .andExpect(method(HttpMethod.valueOf("PROPFIND")))
+                .andRespond(withStatus(org.springframework.http.HttpStatus.MULTI_STATUS).body(XML_LISTA));
+        servidor.expect(requestTo("https://nextcloud.example.org/remote.php/dav/files/luisd/presupuesto.xlsx"))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", org.hamcrest.Matchers.startsWith("Basic ")))
                 .andRespond(withSuccess(new byte[]{1, 2, 3}, MediaType.APPLICATION_OCTET_STREAM));

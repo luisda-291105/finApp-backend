@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -665,6 +666,11 @@ public class CGmail {
                 String token = tokenAccesoActual(cuenta);
                 registrarWatch(cuenta, token);
                 if (cuenta.getGmailSincronizadoEn() == null) sincronizarInicialMensajes(cuenta, token);
+            } catch (HttpClientErrorException.Unauthorized rechazado) {
+                if (!recuperarConRenovacion(cuenta)) {
+                    LOGGER.warn("La cuenta Gmail {} requiere reconexión: Google rechazó el acceso y no se pudo renovar el token.",
+                            cuenta.getIdFuente());
+                }
             } catch (IOException | GeneralSecurityException | RestClientException | IllegalStateException error) {
                 LOGGER.error("No se pudo renovar watch Gmail para la cuenta {}", cuenta.getIdFuente(), error);
             }
@@ -701,6 +707,13 @@ public class CGmail {
                 procesarMovimientosGmailPendientes(cuenta);
             } catch (CuentaGmailRequiereReconectarException error) {
                 LOGGER.warn("La cuenta Gmail {} requiere reconexión.", cuenta.getIdFuente());
+            } catch (HttpClientErrorException.Unauthorized rechazado) {
+                // Token cacheado revocado o caducado ante Google: se fuerza una renovación y se reintenta;
+                // si vuelve a fallar, se reporta con un aviso corto (sin stack) para no saturar el log.
+                if (!recuperarConRenovacion(cuenta)) {
+                    LOGGER.warn("La cuenta Gmail {} requiere reconexión: Google rechazó el acceso y no se pudo renovar el token.",
+                            cuenta.getIdFuente());
+                }
             } catch (IOException | GeneralSecurityException | RestClientException | IllegalStateException error) {
                 LOGGER.error("No se pudo sincronizar en segundo plano la cuenta Gmail {}", cuenta.getIdFuente(), error);
             }
@@ -1153,6 +1166,23 @@ public class CGmail {
             guardarSuscripcion(cuenta, valorSeguro(mensaje.getRemitente()), valorSeguro(mensaje.getListUnsubscribe()),
                     valorSeguro(mensaje.getListUnsubscribePost()), leerListaJson(mensaje.getEtiquetasJson()),
                     mensaje.getFechaInterna());
+        }
+    }
+
+    /**
+     * Ante un 401 de Google durante la sincronización programada: invalida el token cacheado,
+     * renueva con refresh_token y verifica con una llamada ligera; false si la cuenta sigue rechazada.
+     */
+    private boolean recuperarConRenovacion(MFuente cuenta) {
+        try {
+            cuenta.setExpiraEn(null);
+            fuentes.save(cuenta);
+            String token = tokenAccesoActual(cuenta);
+            obtenerHistoryIdGmail(token);
+            LOGGER.info("Cuenta Gmail {} recuperada tras renovar el token.", cuenta.getIdFuente());
+            return true;
+        } catch (Exception error) {
+            return false;
         }
     }
 

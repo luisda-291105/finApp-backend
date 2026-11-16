@@ -2,7 +2,9 @@ package com.luisda.fin_app_back;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.web.client.RestClient;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +15,12 @@ import java.util.Set;
 @SpringBootApplication
 @EnableScheduling
 public class FinAppBackApplication {
+
+	/** Builder compartido de RestClient para servicios HTTP (Drive, OAuth, tests con MockRestServiceServer). */
+	@Bean
+	public RestClient.Builder constructorRestClient() {
+		return RestClient.builder();
+	}
 
 	public static void main(String[] args) {
 		cargarDotEnv();

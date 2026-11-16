@@ -1,6 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.Model.MUsuario;
+import com.luisda.fin_app_back.OrigenesWeb;
 import com.luisda.fin_app_back.Repository.IAlmacenamientoConexiones;
 import com.luisda.fin_app_back.Services.SAlmacenamientoConexiones;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.GeneralSecurityException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -48,7 +48,7 @@ public class CAlmacenamiento {
         this.conexiones = conexiones;
         this.usuarioActivo = usuarioActivo;
         this.repositorioConexiones = repositorioConexiones;
-        this.origenesPermitidos = Arrays.stream(origenesPermitidos.split(",")).map(String::trim).toList();
+        this.origenesPermitidos = OrigenesWeb.normalizarLista(origenesPermitidos);
     }
 
     /** Lista las conexiones de almacenamiento del usuario activo. */
@@ -136,11 +136,7 @@ public class CAlmacenamiento {
     }
 
     private boolean origenValido(HttpServletRequest request) {
-        String origen = request.getHeader(HttpHeaders.ORIGIN);
-        String cabeceraSolicitud = request.getHeader("X-Requested-With");
-        boolean origenAutorizado = origen != null && origenesPermitidos.contains(origen);
-        boolean cabeceraAutorizada = "XmlHttpRequest".equals(cabeceraSolicitud);
-        return origenAutorizado && cabeceraAutorizada;
+        return OrigenesWeb.permitido(request.getHeader(HttpHeaders.ORIGIN), origenesPermitidos);
     }
 
     public record SolicitudIniciar(String proveedor) { }

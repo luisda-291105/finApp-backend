@@ -32,7 +32,7 @@ class CAlmacenamientoConexionesTest {
     void listarSoloDevuelveConexionesDelUsuarioYMarcaRenovacionPendiente() {
         MUsuario usuario = usuario("u1");
         IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
+        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto"));
 
         MAlmacenamientoConexion vigente = conexion(usuario, "c1", "ACTIVA");
         vigente.setAccessTokenCifrado("material");
@@ -54,7 +54,7 @@ class CAlmacenamientoConexionesTest {
     void stateInvalidoNoCreaConexion() {
         MUsuario usuario = usuario("u1");
         IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
+        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto"));
 
         assertThrows(SAlmacenamientoConexiones.EstadoInvalidoException.class,
                 () -> servicio.completarOAuth(usuario, "", "codigo", "state-falso", null));
@@ -66,7 +66,7 @@ class CAlmacenamientoConexionesTest {
         MUsuario iniciador = usuario("u1");
         MUsuario atacante = usuario("u2");
         IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
+        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto"));
 
         servicio.iniciar(iniciador, "GOOGLE_DRIVE");
         // El state real es opaco; un atacante solo puede reutilizar el suyo u otro. Cualquier
@@ -80,7 +80,7 @@ class CAlmacenamientoConexionesTest {
     void conectarNextcloudCifraLaCredencialYNoLaExpone() throws GeneralSecurityException {
         MUsuario usuario = usuario("u1");
         IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
+        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto"));
 
         // Credencial inválida: el cliente HTTP intentará contactar; sin servidor la validación falla
         // y no se persiste nada, lo que demuestra que no se guarda antes de validar.
@@ -93,7 +93,7 @@ class CAlmacenamientoConexionesTest {
     void desconectarSoloEliminaConexionesPropias() {
         MUsuario usuario = usuario("u1");
         IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
+        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto"));
 
         when(repositorio.findByIdConexionAndUsuario_IdUsuario("ajena", "u1")).thenReturn(Optional.empty());
 
@@ -106,7 +106,7 @@ class CAlmacenamientoConexionesTest {
     void desconectarEliminaLaCredencialDeLaConexionPropia() throws GeneralSecurityException {
         MUsuario usuario = usuario("u1");
         IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto", "secreto"));
+        SAlmacenamientoConexiones servicio = new SAlmacenamientoConexiones(repositorio, new SAlmacenamientoCifrado("secreto"));
 
         MAlmacenamientoConexion conexion = conexion(usuario, "c1", "ACTIVA");
         conexion.setProveedor("NEXTCLOUD");
@@ -143,13 +143,16 @@ class CAlmacenamientoConexionesTest {
         HttpServletRequest sinCabecera = mock(HttpServletRequest.class);
         when(usuarioActivo.obtenerUsuario(sinCabecera)).thenReturn(Optional.of(usuario("u1")));
         when(sinCabecera.getHeader("Origin")).thenReturn("http://localhost:5173");
-        assertEquals(403, controller.completarConexion(new CAlmacenamiento.SolicitudCallback("", "c", "s"), sinCabecera).getStatusCode().value());
-        verify(servicioConexiones, never()).iniciar(any(), any());
+        // Con OrigenesWeb el origen válido basta (ya no se exige X-Requested-With);
+        // el estado de un solo uso lo valida el servicio: con state vacío responde 409.
         try {
-            verify(servicioConexiones, never()).completarOAuth(any(), any(), any(), any(), any());
+            when(servicioConexiones.completarOAuth(any(), any(), any(), any(), any()))
+                    .thenThrow(new SAlmacenamientoConexiones.EstadoInvalidoException("El estado de conexión no es válido."));
         } catch (GeneralSecurityException noEsperada) {
             throw new IllegalStateException(noEsperada);
         }
+        assertEquals(409, controller.completarConexion(new CAlmacenamiento.SolicitudCallback("", "c", "s"), sinCabecera).getStatusCode().value());
+        verify(servicioConexiones, never()).iniciar(any(), any());
     }
 
     private MUsuario usuario(String id) {

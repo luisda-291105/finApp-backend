@@ -31,9 +31,12 @@ public class SAlmacenamientoCifrado {
     private final String secreto;
 
     public SAlmacenamientoCifrado(
-            @Value("${finapp.almacenamiento.cipher-secret:${FINAPP_ALMACENAMIENTO_CIPHER_SECRET:}}") String secretoConfigurado,
-            @Value("${finapp.jwt.secret:${FINAPP_JWT_SECRET:}}") String secretoSesion) {
-        this.secreto = secretoConfigurado != null && !secretoConfigurado.isBlank() ? secretoConfigurado : secretoSesion;
+            @Value("${finapp.almacenamiento.cipher-secret:${FINAPP_ALMACENAMIENTO_CIPHER_SECRET:}}") String secretoConfigurado) {
+        if (secretoConfigurado == null || secretoConfigurado.isBlank()) {
+            throw new IllegalStateException(
+                    "Configura FINAPP_ALMACENAMIENTO_CIPHER_SECRET en el backend: ya no se deriva del secreto del JWT.");
+        }
+        this.secreto = secretoConfigurado;
     }
 
     /** Cifra el valor con AES/GCM y devuelve nonce+ciphertext en Base64. */

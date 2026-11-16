@@ -79,7 +79,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     @Override
     public AlmacenamientoArchivoDTO metadatos(MAlmacenamientoConexion conexion, String fileId)
             throws GeneralSecurityException {
-        return propfindUno(conexion, rutaArchivos(conexion) + quitarSlash(decodificarId(fileId)));
+        return propfindUno(conexion, rutaDeId(conexion, fileId));
     }
 
     @Override
@@ -124,7 +124,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         if ((nombre == null || nombre.isBlank()) && (idNuevoPadre == null || idNuevoPadre.isBlank())) {
             throw new IllegalArgumentException("Indica un nombre nuevo o una carpeta destino.");
         }
-        String origen = rutaArchivos(conexion) + quitarSlash(decodificarId(fileId));
+        String origen = rutaDeId(conexion, fileId);
         String nombreFinal = nombre == null || nombre.isBlank()
                 ? nombreDeRuta(fileId) : nombreSeguro(nombre);
         String destinoRelativo = idNuevoPadre == null || idNuevoPadre.isBlank() || "root".equalsIgnoreCase(idNuevoPadre)
@@ -137,7 +137,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     @Override
     public AlmacenamientoArchivoDTO copiar(MAlmacenamientoConexion conexion, String fileId, String idNuevoPadre)
             throws GeneralSecurityException {
-        String origen = rutaArchivos(conexion) + quitarSlash(decodificarId(fileId));
+        String origen = rutaDeId(conexion, fileId);
         String destinoRelativo = idNuevoPadre == null || idNuevoPadre.isBlank() || "root".equalsIgnoreCase(idNuevoPadre)
                 ? "" : quitarSlash(decodificarId(idNuevoPadre)) + "/";
         String destino = rutaArchivos(conexion) + destinoRelativo + UriUtils.encodePathSegment(
@@ -150,17 +150,17 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     @Override
     public void aPapelera(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
         // En Nextcloud, DELETE sobre el archivo lo mueve automáticamente a la papelera del usuario.
-        String ruta = rutaArchivos(conexion) + quitarSlash(decodificarId(fileId));
+        String ruta = rutaDeId(conexion, fileId);
         enviar(conexion, HttpMethod.DELETE, URI.create(urlServidor(conexion) + ruta), null, null);
     }
 
     @Override
     public void restaurar(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
         // fileId es la ruta en la papelera (codificada; contiene el sufijo .d<timestamp>); se devuelve a la raíz de archivos.
-        String origen = "/" + quitarSlash(decodificarId(fileId));
-        String nombre = nombreEntradaPapelera(fileId);
-        String destino = rutaArchivos(conexion) + UriUtils.encodePathSegment(nombre, StandardCharsets.UTF_8);
-        mover(conexion, origen, destino);
+        String ruta = decodificarId(fileId);
+        String destino = rutaArchivos(conexion) + UriUtils.encodePathSegment(nombreEntradaPapelera(ruta), StandardCharsets.UTF_8);
+        enviar(conexion, HttpMethod.valueOf("MOVE"), URI.create(urlServidor(conexion) + quitarSlash(ruta)), null, null,
+                Map.of("Destination", urlServidor(conexion) + destino));
     }
 
     @Override
@@ -232,11 +232,22 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         }
     }
 
+    /** Resuelve la ruta absoluta del recurso a partir del id (o de una carpeta) de la conexión. */
+    private String rutaDeId(MAlmacenamientoConexion conexion, String id) throws GeneralSecurityException {
+        String ruta = decodificarId(id);
+        if (ruta.startsWith("/remote.php/dav")) {
+            // El id ya es una ruta completa (archivo, carpeta o papelera).
+            return quitarSlash(ruta);
+        }
+        return rutaArchivos(conexion) + quitarSlash(ruta);
+    }
+
     private RecursoContenido flujoArchivo(MAlmacenamientoConexion conexion, String fileId)
             throws GeneralSecurityException {
         String ruta = decodificarId(fileId);
         boolean enPapelera = ruta.contains("/trashbin/");
-        if (!enPapelera) ruta = rutaArchivos(conexion) + quitarSlash(ruta);
+        if (enPapelera) ruta = quitarSlash(ruta);
+        else if (!ruta.startsWith("/remote.php/dav")) ruta = rutaArchivos(conexion) + quitarSlash(ruta);
         if (!ruta.startsWith("/")) ruta = "/" + ruta;
         byte[] bytes;
         String mime = "application/octet-stream";

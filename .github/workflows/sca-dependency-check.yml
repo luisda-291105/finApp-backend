@@ -17,19 +17,30 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
+          cache: maven
+
+      - name: Compilar el proyecto para analizar los artefactos
+        run: ./mvnw -B -DskipTests package
 
       - name: Ejecutar OWASP Dependency Check
-        uses: dependency-check/dependency-check-action@v4
+        uses: dependency-check/Dependency-Check_Action@main
+        env:
+          # actions/setup-java altera JAVA_HOME; el runner del action usa su propio JDK (/opt/jdk)
+          JAVA_HOME: /opt/jdk
         with:
-          project-type: 'java'
-          fail-build-on-vulnerability: true
-          output-directory: target/dependency-check-report
+          project: 'fin_app_back'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
 
       - name: Subir reporte de dependencias
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: target/dependency-check-report
+          path: reports
           if-no-files-found: ignore

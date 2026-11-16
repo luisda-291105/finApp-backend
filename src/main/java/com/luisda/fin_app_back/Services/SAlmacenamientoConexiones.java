@@ -57,7 +57,7 @@ public class SAlmacenamientoConexiones {
     private static final String URL_AUTORIZAR_MICROSOFT = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
     private static final String URL_PERFIL_MICROSOFT = "https://graph.microsoft.com/v1.0/me";
     private static final String URL_REVOCAR_MICROSOFT = "https://graph.microsoft.com/v1.0/me/revokeSignInSessions";
-    private static final String SCOPE_GOOGLE = "openid email profile";
+    private static final String SCOPE_GOOGLE = "https://www.googleapis.com/auth/drive openid email profile";
     private static final String SCOPE_MICROSOFT = "openid profile email offline_access User.Read";
     private static final long VIDA_STATE_SEGUNDOS = 600;
     private static final long MARGEN_RENOVACION_SEGUNDOS = 60;
@@ -224,6 +224,13 @@ public class SAlmacenamientoConexiones {
         JsonNode tokens = canjearToken(URL_TOKEN_GOOGLE, clientIdGoogle.trim(), clientSecretGoogle.trim(), code, null, redirectUri);
         String accessToken = tokens.path("access_token").asText("");
         if (accessToken.isBlank()) throw new IllegalStateException("Google no devolvió un token de acceso.");
+        // Verifica que el alcance concedido incluya Google Drive; si no, la conexión fallaría al listar.
+        String alcance = tokens.path("scope").asText("");
+        if (!alcance.contains("https://www.googleapis.com/auth/drive")) {
+            LOGGER.warn("Autorización de Google Drive sin alcance drive (scope={})", alcance);
+            throw new EstadoInvalidoException(
+                    "Google autorizó la sesión sin acceso a Google Drive. Vuelve a conectar la cuenta y acepta el permiso de Drive.");
+        }
         String refreshToken = tokens.path("refresh_token").asText("");
         long expiraEn = tokens.path("expires_in").asLong(DURACION_TOKEN_SEGUNDOS_POR_DEFECTO);
         JsonNode perfil = respuestaJson(clienteHttp().get().uri(URI.create(URL_PERFIL_GOOGLE))

@@ -266,14 +266,20 @@ public class SMovimientoContable {
         }
         MBolsillo bolsillo = bolsilloPropio(idUsuario, solicitud.idBolsillo());
         if (!bolsillo.isEstado()) throw new IllegalArgumentException("Activa el bolsillo para registrar movimientos.");
-        // Allow manual registration on AHORRO, GASTO, and INGRESO pockets
-        if (tipoMovimiento == null) {
-            String tipoBolsilloNorm = normalizarTipo(bolsillo.getTipo());
+        String tipo;
+        if (tipoMovimiento != null) {
+            // Importaciones automáticas (Gmail): el tipo ya viene resuelto por el clasificador.
+            tipo = normalizarTipo(tipoMovimiento);
+        } else {
+            // Registro manual: el tipo llega en la solicitud (interfaz) o se deduce del bolsillo (asistente).
+            String tipoBolsilloNorm = tipoBolsillo(bolsillo);
             if (!Set.of("AHORRO", "GASTO", "INGRESO").contains(tipoBolsilloNorm)) {
                 throw new IllegalArgumentException("Los movimientos manuales solo pueden asignarse a un bolsillo de tipo AHORRO, GASTO o INGRESO.");
             }
+            tipo = solicitud.tipo() == null || solicitud.tipo().isBlank()
+                    ? tipoBolsilloNorm
+                    : tipoManual(solicitud.tipo());
         }
-        String tipo = tipoMovimiento == null ? normalizarTipo(bolsillo.getTipo()) : normalizarTipo(tipoMovimiento);
         Origen origen = resolverOrigen(idUsuario, solicitud, tipo, null);
         if (!omitirSaldo) validarSaldoDisponible(origen.bolsillo(), tipo, solicitud.monto(), null);
         MMovimientoContable movimiento = new MMovimientoContable();

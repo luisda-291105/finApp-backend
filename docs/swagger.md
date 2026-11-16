@@ -13,6 +13,41 @@ Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asisten
 
 El CRUD de suscripciones manuales (tabla única `suscripcion`, con `origen` MANUAL/GMAIL) está documentado en [`docs/suscripciones.md`](suscripciones.md).
 
+## Almacenamiento en la nube (B1–B8)
+
+Rutas del dominio `finapp.almacenamiento.*`, con proveedor por conexión (`GOOGLE_DRIVE`, `NEXTCLOUD`) vía `SArchivosPorConexion`.
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| `GET` | `/api/almacenamiento/conexiones` | Listar conexiones del usuario | Manual |
+| `GET` | `/api/almacenamiento/conexiones/{idConexion}` | Obtener conexión | Manual (ownership) |
+| `POST` | `/api/almacenamiento/conexiones/iniciar` | Iniciar OAuth nuevo almacenamiento | Manual |
+| `GET` | `/api/almacenamiento/conexiones/callback` | Callback OAuth | Público* (valida `state`) |
+| `DELETE` | `/api/almacenamiento/conexiones/{idConexion}` | Desconectar | Manual (ownership) |
+| `GET` | `/api/almacenamiento/conexiones/nextcloud` | Listar archivos Nextcloud | Manual (ownership) |
+
+### Archivos sobre una conexión
+
+| Método | Ruta | Función | Body/Params |
+|--------|------|---------|-------------|
+| `GET` | `/api/almacenamiento/conexiones/{idConexion}/archivos` | Listar (carpetaId, vista, busqueda, orden, ordenCampo, ordenDireccion, pagina) | Query |
+| `GET` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}` | Metadatos | Path |
+| `GET` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/contenido` | Contenido (descargar=false stream inline) | Path + `descargar` |
+| `GET` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/previsualizacion` | Previsualización (stream inline) | Path |
+| `POST` | `/api/almacenamiento/conexiones/{idConexion}/archivos/carpeta` | Crear carpeta | `SolicitudCarpeta` |
+| `POST` | `/api/almacenamiento/conexiones/{idConexion}/archivos/subir` | Subir archivo (multipart, 100 MB) | `MultipartFile archivo` + `idPadre` |
+| `PATCH` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}` | Renombrar / mover / destacar | `SolicitudActualizar` |
+| `POST` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/copiar` | Copiar | `SolicitudCarpeta` |
+| `DELETE` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}` | Papelera | — |
+| `POST` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/restaurar` | Restaurar | — |
+| `DELETE` | `/api/almacenamiento/conexiones/{idConexion}/archivos/papelera` | Vaciar papelera | — |
+| `GET` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/permisos` | Listar permisos | — |
+| `POST` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/permisos` | Compartir | `SolicitudPermiso` |
+| `DELETE` | `/api/almacenamiento/conexiones/{idConexion}/archivos/{fileId}/permisos/{permisoId}` | Revocar permiso | — |
+| `POST` | `/api/almacenamiento/conexiones/{idConexion}/archivos/lote` | Lote (ZIP en backend) | `SolicitudLote` |
+
+Vistas soportadas: `unidad`, `recientes`, `compartidos`, `destacados`, `papelera`. Orígenes permitidos: escrituras con `Origin` en `WEB_ALLOWED_ORIGINS` (validación CSRF), nunca con `X-Requested-With` solamente.
+
 ## Cookie de sesión y orígenes permitidos
 
 La sesión viaja en la cookie `FINAPP_AUTH` (`HttpOnly`). Su comportamiento se ajusta con el entorno:
@@ -113,3 +148,19 @@ La API usa JWT. Hay tres vías:
 - El logout revoca el token en el servidor (deny-list de `jti`), por lo que un token copiado deja de servir tras cerrar sesión.
 
 La especificación también se puede importar en clientes compatibles con OpenAPI usando la URL `/api-docs`.
+
+## Almacenamiento en la nube (resumen B1–B8)
+
+- **Conexiones y tokens:** OAuth Google Drive con scope `https://www.googleapis.com/auth/drive openid email profile`;
+  refresh token renova access token; fallo → conexión `REQUIERE_RECONEXION` (`409` con código `CONEXION_REQUIERE_RECONEXION`).
+- **Cifrado:** AES/GCM con `FINAPP_ALMACENAMIENTO_CIPHER_SECRET` (clave propia; ya no se deriva del JWT).
+- **Proveedores:** `GoogleDriveArchivos` (Drive v3) y `NextcloudArchivos` (WebDAV), ambos tras `SArchivosPorConexion`
+  (router por `proveedor`); el proveedor no soportado responde `400 AlmacenamientoProveedorNoSoportado`.
+- **Errores operativos:** proveedor 401 → renovar y reintentar → si falla, `409 CONEXION_REQUIERE_RECONEXION`;
+  403 → reconexión; 404 → `AlmacenamientoRecursoNoEncontrado`; 429 → cuota agotada; 5xx → backoff.
+- **Listados:** caché de 60 s por conexión+carpeta (`SCacheListadosAlmacenamiento`), invalidada tras escrituras.
+- **Subidas:** multipart con `spring.servlet.multipart.max-file-size=100MB` (y `max-request-size=110MB`).
+
+La documentación de los servicios y controladores se mantiene en el cerebro de desarrollo:
+[`Controller/CAlmacenamiento.md`](../../Nextcloud/cerebro/desarrollo/finApp/backend/Controller/CAlmacenamiento.md) y
+[`Services/README.md`](../../Nextcloud/cerebro/desarrollo/finApp/backend/Services/README.md).

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * @uso               Manejo centralizado de errores de la API
@@ -46,7 +47,7 @@ public class ManejoErroresApi {
         ));
     }
 
-    /** Si la respuesta ya fue comprometida (p. ej. stream de archivo ya enviado y abortado por el cliente), no escribe un error JSON. */
+    /** Si la respuesta ya fue comprometida (p. ej. stream de archivo ya enviado y abortado por el client), no escribe un error JSON. */
     @ExceptionHandler(Exception.class)
     public Object genérico(Exception error, org.springframework.web.context.request.RequestAttributes atributos) {
         org.springframework.web.context.request.HttpRequest request = atributos.getRequest();

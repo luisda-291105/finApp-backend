@@ -38,6 +38,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!--
+			Spring Framework 7 comprueba (instanceof) org.reactivestreams.Publisher al construir
+			MultipartBodyBuilder. Sin esta dependencia la subida de archivos a la nube falla con
+			NoClassDefFoundError. La gestiona spring-boot-starter-parent.
+		-->
+		<dependency>
+			<groupId>org.reactivestreams</groupId>
+			<artifactId>reactive-streams</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>

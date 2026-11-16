@@ -187,6 +187,17 @@ public class CAlmacenamientoArchivos {
         } catch (Exception error) { return respuestaError(error); }
     }
 
+    @DeleteMapping("/{fileId}/permanente")
+    public ResponseEntity<?> eliminarDefinitivo(@PathVariable String idConexion, @PathVariable String fileId,
+                                                HttpServletRequest request) {
+        if (!origenValido(request)) return prohibido();
+        try {
+            MAlmacenamientoConexion conexion = conexionPropia(request, idConexion);
+            proveedor.eliminarDefinitivo(conexion, fileId);
+            return ResponseEntity.noContent().build();
+        } catch (Exception error) { return respuestaError(error); }
+    }
+
     @DeleteMapping("/papelera")
     public ResponseEntity<?> vaciarPapelera(@PathVariable String idConexion, HttpServletRequest request) {
         if (!origenValido(request)) return prohibido();

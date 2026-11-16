@@ -181,6 +181,13 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
     }
 
     @Override
+    public void eliminarDefinitivo(MAlmacenamientoConexion conexion, String fileId) throws GeneralSecurityException {
+        // En Nextcloud, DELETE sobre una entrada que ya está en la papelera la borra de forma permanente.
+        String ruta = rutaDeId(conexion, fileId);
+        enviar(conexion, HttpMethod.DELETE, URI.create(urlServidor(conexion) + ruta), null, null);
+    }
+
+    @Override
     public void vaciarPapelera(MAlmacenamientoConexion conexion) throws GeneralSecurityException {
         String ruta = rutaPapelera(conexion);
         if (!"/".equals(ruta)) {

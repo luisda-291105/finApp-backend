@@ -15,6 +15,9 @@ public interface IGmailPapeleraListaBlanca extends JpaRepository<MGmailPapeleraL
     /** Remitente concreto de la lista blanca de una cuenta. */
     Optional<MGmailPapeleraListaBlanca> findByFuente_IdFuenteAndRemitente(String idFuente, String remitente);
 
+    /** Fila concreta de la lista blanca por su identificador, restringida a la cuenta indicada. */
+    Optional<MGmailPapeleraListaBlanca> findByIdAndFuente_IdFuente(String id, String idFuente);
+
     /** Indica si un remitente ya está en la lista blanca de la cuenta. */
     boolean existsByFuente_IdFuenteAndRemitente(String idFuente, String remitente);
 }

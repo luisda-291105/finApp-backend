@@ -2,13 +2,21 @@ package com.luisda.fin_app_back.Services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.luisda.fin_app_back.DTO.GmailListaBlancaDTO;
+import com.luisda.fin_app_back.DTO.GmailPapeleraConfiguracionDTO;
 import com.luisda.fin_app_back.DTO.GmailPapeleraDTO;
 import com.luisda.fin_app_back.DTO.GmailPapeleraMovimientoDTO;
 import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGmailMensaje;
+import com.luisda.fin_app_back.Model.MGmailPapeleraCategoria;
+import com.luisda.fin_app_back.Model.MGmailPapeleraConfiguracion;
+import com.luisda.fin_app_back.Model.MGmailPapeleraListaBlanca;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGmailMensajes;
+import com.luisda.fin_app_back.Repository.IGmailPapeleraCategoria;
+import com.luisda.fin_app_back.Repository.IGmailPapeleraConfiguracion;
+import com.luisda.fin_app_back.Repository.IGmailPapeleraListaBlanca;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -25,20 +33,29 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 /**
- * @uso               Lista la Papelera de una cuenta Gmail en vivo y mueve/restaura correos
+ * @uso               Lista la Papelera de una cuenta Gmail en vivo, mueve/restaura correos y gestiona
+ *                    su configuración por categoría y su lista blanca
  * @capa              Servicio
  * @responsabilidades Consultar `messages.list?q=in:trash` con paginación, obtener los metadatos de
  *                    cada mensaje (`internalDate` → `eliminacion_estimada_en`, `labelIds`) con
- *                    backoff, combinar el marcador local del movimiento automático y mover/restaurar
+ *                    backoff, combinar el marcador local del movimiento automático, mover/restaurar
  *                    con `messages.modify` actualizando el estado local (RF-01..RF-05, RF-13..RF-20)
- * @datos             Respuestas de la API de Gmail (formato metadata) y filas de `gmail_mensaje`
- * @dependencias      IGmailMensajes, SGmailMensajes (credenciales/cifrado), IFuentes
+ *                    y leer/actualizar la configuración por categoría y la lista blanca (RF-33,
+ *                    RF-34, RF-36, RF-37)
+ * @datos             Respuestas de la API de Gmail (formato metadata), filas de `gmail_mensaje`,
+ *                    configuración/categorías de papelera y lista blanca
+ * @dependencias      IGmailMensajes, SGmailMensajes (credenciales/cifrado), IFuentes,
+ *                    IGmailPapeleraConfiguracion, IGmailPapeleraCategoria, IGmailPapeleraListaBlanca
  * @usadoPor          CPapeleraGmail
  */
 @Service
@@ -58,17 +75,34 @@ public class SPapeleraGmail {
     private static final String ESTADO_PAPELERA = "EN_PAPELERA";
     private static final String ESTADO_BANDEJA = "EN_BANDEJA";
 
+    /** Categorías configurables, en el orden que expone el contrato (sección 4). */
+    private static final List<String> CATEGORIAS = List.of(
+            "CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS", "CATEGORY_UPDATES", "SPAM");
+    private static final Set<String> CATEGORIAS_CONOCIDAS = Set.copyOf(CATEGORIAS);
+    /** Categoría que exige aceptar la advertencia para activarse (RF-34). */
+    private static final String CATEGORIA_UPDATES = "CATEGORY_UPDATES";
+    private static final int LONGITUD_MAXIMA_REMITENTE = 320;
+    /** Formato mínimo de una dirección de correo; acepta también `Nombre <correo@dominio>`. */
+    private static final Pattern PATRON_REMITENTE = Pattern.compile("[^@\\s<>]+@[^@\\s<>]+\\.[^@\\s<>]+");
+
     private final IGmailMensajes mensajes;
     private final SGmailMensajes servicioMensajes;
     private final IFuentes fuentes;
+    private final IGmailPapeleraConfiguracion configuraciones;
+    private final IGmailPapeleraCategoria categorias;
+    private final IGmailPapeleraListaBlanca listaBlanca;
     private final RestClient clienteHttp;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SPapeleraGmail(IGmailMensajes mensajes, SGmailMensajes servicioMensajes, IFuentes fuentes,
-                          RestClient.Builder constructorCliente) {
+                          IGmailPapeleraConfiguracion configuraciones, IGmailPapeleraCategoria categorias,
+                          IGmailPapeleraListaBlanca listaBlanca, RestClient.Builder constructorCliente) {
         this.mensajes = mensajes;
         this.servicioMensajes = servicioMensajes;
         this.fuentes = fuentes;
+        this.configuraciones = configuraciones;
+        this.categorias = categorias;
+        this.listaBlanca = listaBlanca;
         this.clienteHttp = constructorCliente.build();
     }
 
@@ -170,6 +204,136 @@ public class SPapeleraGmail {
         entidad.setPapeleraExenta(true);
         mensajes.save(entidad);
         return new GmailPapeleraMovimientoDTO(mensajeId, ESTADO_BANDEJA, null);
+    }
+
+    /**
+     * Configuración de la regla automática de la cuenta (RF-33): las cinco categorías con su estado,
+     * la antigüedad mínima, el límite por ejecución y si la cuenta tiene el permiso ampliado. Si la
+     * cuenta todavía no tiene configuración, se crea de forma perezosa con los valores por defecto.
+     */
+    public GmailPapeleraConfiguracionDTO configuracion(MFuente cuenta) {
+        MGmailPapeleraConfiguracion config = cargarConfiguracion(cuenta);
+        return construirRespuesta(cuenta, config, categoriasPorNombre(cuenta));
+    }
+
+    /**
+     * Actualiza las categorías activas, la antigüedad mínima, el límite por ejecución y la aceptación
+     * de advertencias (RF-33/RF-34/RF-37). Activar una categoría registra su instante de activación
+     * (para que la regla aplique solo a correos recibidos desde ese momento); desactivarla lo borra.
+     */
+    public GmailPapeleraConfiguracionDTO actualizarConfiguracion(MFuente cuenta,
+            GmailPapeleraConfiguracionDTO.Solicitud solicitud) {
+        GmailPapeleraConfiguracionDTO.Solicitud peticion = solicitud == null
+                ? GmailPapeleraConfiguracionDTO.Solicitud.vacia() : solicitud;
+        List<String> activas = peticion.categoriasActivas() == null ? List.of() : peticion.categoriasActivas();
+
+        for (String categoria : activas) {
+            if (!CATEGORIAS_CONOCIDAS.contains(categoria))
+                throw new IllegalArgumentException("Categoría de Gmail no válida: " + categoria + ".");
+        }
+        if (peticion.antiguedadMinimaDias() != null && peticion.antiguedadMinimaDias() < 0)
+            throw new IllegalArgumentException("La antigüedad mínima debe ser un entero mayor o igual que 0.");
+        if (peticion.limitePorEjecucion() != null && peticion.limitePorEjecucion() <= 0)
+            throw new IllegalArgumentException("El límite por ejecución debe ser un entero mayor que 0.");
+        if (activas.contains(CATEGORIA_UPDATES) && !Boolean.TRUE.equals(peticion.advertenciaAceptada()))
+            throw new IllegalArgumentException("Debes aceptar la advertencia para activar CATEGORY_UPDATES.");
+        if (!activas.isEmpty() && !cuenta.tienePermisoModificarGmail()) throw new RequiereScopeException();
+
+        MGmailPapeleraConfiguracion config = cargarConfiguracion(cuenta);
+        if (peticion.antiguedadMinimaDias() != null) config.setAntiguedadMinimaDias(peticion.antiguedadMinimaDias());
+        if (peticion.limitePorEjecucion() != null) config.setLimitePorEjecucion(peticion.limitePorEjecucion());
+        configuraciones.save(config);
+
+        Map<String, MGmailPapeleraCategoria> filas = categoriasPorNombre(cuenta);
+        for (String categoria : CATEGORIAS) {
+            MGmailPapeleraCategoria fila = filas.get(categoria);
+            if (fila == null) {
+                fila = new MGmailPapeleraCategoria(UUID.randomUUID().toString(), cuenta, categoria);
+                filas.put(categoria, fila);
+            }
+            boolean activa = activas.contains(categoria);
+            fila.setAdvertenciaAceptada(CATEGORIA_UPDATES.equals(categoria)
+                    && activa && Boolean.TRUE.equals(peticion.advertenciaAceptada()));
+            if (activa && !fila.isActiva()) fila.setActivadaEn(Instant.now());
+            if (!activa) fila.setActivadaEn(null);
+            fila.setActiva(activa);
+            categorias.save(fila);
+        }
+        return construirRespuesta(cuenta, config, filas);
+    }
+
+    /** Remitentes exentos de la regla automática de la cuenta (RF-36). */
+    public GmailListaBlancaDTO listarListaBlanca(MFuente cuenta) {
+        List<GmailListaBlancaDTO.Remitente> remitentes =
+                listaBlanca.findByFuente_IdFuenteOrderByRemitenteAsc(cuenta.getIdFuente()).stream()
+                        .map(fila -> new GmailListaBlancaDTO.Remitente(fila.getId(), fila.getRemitente()))
+                        .toList();
+        return new GmailListaBlancaDTO(remitentes);
+    }
+
+    /**
+     * Añade un remitente a la lista blanca de la cuenta (RF-36). Normaliza y valida la dirección;
+     * si el remitente ya está exento devuelve la fila existente sin duplicarla.
+     */
+    public GmailListaBlancaDTO.Remitente agregarRemitente(MFuente cuenta, String remitente) {
+        String normalizado = normalizarRemitente(remitente);
+        Optional<MGmailPapeleraListaBlanca> existente =
+                listaBlanca.findByFuente_IdFuenteAndRemitente(cuenta.getIdFuente(), normalizado);
+        if (existente.isPresent()) {
+            return new GmailListaBlancaDTO.Remitente(existente.get().getId(), existente.get().getRemitente());
+        }
+        MGmailPapeleraListaBlanca fila = listaBlanca.save(
+                new MGmailPapeleraListaBlanca(UUID.randomUUID().toString(), cuenta, normalizado));
+        return new GmailListaBlancaDTO.Remitente(fila.getId(), fila.getRemitente());
+    }
+
+    /** Quita un remitente de la lista blanca de la cuenta; `404` si no está en la lista (RF-36). */
+    public void eliminarRemitente(MFuente cuenta, String remitenteId) {
+        MGmailPapeleraListaBlanca fila = listaBlanca
+                .findByIdAndFuente_IdFuente(remitenteId, cuenta.getIdFuente())
+                .orElseThrow(RemitenteNoEncontradoException::new);
+        listaBlanca.delete(fila);
+    }
+
+    /** Configuración de la cuenta o una nueva con los valores por defecto si aún no existe. */
+    private MGmailPapeleraConfiguracion cargarConfiguracion(MFuente cuenta) {
+        return configuraciones.findByFuente_IdFuente(cuenta.getIdFuente())
+                .orElseGet(() -> configuraciones.save(new MGmailPapeleraConfiguracion(cuenta)));
+    }
+
+    /** Filas de categoría configuradas de la cuenta, indexadas por nombre de categoría. */
+    private Map<String, MGmailPapeleraCategoria> categoriasPorNombre(MFuente cuenta) {
+        Map<String, MGmailPapeleraCategoria> filas = new HashMap<>();
+        for (MGmailPapeleraCategoria fila : categorias.findByFuente_IdFuente(cuenta.getIdFuente())) {
+            filas.put(fila.getCategoria(), fila);
+        }
+        return filas;
+    }
+
+    /** Arma la respuesta de configuración a partir del estado ya cargado/mutado. */
+    private GmailPapeleraConfiguracionDTO construirRespuesta(MFuente cuenta, MGmailPapeleraConfiguracion config,
+            Map<String, MGmailPapeleraCategoria> filas) {
+        List<GmailPapeleraConfiguracionDTO.CategoriaConfigurada> categoriasDto = new ArrayList<>();
+        for (String categoria : CATEGORIAS) {
+            MGmailPapeleraCategoria fila = filas.get(categoria);
+            categoriasDto.add(new GmailPapeleraConfiguracionDTO.CategoriaConfigurada(
+                    categoria,
+                    fila != null && fila.isActiva(),
+                    CATEGORIA_UPDATES.equals(categoria),
+                    fila != null && fila.isAdvertenciaAceptada()));
+        }
+        return new GmailPapeleraConfiguracionDTO(categoriasDto, config.getAntiguedadMinimaDias(),
+                config.getLimitePorEjecucion(), cuenta.tienePermisoModificarGmail());
+    }
+
+    /** Normaliza y valida una dirección de correo; lanza `IllegalArgumentException` si no es válida. */
+    private static String normalizarRemitente(String remitente) {
+        if (remitente == null) throw new IllegalArgumentException("El remitente es obligatorio.");
+        String normalizado = remitente.trim();
+        if (normalizado.isEmpty() || normalizado.length() > LONGITUD_MAXIMA_REMITENTE
+                || !PATRON_REMITENTE.matcher(normalizado).find())
+            throw new IllegalArgumentException("El remitente no es una dirección de correo válida.");
+        return normalizado;
     }
 
     /**
@@ -311,4 +475,10 @@ public class SPapeleraGmail {
 
     /** El mensaje no pertenece a la cuenta indicada: `404`. */
     public static class CorreoNoEncontradoException extends RuntimeException { }
+
+    /** Activar categorías exige el permiso ampliado de Gmail: `409 requires_scope_authorization`. */
+    public static class RequiereScopeException extends IllegalStateException { }
+
+    /** El remitente no está en la lista blanca de la cuenta: `404`. */
+    public static class RemitenteNoEncontradoException extends RuntimeException { }
 }

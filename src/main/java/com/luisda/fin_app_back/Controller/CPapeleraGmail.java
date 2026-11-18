@@ -1,5 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
+import com.luisda.fin_app_back.DTO.GmailListaBlancaDTO;
+import com.luisda.fin_app_back.DTO.GmailPapeleraConfiguracionDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Services.SPapeleraGmail;
@@ -8,9 +10,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,9 +30,9 @@ import java.util.Map;
  * @capa              Controlador
  * @responsabilidades Sesión, propiedad de la cuenta y traducción de errores de la Papelera a
  *                    `{ "message": … }` + flag (`requires_reconnect` / `requires_scope_authorization` /
- *                    `mail_unavailable`)
- * @datos             Peticiones HTTP bajo `/api/gmail/cuentas/{cuentaId}` (papelera, mover y restaurar)
- *                    y DTOs de papelera
+ *                    `mail_unavailable`), además de la configuración por categoría y la lista blanca
+ * @datos             Peticiones HTTP bajo `/api/gmail/cuentas/{cuentaId}` (papelera, mover, restaurar,
+ *                    configuración y lista blanca) y DTOs de papelera
  * @dependencias      IFuentes, SPapeleraGmail, SUsuarioActivo
  * @usadoPor          Frontend de correos (vista Papelera y detalle del correo)
  */
@@ -110,8 +115,78 @@ public class CPapeleraGmail {
         }
     }
 
+    /** Lee la configuración por categoría de la cuenta (RF-33). No exige el permiso ampliado. */
+    @GetMapping("/papelera/configuracion")
+    public ResponseEntity<?> configuracion(@PathVariable String cuentaId, HttpServletRequest request) {
+        Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        return ResponseEntity.ok(papelera.configuracion(resolucion.cuenta()));
+    }
+
+    /** Actualiza la configuración por categoría de la cuenta (RF-33/RF-34/RF-37). */
+    @PutMapping("/papelera/configuracion")
+    public ResponseEntity<?> actualizarConfiguracion(@PathVariable String cuentaId,
+                                                     @RequestBody(required = false) GmailPapeleraConfiguracionDTO.Solicitud solicitud,
+                                                     HttpServletRequest request) {
+        Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        try {
+            return ResponseEntity.ok(papelera.actualizarConfiguracion(resolucion.cuenta(), solicitud));
+        } catch (SPapeleraGmail.RequiereScopeException error) {
+            return respuestaScopeNoAutorizado();
+        } catch (IllegalArgumentException error) {
+            return respuestaSolicitudInvalida(error.getMessage());
+        }
+    }
+
+    /** Lista los remitentes exentos de la regla automática (RF-36). No exige el permiso ampliado. */
+    @GetMapping("/papelera/lista-blanca")
+    public ResponseEntity<?> listarListaBlanca(@PathVariable String cuentaId, HttpServletRequest request) {
+        Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        return ResponseEntity.ok(papelera.listarListaBlanca(resolucion.cuenta()));
+    }
+
+    /** Añade un remitente a la lista blanca de la cuenta (RF-36). */
+    @PostMapping("/papelera/lista-blanca")
+    public ResponseEntity<?> agregarRemitente(@PathVariable String cuentaId,
+                                              @RequestBody(required = false) GmailListaBlancaDTO.Solicitud solicitud,
+                                              HttpServletRequest request) {
+        Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        try {
+            GmailListaBlancaDTO.Remitente creado = papelera.agregarRemitente(resolucion.cuenta(),
+                    solicitud == null ? null : solicitud.remitente());
+            return ResponseEntity.status(HttpStatus.CREATED).body(creado);
+        } catch (IllegalArgumentException error) {
+            return respuestaSolicitudInvalida(error.getMessage());
+        }
+    }
+
+    /** Quita un remitente de la lista blanca de la cuenta (RF-36). */
+    @DeleteMapping("/papelera/lista-blanca/{remitenteId}")
+    public ResponseEntity<?> eliminarRemitente(@PathVariable String cuentaId, @PathVariable String remitenteId,
+                                               HttpServletRequest request) {
+        Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        try {
+            papelera.eliminarRemitente(resolucion.cuenta(), remitenteId);
+            return ResponseEntity.noContent().build();
+        } catch (SPapeleraGmail.RemitenteNoEncontradoException error) {
+            return respuestaRemitenteAusente();
+        }
+    }
+
     /** Sesión activa, cuenta Gmail propia conectada y permiso ampliado concedido. */
     private Resolucion resolverCuenta(HttpServletRequest request, String cuentaId) {
+        Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
+        if (resolucion.error() != null) return resolucion;
+        if (!resolucion.cuenta().tienePermisoModificarGmail()) return new Resolucion(null, respuestaScopeNoAutorizado());
+        return resolucion;
+    }
+
+    /** Sesión activa y cuenta Gmail propia conectada, sin exigir el permiso ampliado. */
+    private Resolucion resolverCuentaSinPermiso(HttpServletRequest request, String cuentaId) {
         var usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null) return new Resolucion(null, ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("message", "No hay una sesión activa.")));
@@ -120,7 +195,6 @@ public class CPapeleraGmail {
             return new Resolucion(null, ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "No se encontró esa cuenta Gmail conectada.")));
         }
-        if (!cuenta.tienePermisoModificarGmail()) return new Resolucion(null, respuestaScopeNoAutorizado());
         return new Resolucion(cuenta, null);
     }
 
@@ -140,6 +214,19 @@ public class CPapeleraGmail {
     private ResponseEntity<Map<String, Object>> respuestaMensajeAjeno() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
                 "message", "Ese correo no pertenece a esta cuenta Gmail."
+        ));
+    }
+
+    /** 400 cuando la solicitud de configuración o lista blanca trae valores no válidos. */
+    private ResponseEntity<Map<String, Object>> respuestaSolicitudInvalida(String mensaje) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "message", mensaje == null || mensaje.isBlank() ? "La solicitud enviada no es válida." : mensaje
+        ));
+    }
+
+    private ResponseEntity<Map<String, Object>> respuestaRemitenteAusente() {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                "message", "Ese remitente no está en la lista blanca de la cuenta."
         ));
     }
 

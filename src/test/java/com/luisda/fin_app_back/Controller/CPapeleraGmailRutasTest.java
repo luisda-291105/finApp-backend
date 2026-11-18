@@ -36,6 +36,11 @@ class CPapeleraGmailRutasTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/mensajes/{mensajeId}/papelera'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/mensajes/{mensajeId}/restaurar'].post").exists())
-                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera'].get").exists());
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/configuracion'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/configuracion'].put").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca/{remitenteId}'].delete").exists());
     }
 }

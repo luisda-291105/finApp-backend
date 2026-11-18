@@ -6,6 +6,9 @@ import com.luisda.fin_app_back.Model.MGmailMensaje;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGmailMensajes;
+import com.luisda.fin_app_back.Repository.IGmailPapeleraCategoria;
+import com.luisda.fin_app_back.Repository.IGmailPapeleraConfiguracion;
+import com.luisda.fin_app_back.Repository.IGmailPapeleraListaBlanca;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -49,6 +52,9 @@ class SPapeleraGmailMovimientoTest {
     private IGmailMensajes mensajes;
     private SGmailMensajes servicioMensajes;
     private IFuentes fuentes;
+    private IGmailPapeleraConfiguracion configuraciones;
+    private IGmailPapeleraCategoria categorias;
+    private IGmailPapeleraListaBlanca listaBlanca;
     private MockRestServiceServer servidor;
     private SPapeleraGmail papelera;
     private MFuente cuenta;
@@ -58,9 +64,13 @@ class SPapeleraGmailMovimientoTest {
         mensajes = mock(IGmailMensajes.class);
         servicioMensajes = mock(SGmailMensajes.class);
         fuentes = mock(IFuentes.class);
+        configuraciones = mock(IGmailPapeleraConfiguracion.class);
+        categorias = mock(IGmailPapeleraCategoria.class);
+        listaBlanca = mock(IGmailPapeleraListaBlanca.class);
         RestClient.Builder constructor = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(constructor).build();
-        papelera = new SPapeleraGmail(mensajes, servicioMensajes, fuentes, constructor);
+        papelera = new SPapeleraGmail(mensajes, servicioMensajes, fuentes, configuraciones, categorias, listaBlanca,
+                constructor);
 
         MUsuario usuario = new MUsuario();
         usuario.setIdUsuario("usuario-1");

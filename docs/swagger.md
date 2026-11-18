@@ -49,6 +49,71 @@ drena invalida la caché de mensajes y los recarga sin esperar el ciclo de 5 min
 
 Instalaciones sin `ddl-auto=update` deben aplicar `sql/073_cola_entrada_gmail.sql`.
 
+## Papelera de correos (Gmail)
+
+Gestión de la Papelera de Gmail desde FinApp: mover un correo a la papelera, listar la Papelera real
+en vivo y restaurar. Todas las rutas viven bajo `/api/gmail/cuentas/{cuentaId}/…` y exigen sesión
+activa; `{cuentaId}` es una fuente de tipo `CORREO` con conexión Gmail del usuario (si no existe o no
+es suya, `404`). Documentado en [`specs/040-papelera-correos/contrato-api.md`](../specs/040-papelera-correos/contrato-api.md).
+
+| Método | Ruta | Propósito |
+|--------|------|-----------|
+| `GET` | `/api/gmail/cuentas/{cuentaId}/papelera` | Listar la Papelera en vivo (TRASH de Gmail), con paginación por `page_token` |
+| `POST` | `/api/gmail/cuentas/{cuentaId}/mensajes/{mensajeId}/papelera` | Mover un correo a la papelera (única vía manual, desde el detalle) |
+| `POST` | `/api/gmail/cuentas/{cuentaId}/mensajes/{mensajeId}/restaurar` | Restaurar un correo desde la papelera |
+| `GET` | `/api/gmail/cuentas/{cuentaId}/papelera/configuracion` | Leer la configuración por categoría de la cuenta |
+| `PUT` | `/api/gmail/cuentas/{cuentaId}/papelera/configuracion` | Actualizar la configuración (`advertencia_aceptada` obligatoria para activar UPDATES) |
+| `GET` | `/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca` | Listar los remitentes de la lista blanca |
+| `POST` | `/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca` | Añadir un remitente a la lista blanca (`201`) |
+| `DELETE` | `/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca/{remitenteId}` | Quitar un remitente de la lista blanca (`204`) |
+| `POST` | `/api/gmail/cuentas/{cuentaId}/papelera/vista-previa` | Vista previa de la limpieza: elegibles, remitentes por categoría y excluidos por motivo |
+| `POST` | `/api/gmail/cuentas/{cuentaId}/papelera/limpieza` | Iniciar la limpieza explícita en lote (`202`) |
+| `GET` | `/api/gmail/cuentas/{cuentaId}/papelera/limpieza/{loteId}` | Consultar el estado de un lote de limpieza |
+
+Mover y restaurar son **idempotentes** respecto al estado final: repetir la operación sobre un correo
+ya en el estado pedido responde `200` sin efectos adicionales. El criterio de papelera lo define
+Gmail: un correo está en la Papelera si y solo si está en el TRASH de Gmail.
+
+### Errores
+
+El cuerpo de error sigue la convención de `CGmail` (`{ "message": … }`) y añade un flag booleano en
+los casos que requieren una acción del usuario.
+
+| Código | Flag | Cuándo | Acción esperada del cliente |
+|--------|------|--------|------------------------------|
+| `400` | — | Solicitud inválida (categoría, antigüedad, límite, remitente o `advertencia_aceptada` no válidos; falta `vista_previa_id`/`total_estimado` o `confirmado` no es `true`). | Corregir la solicitud. |
+| `401` | — | No hay sesión activa. | Iniciar sesión. |
+| `404` | — | La cuenta no existe o no es del usuario; el mensaje no pertenece a la cuenta; el lote o el remitente no existen. | — |
+| `409` | `requires_scope_authorization: true` | Falta el permiso ampliado `https://www.googleapis.com/auth/gmail.modify` en la cuenta. | Ofrecer la autorización del permiso ampliado (RF-23/RF-24). |
+| `409` | `requires_reconnect: true` | La conexión de la cuenta fue revocada o expiró. | Pedir reconectar la cuenta (RF-26). |
+| `409` | `mail_unavailable: true` | El correo ya no está disponible en la vista Papelera (la reconciliación lo quitó). | Informar sin presentarlo como fallo (RF-20). |
+| `409` | `limpieza_en_curso: true` | Ya hay una limpieza en curso para esa cuenta (solo una por cuenta a la vez). | Informar y esperar a que termine la limpieza en curso. |
+| `409` | `limite_ejecucion_alcanzado: true` | Una ejecución de la regla o de la limpieza alcanzó el límite por ejecución y queda remanente para la siguiente. | Informar del remanente; la siguiente ejecución lo retoma. |
+| `409` | `conteo_cambiado: true` | El conteo real de la limpieza difiere del `total_estimado` confirmado en la vista previa. | Pedir una nueva vista previa y confirmación. |
+| `410` | — | El correo ya fue eliminado definitivamente por Gmail (purgado). | Avisar de que no es recuperable y quitarlo de la vista (RF-18/RF-19). |
+| `429` | — | Cuota de Gmail agotada. | Reintentar más tarde con espera progresiva. |
+| `502` / `503` | — | Gmail no responde o falla (listar, mover, restaurar, evaluar categorías); `503` también si la cola de limpiezas está ocupada. | Mostrar aviso de error y permitir reintentar (RF-11/RF-05/RF-16/CD-04). |
+
+**Permiso ampliado vs. reconexión.** `requires_scope_authorization` (también `409`) significa que
+falta el permiso ampliado `gmail.modify`: el usuario debe **autorizar** ese permiso (el frontend lo
+pide con `incluirModificar` reutilizando `POST /api/gmail/callback`). `requires_reconnect` (también
+`409`) significa que la **conexión fue revocada o expiró** y el usuario debe **reconectar** la
+cuenta. Son casos distintos y se atienden de forma distinta.
+
+**Evaluación en vivo.** La regla automática por categorías evalúa **en vivo** con `messages.list`
+(el TRASH real y el buzón completo de Gmail, incluidos correos nunca sincronizados), **no** desde la
+caché local de FinApp ni desde el marcador de movimiento contable. Por eso la vista Papelera puede
+mostrar y restaurar correos con antigüedad mayor que la retención de la caché (RF-22).
+
+**Ambigüedad conocida del contrato.** En `GET …/papelera`, el campo `total` es el **tamaño de la
+página devuelta**, no un conteo global de la papelera: `messages.list` de Gmail no ofrece un conteo
+fiable del total. Decidido e implementado así en T3; la paginación real se hace con
+`siguiente_page_token` y el parámetro `page_token`.
+
+**Migración.** Instalaciones sin `ddl-auto=update` deben aplicar `sql/075_papelera_correos.sql`
+(idempotente) para crear las columnas de papelera en `gmail_mensaje`, `fuente.gmail_scope_concedido`
+y las tablas `gmail_papelera_configuracion`, `gmail_papelera_categoria` y `gmail_papelera_lista_blanca`.
+
 ## Almacenamiento en la nube (B1–B8)
 
 Rutas del dominio `finapp.almacenamiento.*`, con proveedor por conexión (`GOOGLE_DRIVE`, `NEXTCLOUD`) vía `SArchivosPorConexion`.

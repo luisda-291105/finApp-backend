@@ -67,6 +67,11 @@ public class MFuente {
     @Column(name = "gmail_sincronizado_en")
     private Instant gmailSincronizadoEn;
 
+    /** Permiso (scope) realmente concedido por Google al conectar la cuenta Gmail (RF-24). */
+    @JsonIgnore
+    @Column(name = "gmail_scope_concedido", length = 1000)
+    private String gmailScopeConcedido;
+
     @JsonIgnore
     @OneToMany(mappedBy = "cuenta", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<MGmailMensaje> mensajesGmail = new ArrayList<>();
@@ -152,6 +157,8 @@ public class MFuente {
     public void setGmailWatchExpiraEn(Instant gmailWatchExpiraEn) { this.gmailWatchExpiraEn = gmailWatchExpiraEn; }
     public Instant getGmailSincronizadoEn() { return gmailSincronizadoEn; }
     public void setGmailSincronizadoEn(Instant gmailSincronizadoEn) { this.gmailSincronizadoEn = gmailSincronizadoEn; }
+    public String getGmailScopeConcedido() { return gmailScopeConcedido; }
+    public void setGmailScopeConcedido(String gmailScopeConcedido) { this.gmailScopeConcedido = gmailScopeConcedido; }
     public void desconectarGmail() {
         accessTokenCifrado = null;
         refreshTokenCifrado = null;

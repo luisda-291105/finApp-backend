@@ -41,6 +41,9 @@ class CPapeleraGmailRutasTest {
                 .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/configuracion'].put").exists())
                 .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca'].post").exists())
-                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca/{remitenteId}'].delete").exists());
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/lista-blanca/{remitenteId}'].delete").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/vista-previa'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/limpieza'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/limpieza/{loteId}'].get").exists());
     }
 }

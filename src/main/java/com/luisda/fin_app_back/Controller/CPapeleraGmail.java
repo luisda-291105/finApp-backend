@@ -2,9 +2,12 @@ package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.DTO.GmailListaBlancaDTO;
 import com.luisda.fin_app_back.DTO.GmailPapeleraConfiguracionDTO;
+import com.luisda.fin_app_back.DTO.LimpiezaPapeleraDTO;
+import com.luisda.fin_app_back.DTO.VistaPreviaPapeleraDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Services.SPapeleraGmail;
+import com.luisda.fin_app_back.Services.SReglaPapeleraGmail;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,6 +27,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * @uso               Expone la Papelera de correos de una cuenta Gmail
@@ -43,11 +47,14 @@ public class CPapeleraGmail {
 
     private final IFuentes fuentes;
     private final SPapeleraGmail papelera;
+    private final SReglaPapeleraGmail regla;
     private final SUsuarioActivo usuarioActivo;
 
-    public CPapeleraGmail(IFuentes fuentes, SPapeleraGmail papelera, SUsuarioActivo usuarioActivo) {
+    public CPapeleraGmail(IFuentes fuentes, SPapeleraGmail papelera, SReglaPapeleraGmail regla,
+                          SUsuarioActivo usuarioActivo) {
         this.fuentes = fuentes;
         this.papelera = papelera;
+        this.regla = regla;
         this.usuarioActivo = usuarioActivo;
     }
 
@@ -177,6 +184,68 @@ public class CPapeleraGmail {
         }
     }
 
+    /** Vista previa de la limpieza explícita: elegibles, remitentes por categoría y excluidos (RF-39). */
+    @PostMapping("/papelera/vista-previa")
+    public ResponseEntity<?> vistaPrevia(@PathVariable String cuentaId,
+                                         @RequestBody(required = false) VistaPreviaPapeleraDTO solicitud,
+                                         HttpServletRequest request) {
+        Resolucion resolucion = resolverCuenta(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        try {
+            return ResponseEntity.ok(regla.vistaPrevia(resolucion.cuenta(), solicitud));
+        } catch (IllegalArgumentException error) {
+            return respuestaSolicitudInvalida(error.getMessage());
+        } catch (SPapeleraGmail.CuentaGmailRequiereReconectarException error) {
+            return respuestaReconexionRequerida();
+        } catch (RestClientResponseException error) {
+            return respuestaFalloGmail(error, "No se pudo evaluar la vista previa de la papelera.");
+        } catch (IOException | GeneralSecurityException error) {
+            return respuestaRenovacionFallida();
+        }
+    }
+
+    /** Inicia la limpieza explícita de correos ya recibidos, tras confirmación (RF-37/RF-38). */
+    @PostMapping("/papelera/limpieza")
+    public ResponseEntity<?> iniciarLimpieza(@PathVariable String cuentaId,
+                                             @RequestBody(required = false) LimpiezaPapeleraDTO solicitud,
+                                             HttpServletRequest request) {
+        Resolucion resolucion = resolverCuenta(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        if (solicitud == null || solicitud.vistaPreviaId() == null || solicitud.vistaPreviaId().isBlank()
+                || solicitud.totalEstimado() == null || !Boolean.TRUE.equals(solicitud.confirmado())) {
+            return respuestaSolicitudInvalida(
+                    "La limpieza exige vista_previa_id, total_estimado y confirmado=true.");
+        }
+        try {
+            return ResponseEntity.accepted().body(regla.iniciarLimpieza(resolucion.cuenta(), solicitud));
+        } catch (SReglaPapeleraGmail.VistaPreviaNoEncontradaException error) {
+            return respuestaVistaPreviaExpirada();
+        } catch (SReglaPapeleraGmail.LimpiezaEnCursoException error) {
+            return respuestaLimpiezaEnCurso();
+        } catch (SReglaPapeleraGmail.ConteoCambiadoException error) {
+            return respuestaConteoCambiado(error.getNuevoConteo(), solicitud.totalEstimado());
+        } catch (SPapeleraGmail.CuentaGmailRequiereReconectarException error) {
+            return respuestaReconexionRequerida();
+        } catch (RejectedExecutionException error) {
+            return respuestaColaOcupada();
+        } catch (RestClientResponseException error) {
+            return respuestaFalloGmail(error, "No se pudo iniciar la limpieza de la papelera.");
+        } catch (IOException | GeneralSecurityException error) {
+            return respuestaRenovacionFallida();
+        }
+    }
+
+    /** Estado de un lote de limpieza de la cuenta (RF-38/CD-04). */
+    @GetMapping("/papelera/limpieza/{loteId}")
+    public ResponseEntity<?> consultarLimpieza(@PathVariable String cuentaId, @PathVariable String loteId,
+                                               HttpServletRequest request) {
+        Resolucion resolucion = resolverCuenta(request, cuentaId);
+        if (resolucion.error() != null) return resolucion.error();
+        return regla.consultarLimpieza(resolucion.cuenta(), loteId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(this::respuestaLoteNoEncontrado);
+    }
+
     /** Sesión activa, cuenta Gmail propia conectada y permiso ampliado concedido. */
     private Resolucion resolverCuenta(HttpServletRequest request, String cuentaId) {
         Resolucion resolucion = resolverCuentaSinPermiso(request, cuentaId);
@@ -231,7 +300,47 @@ public class CPapeleraGmail {
     }
 
     private ResponseEntity<Map<String, Object>> respuestaFalloGmail(RestClientResponseException error, String predeterminado) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("message", mensajeErrorGoogle(error, predeterminado)));
+        HttpStatus estado = error.getStatusCode().value() == 429 ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_GATEWAY;
+        return ResponseEntity.status(estado).body(Map.of("message", mensajeErrorGoogle(error, predeterminado)));
+    }
+
+    /** 409 cuando el `vista_previa_id` de la limpieza no existe o expiró (RF-39). */
+    private ResponseEntity<Map<String, Object>> respuestaVistaPreviaExpirada() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "message", "La vista previa ya no está vigente. Genera una nueva antes de limpiar."
+        ));
+    }
+
+    /** 409 cuando ya hay una limpieza en curso para la cuenta (RF-38). */
+    private ResponseEntity<Map<String, Object>> respuestaLimpiezaEnCurso() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "limpieza_en_curso", true,
+                "message", "Ya hay una limpieza en curso para esta cuenta. Espera a que termine."
+        ));
+    }
+
+    /** 409 cuando el conteo real difiere del confirmado; exige una nueva vista previa (RF-38). */
+    private ResponseEntity<Map<String, Object>> respuestaConteoCambiado(int nuevoConteo, Integer totalEstimado) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "conteo_cambiado", true,
+                "nuevo_conteo", nuevoConteo,
+                "total_estimado", totalEstimado,
+                "message", "El número de correos cambió desde la vista previa. Genera una nueva y confírmala."
+        ));
+    }
+
+    /** 404 cuando el lote de limpieza no existe o no es de la cuenta. */
+    private ResponseEntity<Map<String, Object>> respuestaLoteNoEncontrado() {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                "message", "No se encontró ese lote de limpieza para esta cuenta."
+        ));
+    }
+
+    /** 503 cuando la cola de limpiezas está ocupada y no se pudo encolar el lote. */
+    private ResponseEntity<Map<String, Object>> respuestaColaOcupada() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                "message", "La cola de limpiezas está ocupada. Espera un momento y vuelve a intentar."
+        ));
     }
 
     private ResponseEntity<Map<String, Object>> respuestaRenovacionFallida() {

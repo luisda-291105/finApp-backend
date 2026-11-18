@@ -6,6 +6,7 @@ import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Services.SPapeleraGmail;
+import com.luisda.fin_app_back.Services.SReglaPapeleraGmail;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +41,7 @@ class CPapeleraGmailConfiguracionTest {
 
     private IFuentes fuentes;
     private SPapeleraGmail papelera;
+    private SReglaPapeleraGmail regla;
     private SUsuarioActivo usuarioActivo;
     private CPapeleraGmail controlador;
     private MFuente cuenta;
@@ -48,8 +50,9 @@ class CPapeleraGmailConfiguracionTest {
     void preparar() {
         fuentes = mock(IFuentes.class);
         papelera = mock(SPapeleraGmail.class);
+        regla = mock(SReglaPapeleraGmail.class);
         usuarioActivo = mock(SUsuarioActivo.class);
-        controlador = new CPapeleraGmail(fuentes, papelera, usuarioActivo);
+        controlador = new CPapeleraGmail(fuentes, papelera, regla, usuarioActivo);
 
         MUsuario usuario = new MUsuario();
         usuario.setIdUsuario("usuario-1");

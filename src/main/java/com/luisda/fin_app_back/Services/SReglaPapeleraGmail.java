@@ -3,6 +3,11 @@ package com.luisda.fin_app_back.Services;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
+import com.luisda.fin_app_back.DTO.LimpiezaPapeleraDTO;
+import com.luisda.fin_app_back.DTO.LimpiezaPapeleraEstadoDTO;
+import com.luisda.fin_app_back.DTO.LimpiezaPapeleraInicioDTO;
+import com.luisda.fin_app_back.DTO.VistaPreviaPapeleraDTO;
+import com.luisda.fin_app_back.DTO.VistaPreviaPapeleraRespuestaDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGmailMensaje;
 import com.luisda.fin_app_back.Model.MGmailPapeleraCategoria;
@@ -15,6 +20,7 @@ import com.luisda.fin_app_back.Repository.IGmailPapeleraConfiguracion;
 import com.luisda.fin_app_back.Repository.IGmailPapeleraListaBlanca;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -32,12 +38,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -69,6 +78,22 @@ public class SReglaPapeleraGmail {
     private static final long PAUSA_BASE_REINTENTO_GMAIL_MS = 15000;
     /** Límite documentado de Gmail por llamada a `batchModify`. */
     private static final int TAMANO_LOTE = 1000;
+
+    /** Categorías evaluables por la vista previa y la limpieza explícita (sección 4 del contrato). */
+    private static final Set<String> CATEGORIAS_CONOCIDAS = Set.of(
+            "CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS", "CATEGORY_UPDATES", "SPAM");
+
+    /** Motivos de exclusión en el orden del contrato (RF-35/RF-36). */
+    private static final List<String> MOTIVOS_ORDEN = List.of(
+            "STARRED", "IMPORTANT", "ETIQUETA_PERSONALIZADA", "HILO_CON_ENVIADOS", "REMITENTE_PRIORITARIO",
+            "REMITENTE_SUSCRITO", "MOVIMIENTO_REGISTRADO", "ALERTA_PENDIENTE",
+            "ESTADO_BOLSILLO_DUPLICADO_ERROR", "EXENTO", "LISTA_BLANCA");
+
+    /** Motivo local del movimiento por limpieza explícita (RF-38). */
+    private static final String MOTIVO_LIMPIEZA = "LIMPIEZA";
+    private static final String ESTADO_LIMPIEZA_EN_PROCESO = "EN_PROCESO";
+    private static final String ESTADO_LIMPIEZA_COMPLETADO = "COMPLETADO";
+    private static final String ESTADO_LIMPIEZA_FALLIDO = "FALLIDO";
 
     private static final String ETIQUETA_PAPELERA = "TRASH";
     private static final String ETIQUETA_INBOX = "INBOX";
@@ -114,6 +139,8 @@ public class SReglaPapeleraGmail {
     private final SGmailMensajes servicioMensajes;
     private final SSuscripcionGmail suscripcionesGmail;
     private final IFuentes fuentes;
+    private final SRegistroPapeleraGmail registro;
+    private final Executor executor;
     private final RestClient clienteHttp;
     private final ObjectMapper objectMapper = new ObjectMapper();
     /** Bloqueo en memoria por cuenta para no solapar dos ejecuciones de la regla (CD-04). */
@@ -122,7 +149,9 @@ public class SReglaPapeleraGmail {
     public SReglaPapeleraGmail(IGmailPapeleraConfiguracion configuraciones, IGmailPapeleraCategoria categorias,
                                IGmailPapeleraListaBlanca listaBlanca, IGmailMensajes mensajes,
                                SGmailMensajes servicioMensajes, SSuscripcionGmail suscripcionesGmail,
-                               IFuentes fuentes, RestClient.Builder constructorCliente) {
+                               IFuentes fuentes, SRegistroPapeleraGmail registro,
+                               @Qualifier("gmailImportExecutor") Executor executor,
+                               RestClient.Builder constructorCliente) {
         this.configuraciones = configuraciones;
         this.categorias = categorias;
         this.listaBlanca = listaBlanca;
@@ -130,6 +159,8 @@ public class SReglaPapeleraGmail {
         this.servicioMensajes = servicioMensajes;
         this.suscripcionesGmail = suscripcionesGmail;
         this.fuentes = fuentes;
+        this.registro = registro;
+        this.executor = executor;
         this.clienteHttp = constructorCliente.build();
     }
 
@@ -224,6 +255,212 @@ public class SReglaPapeleraGmail {
         return new ResultadoEjecucion(movidos, remanente > 0, remanente);
     }
 
+    /** Correos elegibles de la evaluación en vivo y conteo de excluidos por motivo (RF-35/RF-36). */
+    private record ResultadoEvaluacion(List<SRegistroPapeleraGmail.CorreoElegible> elegibles,
+                                       Map<String, Integer> excluidosPorMotivo) { }
+
+    /**
+     * Vista previa de la limpieza explícita (RF-39): evalúa en vivo las categorías solicitadas
+     * aplicando TODAS las exclusiones (RF-35) y la lista blanca (RF-36), agrupa los elegibles por
+     * categoría con sus remitentes y registra el `vista_previa_id` que fija los parámetros.
+     */
+    public VistaPreviaPapeleraRespuestaDTO vistaPrevia(MFuente cuenta, VistaPreviaPapeleraDTO solicitud)
+            throws IOException, GeneralSecurityException {
+        List<String> categoriasSolicitadas = solicitud == null || solicitud.categorias() == null
+                ? List.of() : solicitud.categorias();
+        int antiguedad = solicitud == null ? 0 : solicitud.antiguedadMinimaDias();
+        ResultadoEvaluacion resultado = evaluarLimpieza(cuenta, categoriasSolicitadas, antiguedad);
+
+        List<VistaPreviaPapeleraRespuestaDTO.CategoriaVistaPrevia> porCategoria =
+                agruparPorCategoria(categoriasSolicitadas, resultado.elegibles());
+        List<VistaPreviaPapeleraRespuestaDTO.ExclusionPorMotivo> excluidos = MOTIVOS_ORDEN.stream()
+                .filter(motivo -> resultado.excluidosPorMotivo().getOrDefault(motivo, 0) > 0)
+                .map(motivo -> new VistaPreviaPapeleraRespuestaDTO.ExclusionPorMotivo(
+                        motivo, resultado.excluidosPorMotivo().get(motivo)))
+                .toList();
+
+        SRegistroPapeleraGmail.VistaPrevia vista = registro.registrarVistaPrevia(
+                cuenta.getUsuario().getIdUsuario(), cuenta.getIdFuente(), categoriasSolicitadas, antiguedad,
+                resultado.elegibles().size(), resultado.elegibles());
+        return new VistaPreviaPapeleraRespuestaDTO(vista.id(), resultado.elegibles().size(), porCategoria, excluidos);
+    }
+
+    /**
+     * Inicia la limpieza explícita de los correos ya recibidos (RF-37/RF-38). Exige un
+     * `vista_previa_id` vigente, impone «una limpieza por cuenta» a la vez, recalcula el conteo en
+     * vivo y, si difiere del confirmado, responde `409 conteo_cambiado` sin mover nada. Con el conteo
+     * confirmado, lanza el movimiento en segundo plano y devuelve el lote.
+     */
+    public LimpiezaPapeleraInicioDTO iniciarLimpieza(MFuente cuenta, LimpiezaPapeleraDTO solicitud)
+            throws IOException, GeneralSecurityException {
+        String idUsuario = cuenta.getUsuario().getIdUsuario();
+        String idCuenta = cuenta.getIdFuente();
+        SRegistroPapeleraGmail.VistaPrevia vista = registro
+                .obtenerVistaPrevia(solicitud.vistaPreviaId(), idUsuario, idCuenta)
+                .orElseThrow(VistaPreviaNoEncontradaException::new);
+        if (!registro.intentarBloquearLimpieza(idCuenta)) throw new LimpiezaEnCursoException();
+        try {
+            ResultadoEvaluacion resultado = evaluarLimpieza(cuenta, vista.categorias(), vista.antiguedadDias());
+            int totalEnVivo = resultado.elegibles().size();
+            int confirmado = solicitud.totalEstimado() == null ? -1 : solicitud.totalEstimado();
+            if (totalEnVivo != confirmado) throw new ConteoCambiadoException(totalEnVivo);
+            SRegistroPapeleraGmail.LoteLimpieza lote = registro.crearLote(idUsuario, idCuenta, totalEnVivo);
+            executor.execute(() -> ejecutarLimpieza(cuenta, lote, resultado.elegibles()));
+            return new LimpiezaPapeleraInicioDTO(lote.getId(), ESTADO_LIMPIEZA_EN_PROCESO);
+        } catch (IOException | GeneralSecurityException | RuntimeException error) {
+            registro.liberarLimpieza(idCuenta);
+            throw error;
+        }
+    }
+
+    /** Estado del lote de limpieza de la cuenta; vacío si el lote no existe o no es de la cuenta. */
+    public Optional<LimpiezaPapeleraEstadoDTO> consultarLimpieza(MFuente cuenta, String loteId) {
+        return registro.consultarLote(cuenta.getUsuario().getIdUsuario(), cuenta.getIdFuente(), loteId)
+                .map(lote -> new LimpiezaPapeleraEstadoDTO(lote.getId(), lote.getEstado(), lote.getTotal(),
+                        lote.getMovidos(), lote.getOmitidos(), lote.getFallidos(),
+                        lote.isLimiteEjecucionAlcanzado()));
+    }
+
+    /** Evalúa en vivo las categorías aplicando las exclusiones y la lista blanca, sin activación. */
+    private ResultadoEvaluacion evaluarLimpieza(MFuente cuenta, List<String> categoriasSolicitadas, int antiguedadDias)
+            throws IOException, GeneralSecurityException {
+        validarCategorias(categoriasSolicitadas);
+        String token = tokenAccesoActual(cuenta);
+        Set<String> remitentesExentos = remitentesListaBlanca(cuenta);
+        List<SRegistroPapeleraGmail.CorreoElegible> elegibles = new ArrayList<>();
+        Map<String, Integer> excluidos = new LinkedHashMap<>();
+        Set<String> idsVistos = new HashSet<>();
+        for (String categoria : categoriasSolicitadas) {
+            for (JsonNode item : listarMensajes(token, consultaCategoria(categoria, antiguedadDias))) {
+                String id = item.path("id").asText("");
+                if (id.isBlank() || !idsVistos.add(id)) continue;
+                String threadId = item.path("threadId").asText("");
+                JsonNode mensaje = metadatosDeMensaje(token, id);
+                if (mensaje == null) continue;
+                if (!esElegiblePorDestinoYAntiguedad(mensaje, categoria, antiguedadDias)) continue;
+                MGmailMensaje local = mensajes
+                        .findByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), id).orElse(null);
+                String motivo = motivoExclusion(cuenta, mensaje, threadId, categoria, local, remitentesExentos, token);
+                if (motivo != null) {
+                    excluidos.merge(motivo, 1, Integer::sum);
+                    continue;
+                }
+                JsonNode headers = mensaje.path("payload").path("headers");
+                long internalDate = mensaje.path("internalDate").asLong(0);
+                Instant fecha = internalDate > 0 ? Instant.ofEpochMilli(internalDate) : Instant.now();
+                elegibles.add(new SRegistroPapeleraGmail.CorreoElegible(id, categoria,
+                        SGmailMensajes.extraerDireccionRemitente(header(headers, "From")),
+                        header(headers, "Subject"), mensaje.path("snippet").asText(""), fecha));
+            }
+        }
+        return new ResultadoEvaluacion(elegibles, excluidos);
+    }
+
+    /** Agrupa los elegibles por categoría (en el orden solicitado) con sus remitentes y cantidades. */
+    private static List<VistaPreviaPapeleraRespuestaDTO.CategoriaVistaPrevia> agruparPorCategoria(
+            List<String> categorias, List<SRegistroPapeleraGmail.CorreoElegible> elegibles) {
+        List<VistaPreviaPapeleraRespuestaDTO.CategoriaVistaPrevia> resultado = new ArrayList<>();
+        for (String categoria : categorias) {
+            List<SRegistroPapeleraGmail.CorreoElegible> deCategoria = elegibles.stream()
+                    .filter(correo -> correo.categoria().equals(categoria)).toList();
+            if (deCategoria.isEmpty()) continue;
+            Map<String, Integer> porRemitente = new LinkedHashMap<>();
+            for (SRegistroPapeleraGmail.CorreoElegible correo : deCategoria) {
+                String remitente = correo.remitente() == null || correo.remitente().isBlank() ? "" : correo.remitente();
+                porRemitente.merge(remitente, 1, Integer::sum);
+            }
+            List<VistaPreviaPapeleraRespuestaDTO.RemitenteVistaPrevia> remitentes = porRemitente.entrySet().stream()
+                    .map(entrada -> new VistaPreviaPapeleraRespuestaDTO.RemitenteVistaPrevia(
+                            entrada.getKey(), entrada.getValue()))
+                    .toList();
+            resultado.add(new VistaPreviaPapeleraRespuestaDTO.CategoriaVistaPrevia(
+                    categoria, deCategoria.size(), remitentes));
+        }
+        return resultado;
+    }
+
+    /** Valida que las categorías solicitadas sean configurables; `400` si alguna no lo es. */
+    private static void validarCategorias(List<String> categorias) {
+        for (String categoria : categorias) {
+            if (categoria == null || !CATEGORIAS_CONOCIDAS.contains(categoria))
+                throw new IllegalArgumentException("Categoría de Gmail no válida: " + categoria + ".");
+        }
+    }
+
+    /**
+     * Mueve los correos elegibles en segundo plano con `batchModify` en lotes ≤ `tamanoLote()`,
+     * respetando `limite_por_ejecucion` (el resto queda como remanente) y marcando cada movido con
+     * motivo `LIMPIEZA`. Un fallo parcial deja los movidos en la papelera y los fallidos reintentables
+     * sin duplicar movimientos (CD-04). Siempre libera el bloqueo de la cuenta al terminar.
+     */
+    private void ejecutarLimpieza(MFuente cuenta, SRegistroPapeleraGmail.LoteLimpieza lote,
+                                  List<SRegistroPapeleraGmail.CorreoElegible> elegibles) {
+        try {
+            int limite = limitePorEjecucion(cuenta);
+            int aMover = Math.min(limite, elegibles.size());
+            List<SRegistroPapeleraGmail.CorreoElegible> seleccion = elegibles.subList(0, aMover);
+            int omitidos = elegibles.size() - aMover;
+            lote.setOmitidos(omitidos);
+            lote.setLimiteEjecucionAlcanzado(omitidos > 0);
+
+            String token = tokenAccesoActual(cuenta);
+            int movidos = 0;
+            int fallidos = 0;
+            for (List<SRegistroPapeleraGmail.CorreoElegible> bloque : partirCorreos(seleccion, tamanoLote())) {
+                try {
+                    batchModify(token, bloque.stream().map(SRegistroPapeleraGmail.CorreoElegible::id).toList());
+                    for (SRegistroPapeleraGmail.CorreoElegible correo : bloque) marcarMovidoLimpieza(cuenta, correo);
+                    movidos += bloque.size();
+                } catch (Exception error) {
+                    fallidos += bloque.size();
+                    LOGGER.warn("Falló un lote de la limpieza de papelera de la cuenta {}", cuenta.getIdFuente(), error);
+                }
+            }
+            lote.setMovidos(movidos);
+            lote.setFallidos(fallidos);
+            lote.setEstado(ESTADO_LIMPIEZA_COMPLETADO);
+        } catch (Exception error) {
+            LOGGER.warn("La limpieza de papelera falló para la cuenta {}", cuenta.getIdFuente(), error);
+            lote.setEstado(ESTADO_LIMPIEZA_FALLIDO);
+        } finally {
+            registro.liberarLimpieza(cuenta.getIdFuente());
+        }
+    }
+
+    /** Marca localmente el correo movido por la limpieza, creando la fila mínima si no existía. */
+    private void marcarMovidoLimpieza(MFuente cuenta, SRegistroPapeleraGmail.CorreoElegible correo) {
+        MGmailMensaje entidad = mensajes
+                .findByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), correo.id())
+                .orElseGet(() -> {
+                    MGmailMensaje nueva = new MGmailMensaje(UUID.randomUUID().toString(), cuenta, correo.id(),
+                            correo.fechaInterna() == null ? Instant.now() : correo.fechaInterna());
+                    nueva.setRemitente(correo.remitente());
+                    nueva.setAsunto(correo.asunto() == null || correo.asunto().isBlank()
+                            ? "(Sin asunto)" : correo.asunto());
+                    nueva.setFragmento(correo.fragmento());
+                    return nueva;
+                });
+        entidad.setPapeleraEstado(ESTADO_PAPELERA);
+        entidad.setPapeleraMovidoAutomaticamente(true);
+        entidad.setPapeleraMotivo(MOTIVO_LIMPIEZA);
+        entidad.setPapeleraCategoria(correo.categoria());
+        mensajes.save(entidad);
+    }
+
+    /** Divide una lista en bloques de a lo sumo `tamano` elementos, sin modificar la original. */
+    private static <T> List<List<T>> partirCorreos(List<T> elementos, int tamano) {
+        List<List<T>> bloques = new ArrayList<>();
+        for (int i = 0; i < elementos.size(); i += tamano) {
+            bloques.add(new ArrayList<>(elementos.subList(i, Math.min(i + tamano, elementos.size()))));
+        }
+        return bloques;
+    }
+
+    /** Tamaño máximo de cada `batchModify` de la limpieza; sobrescribible en pruebas. */
+    protected int tamanoLote() {
+        return TAMANO_LOTE;
+    }
+
     /** Cuenta Gmail propia (tipo CORREO) apta para la regla. */
     private static boolean esCuentaGmail(MFuente cuenta) {
         return cuenta != null && "CORREO".equalsIgnoreCase(cuenta.getTipo());
@@ -293,19 +530,28 @@ public class SReglaPapeleraGmail {
      * llegado después de la activación de la categoría (RF-33/RF-34/RF-37).
      */
     private static boolean esElegible(JsonNode mensaje, MGmailPapeleraCategoria categoria, int antiguedadDias) {
+        if (!esElegiblePorDestinoYAntiguedad(mensaje, categoria.getCategoria(), antiguedadDias)) return false;
+        Instant activacion = categoria.getActivadaEn();
+        if (activacion == null) return false;
+        return !Instant.ofEpochMilli(mensaje.path("internalDate").asLong(0)).isBefore(activacion);
+    }
+
+    /**
+     * Elegibilidad por destino y antigüedad, sin la compuerta de activación: debe seguir en INBOX (o
+     * en SPAM, si la categoría es SPAM), no estar ya en la papelera y superar la antigüedad mínima.
+     * La usa la limpieza explícita, que actúa sobre correos ya recibidos (RF-37/RF-38).
+     */
+    private static boolean esElegiblePorDestinoYAntiguedad(JsonNode mensaje, String categoria, int antiguedadDias) {
         JsonNode etiquetas = mensaje.path("labelIds");
         if (etiquetasContienen(etiquetas, ETIQUETA_PAPELERA)) return false;
-        boolean enDestino = CATEGORIA_SPAM.equals(categoria.getCategoria())
+        boolean enDestino = CATEGORIA_SPAM.equals(categoria)
                 ? etiquetasContienen(etiquetas, ETIQUETA_SPAM)
                 : etiquetasContienen(etiquetas, ETIQUETA_INBOX);
         if (!enDestino) return false;
         long internalDate = mensaje.path("internalDate").asLong(0);
         if (internalDate <= 0) return false;
         Instant fecha = Instant.ofEpochMilli(internalDate);
-        if (!fecha.isBefore(Instant.now().minus(Duration.ofDays(antiguedadDias)))) return false;
-        Instant activacion = categoria.getActivadaEn();
-        if (activacion == null) return false;
-        return !fecha.isBefore(activacion);
+        return fecha.isBefore(Instant.now().minus(Duration.ofDays(antiguedadDias)));
     }
 
     /**
@@ -525,5 +771,22 @@ public class SReglaPapeleraGmail {
             if (nombre.equalsIgnoreCase(header.path("name").asText())) return header.path("value").asText("");
         }
         return "";
+    }
+
+    /** El `vista_previa_id` no existe o expiró: `409` (RF-39). */
+    public static class VistaPreviaNoEncontradaException extends RuntimeException { }
+
+    /** Ya hay una limpieza en curso para la cuenta: `409 limpieza_en_curso` (RF-38). */
+    public static class LimpiezaEnCursoException extends IllegalStateException { }
+
+    /** El conteo real difiere del confirmado: `409 conteo_cambiado` con el nuevo conteo (RF-38). */
+    public static class ConteoCambiadoException extends IllegalStateException {
+        private final int nuevoConteo;
+
+        public ConteoCambiadoException(int nuevoConteo) {
+            this.nuevoConteo = nuevoConteo;
+        }
+
+        public int getNuevoConteo() { return nuevoConteo; }
     }
 }

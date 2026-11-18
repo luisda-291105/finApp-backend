@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
@@ -79,7 +80,7 @@ class SReglaPapeleraGmailTest {
         RestClient.Builder constructor = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(constructor).build();
         regla = new ReglaSinEspera(configuraciones, categorias, listaBlanca, mensajes, servicioMensajes,
-                suscripcionesGmail, fuentes, constructor);
+                suscripcionesGmail, fuentes, new SRegistroPapeleraGmail(), Runnable::run, constructor);
 
         MUsuario usuario = new MUsuario();
         usuario.setIdUsuario("usuario-1");
@@ -551,9 +552,10 @@ class SReglaPapeleraGmailTest {
         private ReglaSinEspera(IGmailPapeleraConfiguracion configuraciones, IGmailPapeleraCategoria categorias,
                                IGmailPapeleraListaBlanca listaBlanca, IGmailMensajes mensajes,
                                SGmailMensajes servicioMensajes, SSuscripcionGmail suscripcionesGmail,
-                               IFuentes fuentes, RestClient.Builder constructor) {
+                               IFuentes fuentes, SRegistroPapeleraGmail registro, Executor executor,
+                               RestClient.Builder constructor) {
             super(configuraciones, categorias, listaBlanca, mensajes, servicioMensajes, suscripcionesGmail,
-                    fuentes, constructor);
+                    fuentes, registro, executor, constructor);
         }
 
         @Override

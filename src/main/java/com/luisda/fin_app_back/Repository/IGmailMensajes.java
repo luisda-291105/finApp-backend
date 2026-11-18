@@ -43,6 +43,9 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
     Optional<MGmailMensaje> findByIdAndCuenta_Usuario_IdUsuario(String id, String idUsuario);
     Optional<MGmailMensaje> findByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
 
+    /** Primer mensaje con ese id de Gmail en cualquier cuenta del usuario (para detectar cuentas ajenas). */
+    Optional<MGmailMensaje> findFirstByGoogleMessageIdAndCuenta_Usuario_IdUsuario(String googleMessageId, String idUsuario);
+
     boolean existsByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
     @org.springframework.transaction.annotation.Transactional
     long deleteByCuenta_IdFuente(String idFuente);

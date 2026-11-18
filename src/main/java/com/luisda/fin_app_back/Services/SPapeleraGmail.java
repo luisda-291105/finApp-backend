@@ -3,6 +3,7 @@ package com.luisda.fin_app_back.Services;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.DTO.GmailPapeleraDTO;
+import com.luisda.fin_app_back.DTO.GmailPapeleraMovimientoDTO;
 import com.luisda.fin_app_back.DTO.GoogleOAuthTokenDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGmailMensaje;
@@ -25,13 +26,17 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
- * @uso               Lista la Papelera de una cuenta Gmail en vivo desde el TRASH de Gmail
+ * @uso               Lista la Papelera de una cuenta Gmail en vivo y mueve/restaura correos
  * @capa              Servicio
  * @responsabilidades Consultar `messages.list?q=in:trash` con paginación, obtener los metadatos de
  *                    cada mensaje (`internalDate` → `eliminacion_estimada_en`, `labelIds`) con
- *                    backoff y combinar el marcador local del movimiento automático
+ *                    backoff, combinar el marcador local del movimiento automático y mover/restaurar
+ *                    con `messages.modify` actualizando el estado local (RF-01..RF-05, RF-13..RF-20)
  * @datos             Respuestas de la API de Gmail (formato metadata) y filas de `gmail_mensaje`
  * @dependencias      IGmailMensajes, SGmailMensajes (credenciales/cifrado), IFuentes
  * @usadoPor          CPapeleraGmail
@@ -49,6 +54,9 @@ public class SPapeleraGmail {
     private static final int DIAS_PARA_PURGA = 30;
     private static final String CONSULTA_PAPELERA = "in:trash";
     private static final String ETIQUETA_PAPELERA = "TRASH";
+    /** Estados locales del correo respecto a la Papelera (columna `papelera_estado`). */
+    private static final String ESTADO_PAPELERA = "EN_PAPELERA";
+    private static final String ESTADO_BANDEJA = "EN_BANDEJA";
 
     private final IGmailMensajes mensajes;
     private final SGmailMensajes servicioMensajes;
@@ -114,10 +122,113 @@ public class SPapeleraGmail {
                 local == null ? null : local.getPapeleraCategoria());
     }
 
+    /**
+     * Mueve un correo a la Papelera de Gmail (`addLabelIds:[TRASH]`). Es idempotente: si el correo
+     * ya está en TRASH responde `EN_PAPELERA` sin efectos adicionales. Al mover descarta de forma
+     * persistente la alerta de movimiento pendiente (RF-28) sin tocar los movimientos contables (RF-27).
+     */
+    public GmailPapeleraMovimientoDTO mover(MFuente cuenta, String mensajeId)
+            throws IOException, GeneralSecurityException {
+        String token = tokenAccesoActual(cuenta);
+        JsonNode mensaje = metadatosDeMensaje(cuenta, token, mensajeId);
+        if (etiquetasContienen(mensaje.path("labelIds"), ETIQUETA_PAPELERA)) {
+            return new GmailPapeleraMovimientoDTO(mensajeId, ESTADO_PAPELERA, false);
+        }
+        modificarEtiquetas(token, mensajeId, Map.of("addLabelIds", List.of(ETIQUETA_PAPELERA)));
+        servicioMensajes.descartarAlertaMovimiento(cuenta, mensajeId);
+        mensajes.findByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId).ifPresent(local -> {
+            local.setPapeleraEstado(ESTADO_PAPELERA);
+            local.setPapeleraMovidoAutomaticamente(false);
+            local.setPapeleraMotivo(null);
+            local.setPapeleraCategoria(null);
+            mensajes.save(local);
+        });
+        return new GmailPapeleraMovimientoDTO(mensajeId, ESTADO_PAPELERA, false);
+    }
+
+    /**
+     * Restaura un correo desde la Papelera de Gmail (`removeLabelIds:[TRASH]`) y lo marca exento de
+     * la regla automática (RF-40). Es idempotente: si el correo ya salió de la Papelera responde
+     * `EN_BANDEJA` sin efectos adicionales; si la reconciliación ya lo quitó de la vista sin que
+     * FinApp lo hubiera restaurado, informa `mail_unavailable` (RF-20).
+     */
+    public GmailPapeleraMovimientoDTO restaurar(MFuente cuenta, String mensajeId)
+            throws IOException, GeneralSecurityException {
+        String token = tokenAccesoActual(cuenta);
+        JsonNode mensaje = metadatosDeMensaje(cuenta, token, mensajeId);
+        MGmailMensaje local = mensajes.findByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId)
+                .orElse(null);
+        if (!etiquetasContienen(mensaje.path("labelIds"), ETIQUETA_PAPELERA)) {
+            if (local != null && ESTADO_BANDEJA.equals(local.getPapeleraEstado())) {
+                return new GmailPapeleraMovimientoDTO(mensajeId, ESTADO_BANDEJA, null);
+            }
+            throw new CorreoNoDisponibleException();
+        }
+        modificarEtiquetas(token, mensajeId, Map.of("removeLabelIds", List.of(ETIQUETA_PAPELERA)));
+        MGmailMensaje entidad = local != null ? local : nuevoMensajeLocal(cuenta, mensaje);
+        entidad.setPapeleraEstado(ESTADO_BANDEJA);
+        entidad.setPapeleraExenta(true);
+        mensajes.save(entidad);
+        return new GmailPapeleraMovimientoDTO(mensajeId, ESTADO_BANDEJA, null);
+    }
+
+    /**
+     * Obtiene los metadatos del mensaje. Si Gmail responde `404` (o no devuelve el mensaje) distingue
+     * el correo purgado (`410`, eliminando los datos locales, RF-19) del mensaje de otra cuenta (`404`).
+     */
+    private JsonNode metadatosDeMensaje(MFuente cuenta, String token, String mensajeId) throws IOException {
+        URI uri = UriComponentsBuilder.fromUriString(URL_MENSAJES_GMAIL)
+                .pathSegment(mensajeId).queryParam("format", "metadata").build().encode().toUri();
+        try {
+            JsonNode mensaje = respuestaJsonConReintentos(uri, token);
+            if (mensaje != null && !mensaje.path("id").asText("").isBlank()) return mensaje;
+        } catch (HttpStatusCodeException error) {
+            if (error.getStatusCode().value() != 404) throw error;
+        }
+        throw correoInexistente(cuenta, mensajeId);
+    }
+
+    /** Excepción adecuada cuando Gmail no reconoce el mensaje para la cuenta indicada. */
+    private RuntimeException correoInexistente(MFuente cuenta, String mensajeId) {
+        boolean deOtraCuenta = mensajes
+                .findFirstByGoogleMessageIdAndCuenta_Usuario_IdUsuario(mensajeId, cuenta.getUsuario().getIdUsuario())
+                .filter(otro -> !cuenta.getIdFuente().equals(otro.getCuenta().getIdFuente()))
+                .isPresent();
+        if (deOtraCuenta) return new CorreoNoEncontradoException();
+        mensajes.deleteByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId);
+        return new CorreoPurgadoException();
+    }
+
+    /** Crea la fila local mínima de un correo que nunca se sincronizó, para poder marcarlo exento. */
+    private MGmailMensaje nuevoMensajeLocal(MFuente cuenta, JsonNode mensaje) {
+        long internalDate = mensaje.path("internalDate").asLong(0);
+        Instant fecha = internalDate > 0 ? Instant.ofEpochMilli(internalDate) : Instant.now();
+        MGmailMensaje entidad = new MGmailMensaje(UUID.randomUUID().toString(), cuenta,
+                mensaje.path("id").asText(""), fecha);
+        JsonNode headers = mensaje.path("payload").path("headers");
+        entidad.setRemitente(header(headers, "From"));
+        entidad.setAsunto(header(headers, "Subject").isBlank() ? "(Sin asunto)" : header(headers, "Subject"));
+        entidad.setFragmento(mensaje.path("snippet").asText(""));
+        return entidad;
+    }
+
+    /** Ejecuta `messages.modify` con las etiquetas indicadas, con reintentos ante cuota. */
+    private void modificarEtiquetas(String token, String mensajeId, Map<String, List<String>> cambios) throws IOException {
+        URI uri = UriComponentsBuilder.fromUriString(URL_MENSAJES_GMAIL)
+                .pathSegment(mensajeId, "modify").build().encode().toUri();
+        ejecutarConReintentos(() -> clienteHttp.post().uri(uri).headers(h -> h.setBearerAuth(token))
+                .contentType(MediaType.APPLICATION_JSON).body(cambios));
+    }
+
     private JsonNode respuestaJsonConReintentos(URI uri, String token) throws IOException {
+        return ejecutarConReintentos(() -> clienteHttp.get().uri(uri).headers(h -> h.setBearerAuth(token)));
+    }
+
+    /** Reintenta con espera progresiva ante cuota de Gmail (`429`/`403`), como el resto del flujo. */
+    private JsonNode ejecutarConReintentos(Supplier<RestClient.RequestHeadersSpec<?>> solicitud) throws IOException {
         for (int intento = 0; intento < INTENTOS_GMAIL; intento++) {
             try {
-                return respuestaJson(clienteHttp.get().uri(uri).headers(h -> h.setBearerAuth(token)), JsonNode.class);
+                return respuestaJson(solicitud.get(), JsonNode.class);
             } catch (HttpStatusCodeException error) {
                 int estado = error.getStatusCode().value();
                 if (estado != 429 && estado != 403) throw error;
@@ -191,4 +302,13 @@ public class SPapeleraGmail {
 
     /** La cuenta necesita reconectarse: no hay token vigente ni refresh token utilizable (RF-26). */
     public static class CuentaGmailRequiereReconectarException extends IllegalStateException { }
+
+    /** El correo ya fue eliminado definitivamente por Gmail (purgado): `410` (RF-18/RF-19). */
+    public static class CorreoPurgadoException extends RuntimeException { }
+
+    /** El correo ya no está disponible en la vista Papelera: `409 mail_unavailable` (RF-20). */
+    public static class CorreoNoDisponibleException extends RuntimeException { }
+
+    /** El mensaje no pertenece a la cuenta indicada: `404`. */
+    public static class CorreoNoEncontradoException extends RuntimeException { }
 }

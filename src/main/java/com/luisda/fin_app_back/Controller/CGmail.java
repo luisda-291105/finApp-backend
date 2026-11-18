@@ -1203,7 +1203,9 @@ public class CGmail {
             return ResponseEntity.ok(Map.of("connected", true, "email", fuente.getContenido(),
                     "expires_at", fuente.getExpiraEn().toString()));
         } catch (RestClientResponseException error) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+            // Es un problema de la autorización de Google, no de la sesión FinApp.
+            // 409 evita que el cliente interprete el 401 como expiración de sesión.
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                     "connected", false, "requires_reconnect", true,
                     "message", "Google revocó o venció esta autorización. Conecta de nuevo la cuenta."
             ));

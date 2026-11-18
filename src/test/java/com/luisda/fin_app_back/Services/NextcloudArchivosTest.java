@@ -141,4 +141,35 @@ class NextcloudArchivosTest {
         assertEquals("presupuesto.xlsx", recurso.nombreArchivo());
         servidor.verify();
     }
+
+    @Test
+    void renombrarResuelveLaRutaDeMetadatosTrasMover() throws Exception {
+        String idOriginal = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("/remote.php/dav/files/luisd/Finanzas/presupuesto.xlsx".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String xmlDestino = """
+                <d:multistatus xmlns:d="DAV:">
+                  <d:response>
+                    <d:href>/remote.php/dav/files/luisd/Finanzas/presupuesto-renombrado.xlsx</d:href>
+                    <d:propstat><d:prop>
+                      <d:getcontentlength>2048</d:getcontentlength>
+                      <d:getcontenttype>application/vnd.ms-excel</d:getcontenttype>
+                      <d:getlastmodified>Tue, 10 Nov 2026 12:00:00 GMT</d:getlastmodified>
+                      <d:resourcetype/>
+                    </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+                  </d:response>
+                </d:multistatus>
+                """;
+        servidor.expect(requestTo(org.hamcrest.Matchers.containsString("/remote.php/dav/files/luisd/Finanzas/presupuesto.xlsx")))
+                .andExpect(method(HttpMethod.valueOf("MOVE")))
+                .andExpect(header("Destination", org.hamcrest.Matchers.containsString("/remote.php/dav/files/luisd/Finanzas/presupuesto-renombrado.xlsx")))
+                .andRespond(withSuccess());
+        servidor.expect(requestTo(org.hamcrest.Matchers.containsString("/remote.php/dav/files/luisd/Finanzas/presupuesto-renombrado.xlsx")))
+                .andExpect(method(HttpMethod.valueOf("PROPFIND")))
+                .andRespond(withStatus(org.springframework.http.HttpStatus.MULTI_STATUS).body(xmlDestino));
+
+        AlmacenamientoArchivoDTO dto = nextcloud.actualizar(conexion, idOriginal, "presupuesto-renombrado.xlsx", null, null);
+
+        assertEquals("presupuesto-renombrado.xlsx", dto.nombre());
+        servidor.verify();
+    }
 }

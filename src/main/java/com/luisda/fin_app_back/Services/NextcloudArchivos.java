@@ -148,7 +148,15 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         String origen = rutaDeId(conexion, fileId);
         String nombreFinal = nombre == null || nombre.isBlank()
                 ? nombreDeRuta(fileId) : nombreSeguro(nombre);
-        String destino = rutaCarpeta(conexion, idNuevoPadre) + UriUtils.encodePathSegment(nombreFinal, StandardCharsets.UTF_8);
+        String destino;
+        if (idNuevoPadre == null || idNuevoPadre.isBlank()) {
+            // Conserva la carpeta de origen: solo cambia el nombre dentro del mismo directorio
+            int barra = origen.lastIndexOf('/');
+            destino = (barra < 0 ? "/" : origen.substring(0, barra) + "/")
+                    + UriUtils.encodePathSegment(nombreFinal, StandardCharsets.UTF_8);
+        } else {
+            destino = rutaCarpeta(conexion, idNuevoPadre) + UriUtils.encodePathSegment(nombreFinal, StandardCharsets.UTF_8);
+        }
         mover(conexion, origen, destino);
         return metadatos(conexion, rutaRelativaDe(rutaArchivos(conexion), destino));
     }
@@ -471,6 +479,7 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         return padre;
     }
 
+    /** Ruta relativa a la raíz de archivos del usuario (sin el segmento del usuario); id que resuelve routeDeId. */
     private static String rutaRelativaDe(String baseArchivos, String rutaCompleta) {
         String ruta = rutaCompleta;
         if (ruta.startsWith("http")) {
@@ -478,6 +487,8 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
         }
         if (ruta.contains("/remote.php/dav/files/")) {
             ruta = ruta.substring(ruta.indexOf("/remote.php/dav/files/") + "/remote.php/dav/files/".length());
+            int primeraBarra = ruta.indexOf('/');
+            ruta = primeraBarra < 0 ? "" : ruta.substring(primeraBarra + 1); // descarta el segmento del usuario
             return ruta.isBlank() ? "root" : quitarSlash(java.net.URLDecoder.decode(ruta, StandardCharsets.UTF_8));
         }
         if (baseArchivos != null && ruta.startsWith(baseArchivos)) {

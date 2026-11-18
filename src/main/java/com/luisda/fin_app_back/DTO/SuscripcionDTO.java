@@ -19,6 +19,8 @@ public record SuscripcionDTO(
         BigDecimal monto,
         LocalDate fechaCobro,
         String importancia,
+        String prioridad,
+        String apodo,
         boolean activa,
         String correoRemitente,
         String cuentaGmailId,

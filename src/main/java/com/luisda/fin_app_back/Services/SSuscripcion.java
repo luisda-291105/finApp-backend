@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.luisda.fin_app_back.DTO.SuscripcionAjustesDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionSolicitudDTO;
 import com.luisda.fin_app_back.Model.MFuente;
@@ -29,7 +30,7 @@ import java.util.regex.Pattern;
 /**
  * @uso               Gestiona las suscripciones manuales y la consulta unificada de suscripciones
  * @capa              Servicio
- * @responsabilidades CRUD de suscripciones manuales y listado unificado (manuales y de Gmail)
+ * @responsabilidades CRUD de suscripciones manuales, listado unificado (manuales y de Gmail) y ajustes de organización
  * @datos             Recibe y devuelve DTOs de Suscripcion
  * @dependencias      ISuscripcion, IUsuario
  * @usadoPor          CSuscripcion
@@ -38,10 +39,12 @@ import java.util.regex.Pattern;
 public class SSuscripcion {
 
     public static final String IMPORTANCIA_ALTA = "ALTA";
+    public static final String IMPORTANCIA_MEDIA = "MEDIA";
     public static final String IMPORTANCIA_BAJA = "BAJA";
 
     private static final int LONGITUD_NOMBRE = 100;
     private static final int LONGITUD_CATEGORIA = 60;
+    private static final int LONGITUD_APODO = 120;
     private static final BigDecimal MONTO_MAXIMO = new BigDecimal("9999999999.99");
     private static final Pattern DESTINO_BAJA = Pattern.compile("(?i)<(" + "(?:https?|mailto)" + ":[^>]+)>");
 
@@ -69,6 +72,8 @@ public class SSuscripcion {
         suscripcion.setMonto(datos.monto());
         suscripcion.setFechaCobro(datos.fechaCobro());
         suscripcion.setImportancia(datos.importancia());
+        suscripcion.setPrioridad(datos.prioridad());
+        suscripcion.setApodo(datos.apodo());
         suscripcion.setActiva(datos.activa() == null || datos.activa());
         suscripcion.setFechaCreacion(ahora);
         suscripcion.setFechaActualizacion(ahora);
@@ -118,7 +123,42 @@ public class SSuscripcion {
         suscripcion.setMonto(datos.monto());
         suscripcion.setFechaCobro(datos.fechaCobro());
         suscripcion.setImportancia(datos.importancia());
+        suscripcion.setPrioridad(datos.prioridad());
+        suscripcion.setApodo(datos.apodo());
         if (datos.activa() != null) suscripcion.setActiva(datos.activa());
+        suscripcion.setFechaActualizacion(Instant.now());
+        return aDto(this.suscripciones.save(suscripcion));
+    }
+
+    /**
+     * Actualiza los ajustes de organización de una suscripción del usuario,
+     * sea manual o detectada en Gmail: importancia, prioridad y apodo.
+     * Omitir un campo (null) conserva el valor actual.
+     */
+    @Transactional
+    public SuscripcionDTO actualizarAjustes(String idUsuario, String id, SuscripcionAjustesDTO ajustes) {
+        if (ajustes == null) {
+            throw new DatosInvalidosException("Indica qué ajustes quieres guardar.", null);
+        }
+        MSuscripcion suscripcion = buscarPropia(idUsuario, id);
+        boolean cambio = false;
+        if (ajustes.importancia() != null) {
+            // Vacío explícito limpia a NULL («No definido» en la UI); antes el vacío conservaba el valor.
+            suscripcion.setImportancia(ajustes.importancia().isBlank() ? null : normalizarNivel(ajustes.importancia(), "importancia", IMPORTANCIA_ALTA));
+            cambio = true;
+        }
+        if (ajustes.prioridad() != null) {
+            // Vacío explícito limpia a NULL («No definido» en la UI); antes el vacío conservaba el valor.
+            suscripcion.setPrioridad(ajustes.prioridad().isBlank() ? null : normalizarNivel(ajustes.prioridad(), "prioridad", IMPORTANCIA_MEDIA));
+            cambio = true;
+        }
+        if (ajustes.apodo() != null) {
+            suscripcion.setApodo(normalizarOpcional(ajustes.apodo(), "apodo", LONGITUD_APODO));
+            cambio = true;
+        }
+        if (!cambio) {
+            throw new DatosInvalidosException("Indica al menos un ajuste para guardar.", null);
+        }
         suscripcion.setFechaActualizacion(Instant.now());
         return aDto(this.suscripciones.save(suscripcion));
     }
@@ -148,15 +188,20 @@ public class SSuscripcion {
     public SuscripcionDTO aDto(MSuscripcion suscripcion) {
         String unsubscribe = valorSeguro(suscripcion.getListUnsubscribe());
         MFuente cuenta = suscripcion.getCuenta();
+        boolean deGmail = suscripcion.getOrigen() == OrigenSuscripcion.GMAIL;
+        String categoria = deGmail ? null : suscripcion.getCategoria();
+        List<String> categorias = deGmail ? leerLista(suscripcion.getCategoria()) : List.of();
         return new SuscripcionDTO(
                 suscripcion.getId(),
                 suscripcion.getOrigen() == null ? null : suscripcion.getOrigen().name(),
                 suscripcion.getNombre(),
-                suscripcion.getCategoria(),
-                leerLista(suscripcion.getCategoriasJson()),
+                categoria,
+                categorias,
                 suscripcion.getMonto(),
                 suscripcion.getFechaCobro(),
                 suscripcion.getImportancia(),
+                suscripcion.getPrioridad(),
+                suscripcion.getApodo(),
                 suscripcion.isActiva(),
                 suscripcion.getCorreoRemitente(),
                 cuenta == null ? null : cuenta.getIdFuente(),
@@ -230,17 +275,30 @@ public class SSuscripcion {
         if (fechaCobro == null) {
             throw new DatosInvalidosException("La fecha de cobro es obligatoria.", "fechaCobro");
         }
+        String prioridad = normalizarNivel(solicitud.prioridad(), "prioridad", IMPORTANCIA_MEDIA);
+        String apodo = normalizarOpcional(solicitud.apodo(), "apodo", LONGITUD_APODO);
         return new Datos(nombre, categoria, monto, fechaCobro,
-                normalizarImportancia(solicitud.importancia()), solicitud.activa());
+                normalizarNivel(solicitud.importancia(), "importancia", IMPORTANCIA_ALTA), prioridad, apodo, solicitud.activa());
     }
 
-    private String normalizarImportancia(String valor) {
-        if (valor == null || valor.isBlank()) return IMPORTANCIA_ALTA;
+    private String normalizarNivel(String valor, String campo, String porDefecto) {
+        if (valor == null || valor.isBlank()) return porDefecto;
         return switch (valor.trim().toUpperCase(Locale.ROOT)) {
             case "ALTA", "ALTO", "IMPORTANTE" -> IMPORTANCIA_ALTA;
+            case "MEDIA", "MEDIO" -> IMPORTANCIA_MEDIA;
             case "BAJA", "BAJO" -> IMPORTANCIA_BAJA;
-            default -> throw new DatosInvalidosException("La importancia debe ser Alta o Baja.", "importancia");
+            default -> throw new DatosInvalidosException(
+                    "La " + campo + " debe ser Alta, Media o Baja.", campo);
         };
+    }
+
+    private String normalizarOpcional(String valor, String campo, int longitud) {
+        String limpio = normalizar(valor);
+        if (limpio != null && limpio.length() > longitud) {
+            throw new DatosInvalidosException(
+                    "El " + campo + " no puede superar " + longitud + " caracteres.", campo);
+        }
+        return limpio;
     }
 
     private String normalizar(String valor) {
@@ -270,7 +328,7 @@ public class SSuscripcion {
 
     /** Datos ya validados y normalizados de la solicitud. */
     private record Datos(String nombre, String categoria, BigDecimal monto, LocalDate fechaCobro,
-                         String importancia, Boolean activa) { }
+                         String importancia, String prioridad, String apodo, Boolean activa) { }
 
     /** Error de validación con el campo que se debe corregir en el formulario. */
     public static class DatosInvalidosException extends RuntimeException {

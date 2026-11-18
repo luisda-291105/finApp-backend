@@ -1,5 +1,6 @@
 package com.luisda.fin_app_back.Services;
 
+import com.luisda.fin_app_back.DTO.SuscripcionAjustesDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionSolicitudDTO;
 import com.luisda.fin_app_back.Model.MSuscripcion;
@@ -18,6 +19,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -62,8 +64,10 @@ class SSuscripcionTest {
         SuscripcionDTO baja = servicio.crear("usuario-1", solicitud("Internet", "80000", "Baja"));
 
         assertEquals("BAJA", baja.importancia());
+        SuscripcionDTO media = servicio.crear("usuario-1", solicitud("Internet", "80000", "Media"));
+        assertEquals("MEDIA", media.importancia());
         SSuscripcion.DatosInvalidosException error = assertThrows(SSuscripcion.DatosInvalidosException.class,
-                () -> servicio.crear("usuario-1", solicitud("Internet", "80000", "Media")));
+                () -> servicio.crear("usuario-1", solicitud("Internet", "80000", "Urgente")));
         assertEquals("importancia", error.getCampo());
     }
 
@@ -139,6 +143,65 @@ class SSuscripcionTest {
         assertTrue(activa.activa());
     }
 
+    @Test
+    void actualizaAjustesEnSuscripcionesDeGmail() {
+        MSuscripcion deGmail = gmail("gmail-1", "correo@promo.com");
+        when(repositorio.findPropia("gmail-1", "usuario-1")).thenReturn(Optional.of(deGmail));
+        when(repositorio.save(deGmail)).thenReturn(deGmail);
+
+        SuscripcionDTO actualizada = servicio.actualizarAjustes("usuario-1", "gmail-1",
+                new SuscripcionAjustesDTO("Media", "Alta", "Alertas del banco"));
+
+        assertEquals("MEDIA", actualizada.importancia());
+        assertEquals("ALTA", actualizada.prioridad());
+        assertEquals("Alertas del banco", actualizada.apodo());
+    }
+
+    @Test
+    void actualizaAjustesEnSuscripcionesManuales() {
+        MSuscripcion manual = manual("manual-1", "Netflix", LocalDate.of(2026, 11, 20));
+        manual.setPrioridad(SSuscripcion.IMPORTANCIA_MEDIA);
+        when(repositorio.findPropia("manual-1", "usuario-1")).thenReturn(Optional.of(manual));
+        when(repositorio.save(manual)).thenReturn(manual);
+
+        SuscripcionDTO actualizada = servicio.actualizarAjustes("usuario-1", "manual-1",
+                new SuscripcionAjustesDTO("Alta", "Baja", null));
+
+        assertEquals("ALTA", actualizada.importancia());
+        assertEquals("BAJA", actualizada.prioridad());
+    }
+
+    @Test
+    void actualizaAjustesConVacioLimpiaANull() {
+        MSuscripcion deGmail = gmail("gmail-1", "correo@promo.com");
+        deGmail.setImportancia(SSuscripcion.IMPORTANCIA_ALTA);
+        deGmail.setPrioridad(SSuscripcion.IMPORTANCIA_MEDIA);
+        when(repositorio.findPropia("gmail-1", "usuario-1")).thenReturn(Optional.of(deGmail));
+        when(repositorio.save(deGmail)).thenReturn(deGmail);
+
+        // Vacío explícito en los selects de la UI («No definido») guarda NULL en la columna.
+        SuscripcionDTO actualizada = servicio.actualizarAjustes("usuario-1", "gmail-1",
+                new SuscripcionAjustesDTO("", " ", null));
+
+        assertNull(actualizada.importancia());
+        assertNull(actualizada.prioridad());
+    }
+
+    @Test
+    void actualizarAjustesLimpiaElApodoYValidaLaPrioridad() {
+        MSuscripcion manual = manual("manual-1", "Netflix", LocalDate.of(2026, 11, 20));
+        manual.setApodo("Alias");
+        when(repositorio.findPropia("manual-1", "usuario-1")).thenReturn(Optional.of(manual));
+        when(repositorio.save(manual)).thenReturn(manual);
+
+        SuscripcionDTO limpia = servicio.actualizarAjustes("usuario-1", "manual-1",
+                new SuscripcionAjustesDTO(null, null, "  "));
+        assertNull(limpia.apodo());
+
+        assertThrows(SSuscripcion.DatosInvalidosException.class, () -> servicio.actualizarAjustes("usuario-1", "manual-1",
+                new SuscripcionAjustesDTO(null, "Urgente", null)));
+    }
+
     private SuscripcionSolicitudDTO solicitud(String nombre, String monto, String importancia) {
         return new SuscripcionSolicitudDTO(nombre, new BigDecimal(monto), LocalDate.of(2026, 11, 20),
                 "Servicios", importancia, null);
@@ -173,7 +236,7 @@ class SSuscripcionTest {
         suscripcion.setOrigen(OrigenSuscripcion.GMAIL);
         suscripcion.setNombre("Promociones");
         suscripcion.setCorreoRemitente(remitente);
-        suscripcion.setCategoriasJson("[\"CATEGORY_PROMOTIONS\"]");
+        suscripcion.setCategoria("[\"CATEGORY_PROMOTIONS\"]");
         suscripcion.setListUnsubscribe("<https://baja.example.com/x>");
         suscripcion.setActiva(true);
         suscripcion.setUltimaActividad(java.time.Instant.now());

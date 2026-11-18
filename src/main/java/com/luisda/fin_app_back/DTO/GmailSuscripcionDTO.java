@@ -15,5 +15,9 @@ public record GmailSuscripcionDTO(
         Long correosRecientes,
         String cuentaGmailId,
         String cuentaGmail,
-        Instant ultimaActividad
+        Instant ultimaActividad,
+        String idSuscripcion,
+        String importancia,
+        String prioridad,
+        String apodo
 ) { }

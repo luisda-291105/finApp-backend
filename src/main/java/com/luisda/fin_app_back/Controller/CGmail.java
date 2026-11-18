@@ -1135,12 +1135,13 @@ public class CGmail {
             String correo = suscripcion.getCorreoRemitente();
             String unsubscribe = valorSeguro(suscripcion.getListUnsubscribe());
             String from = valorSeguro(suscripcion.getNombre());
-            List<String> categorias = leerListaJson(suscripcion.getCategoriasJson());
+            List<String> categorias = leerListaJson(suscripcion.getCategoria());
             resultado.add(new GmailSuscripcionDTO(correo.toLowerCase(Locale.ROOT), from, correo, categorias,
                     extraerDestinoBaja(unsubscribe, "https?"), extraerDestinoBaja(unsubscribe, "mailto"),
                     valorSeguro(suscripcion.getListUnsubscribePost()).toLowerCase(Locale.ROOT)
                             .contains("list-unsubscribe=one-click"),
-                    null, cuenta.getIdFuente(), cuenta.getContenido(), suscripcion.getUltimaActividad()));
+                    null, cuenta.getIdFuente(), cuenta.getContenido(), suscripcion.getUltimaActividad(),
+                    suscripcion.getId(), suscripcion.getImportancia(), suscripcion.getPrioridad(), suscripcion.getApodo()));
         }
         return List.copyOf(resultado);
     }

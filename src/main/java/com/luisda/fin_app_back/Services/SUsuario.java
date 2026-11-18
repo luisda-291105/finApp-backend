@@ -43,11 +43,12 @@ public  class SUsuario {
     private final IGrupo grupos;
     private final ITarjeta tarjetas;
     private final IMuestraRepository muestras;
+    private final SRefreshFamilias refreshFamilias;
 
     // Constructor
     public SUsuario(IUsuario iUsuario, SVerificadorContrasena verificador, IContacto contactos,
                     IFuentes fuentes, IGrupo grupos, ITarjeta tarjetas,
-                    IMuestraRepository muestras) {
+                    IMuestraRepository muestras, SRefreshFamilias refreshFamilias) {
         IUsuario = iUsuario;
         this.verificador = verificador;
         this.contactos = contactos;
@@ -55,6 +56,7 @@ public  class SUsuario {
         this.grupos = grupos;
         this.tarjetas = tarjetas;
         this.muestras = muestras;
+        this.refreshFamilias = refreshFamilias;
     }
 
     /** Agrega un usuario  */
@@ -87,6 +89,8 @@ public  class SUsuario {
         MUsuario.setCorreo(correo);
         MUsuario.setTelefono(telefono);
         MUsuario.setContrasena(verificador.codificar(MUsuario.getContrasena()));
+        MUsuario.setActivo(true);
+        MUsuario.setCredentialVersion(0L);
         return IUsuario.save(MUsuario);
     }
 
@@ -167,6 +171,7 @@ public  class SUsuario {
         try {
             Optional<MUsuario> usuarioEncontrado = this.IUsuario.findById(idUsuario);
             if (usuarioEncontrado.isPresent()){
+                this.refreshFamilias.revocarTodasDelUsuario(idUsuario, java.time.Instant.now());
                 this.IUsuario.deleteById(idUsuario);
                 return true;
             }else {
@@ -216,8 +221,16 @@ public  class SUsuario {
                 }
 
                 anterior.setNombre(cambios.getNombre().trim());
-                if (cambios.getContrasena() != null && !cambios.getContrasena().isBlank()) {
+                boolean contrasenaCambiada = cambios.getContrasena() != null && !cambios.getContrasena().isBlank();
+                if (contrasenaCambiada) {
                     anterior.setContrasena(verificador.codificar(cambios.getContrasena()));
+                    // Solo el cambio de contraseña incrementa la versión de credenciales.
+                    anterior.setCredentialVersion(anterior.getCredentialVersion() + 1);
+                }
+                boolean desactivadoAhora = !cambios.isActivo() && anterior.isActivo();
+                if (desactivadoAhora) anterior.setActivo(false);
+                if (contrasenaCambiada || desactivadoAhora || !nuevoId.equals(idUsuario)) {
+                    refreshFamilias.revocarTodasDelUsuario(idUsuario, java.time.Instant.now());
                 }
                 if (nuevoId.equals(idUsuario)) {
                     anterior.setCorreo(correoNuevo);
@@ -230,6 +243,8 @@ public  class SUsuario {
                 actualizado.setIdUsuario(nuevoId);
                 actualizado.setNombre(anterior.getNombre());
                 actualizado.setContrasena(anterior.getContrasena());
+                actualizado.setActivo(anterior.isActivo());
+                actualizado.setCredentialVersion(anterior.getCredentialVersion());
                 actualizado.setFechaCreacion(anterior.getFechaCreacion());
                 MUsuario nuevoUsuario = IUsuario.saveAndFlush(actualizado);
 

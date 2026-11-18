@@ -32,8 +32,10 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         if ("OPTIONS".equalsIgnoreCase(method)) return true;
         String path = req.getRequestURI();
 
+        // /usuario/refresh debe llegar al controlador aunque el access esté vencido;
+        // el Origin sí se valida en ValidacionOrigenInterceptor (no está exento allí).
         boolean exento = path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
-                || path.equals("/usuario/admin-login")
+                || path.equals("/usuario/refresh") || path.equals("/usuario/admin-login")
                 || path.equals("/api/gmail/callback") || path.equals("/api/gmail/webhook/pubsub")
                 || path.equals("/asistente/publico");
         if (exento) return true;

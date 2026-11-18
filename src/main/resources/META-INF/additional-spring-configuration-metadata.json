@@ -143,5 +143,35 @@
     "name": "finapp.trm.cache-seconds",
     "type": "java.lang.Long",
     "description": "TTL en segundos de la caché de la TRM vigente."
+  },
+  {
+    "name": "finapp.sesion.access-seconds",
+    "type": "java.lang.Long",
+    "description": "Vigencia del access token en segundos (900 por defecto)."
+  },
+  {
+    "name": "finapp.sesion.refresh-inactivity-seconds",
+    "type": "java.lang.Long",
+    "description": "Ventana de inactividad del refresh token en segundos (1800 por defecto)."
+  },
+  {
+    "name": "finapp.sesion.absolute-seconds",
+    "type": "java.lang.Long",
+    "description": "Tope absoluto de la sesión desde el login en segundos (28800 por defecto)."
+  },
+  {
+    "name": "finapp.sesion.reuse-grace-seconds",
+    "type": "java.lang.Long",
+    "description": "Gracia para tolerar reuso concurrente del refresh en segundos (15 por defecto)."
+  },
+  {
+    "name": "finapp.sesion.limpieza-intervalo-ms",
+    "type": "java.lang.Long",
+    "description": "Intervalo de limpieza de familias vencidas en milisegundos."
+  },
+  {
+    "name": "finapp.seguridad.proxies-confiables",
+    "type": "java.lang.String",
+    "description": "CIDR de peers autorizados a aportar CF-Connecting-IP / X-Forwarded-For / X-Real-IP."
   }
-]}
+ ]}

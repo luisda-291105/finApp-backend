@@ -7,6 +7,12 @@ import com.luisda.fin_app_back.Services.SVerificadorContrasena;
 import com.luisda.fin_app_back.Services.JwtTokenService;
 import com.luisda.fin_app_back.Services.SIntentosRateLimit;
 import com.luisda.fin_app_back.Services.SAccesoAdmin;
+import com.luisda.fin_app_back.Services.SRefreshFamilias;
+import com.luisda.fin_app_back.Config.SesionConfig;
+import com.luisda.fin_app_back.Model.MRefreshFamilia;
+import com.luisda.fin_app_back.Seguridad.IpCliente;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.swagger.v3.oas.annotations.Operation;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
@@ -23,7 +29,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * @uso               dar puntos de coneccion con la api
@@ -46,51 +54,172 @@ public class CUsuario {
     private final JwtTokenService tokens;
     private final SIntentosRateLimit rateLimit;
     private final SAccesoAdmin accesoAdmin;
+    private final SesionConfig sesion;
+    private final SRefreshFamilias refreshFamilias;
+    private final IpCliente ipCliente;
 
     public CUsuario(SUsuarioActivo usuarioActivo, SVerificadorContrasena verificadorContrasena,
                     SUsuario SUsuario, JwtTokenService tokens, SIntentosRateLimit rateLimit,
-                    SAccesoAdmin accesoAdmin) {
+                    SAccesoAdmin accesoAdmin, SesionConfig sesion,
+                    SRefreshFamilias refreshFamilias, IpCliente ipCliente) {
         this.usuarioActivo = usuarioActivo;
         this.verificadorContrasena = verificadorContrasena;
         this.SUsuario = SUsuario;
         this.tokens = tokens;
         this.rateLimit = rateLimit;
         this.accesoAdmin = accesoAdmin;
+        this.sesion = sesion;
+        this.refreshFamilias = refreshFamilias;
+        this.ipCliente = ipCliente;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> iniciarSesion(@RequestBody UsuarioLoginDTO credenciales, HttpServletRequest solicitud) {
+        // Un body vacío o incompleto es un login inválido: nunca renueva una sesión.
         if (credenciales == null || credenciales.identificador() == null || credenciales.contrasena() == null) {
-            return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa tu nombre, identificación, correo o teléfono y contraseña.", "credenciales"));
+            return ResponseEntity.badRequest()
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                    .body(RespuestaModalDTO.error("Ingresa tu nombre, identificación, correo o teléfono y contraseña.", "credenciales"));
         }
-        String clave = "login:" + (solicitud.getRemoteAddr() == null ? "ip-desconocida" : solicitud.getRemoteAddr())
-                + ":" + credenciales.identificador().trim().toLowerCase(java.util.Locale.ROOT);
+        String ip = this.ipCliente.resolver(solicitud);
+        String clave = "login:" + ip + ":" + credenciales.identificador().trim().toLowerCase(java.util.Locale.ROOT);
         if (!this.rateLimit.registrar(clave, false)) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
                     .body(RespuestaModalDTO.error("Demasiados intentos fallidos de inicio de sesión. Espera unos minutos e inténtalo de nuevo.", "credenciales"));
         }
         try {
             MUsuario usuario = this.SUsuario.autenticar(credenciales.identificador(), credenciales.contrasena(), verificadorContrasena);
-            if (usuario == null) {
-                LOGGER.warn("Intento de inicio de sesión fallido para identificador {} desde IP {}", credenciales.identificador(), solicitud.getRemoteAddr());
+            if (usuario == null || !usuario.isActivo()) {
+                LOGGER.warn("Intento de inicio de sesión fallido para identificador {} desde IP {}", credenciales.identificador(), ip);
                 this.rateLimit.registrar(clave, true);
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .header(HttpHeaders.CACHE_CONTROL, "no-store")
                         .body(RespuestaModalDTO.error("El usuario o la contraseña no son correctos.", "credenciales"));
             }
             LOGGER.info("Inicio de sesión exitoso para usuario {}", usuario.getIdUsuario());
             this.rateLimit.limpiar(clave);
+
+            Instant ahora = Instant.now();
+            Instant absoluto = ahora.plusSeconds(sesion.absoluteSeconds());
+            String familyId = UUID.randomUUID().toString();
+            String refresh = tokens.emitirRefresh(usuario.getIdUsuario(), familyId, absoluto, usuario.getCredentialVersion());
+            this.refreshFamilias.crear(familyId, usuario.getIdUsuario(), tokens.hash(refresh),
+                    ahora, absoluto, usuario.getCredentialVersion());
+            String access = tokens.emitirAccess(usuario.getIdUsuario(), familyId, null, absoluto);
+
             return ResponseEntity.ok()
-                    .header(HttpHeaders.SET_COOKIE, tokens.cookie(tokens.emitir(usuario.getIdUsuario())).toString())
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                    .header(HttpHeaders.SET_COOKIE, tokens.cookieAccess(access, sesion.accessSeconds()).toString())
+                    .header(HttpHeaders.SET_COOKIE, tokens.cookieRefresh(refresh, sesion.refreshInactivitySeconds()).toString())
                     .body(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
         } catch (IllegalStateException error) {
             this.rateLimit.registrar(clave, true);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
                     .body(RespuestaModalDTO.error(error.getMessage(), null));
         } catch (Exception error) {
             this.rateLimit.registrar(clave, true);
+            LOGGER.error("No se pudo iniciar sesión desde IP {}", ip, error);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
                     .body(RespuestaModalDTO.error("No se pudo iniciar sesión.", null));
         }
+    }
+
+    /**
+     * Renueva access + refresh con rotación y detección de reuso. Sin body.
+     * Queda protegido por ValidacionOrigenInterceptor (Origin exigido) pero exento del
+     * interceptor de sesión, porque el access puede estar vencido.
+     */
+    @PostMapping("/refresh")
+    @Operation(summary = "Renovar sesión", description = RENOVACION_DESCRIPCION)
+    public ResponseEntity<?> refrescarSesion(HttpServletRequest solicitud) {
+        String ip = this.ipCliente.resolver(solicitud);
+        String refresh = tokens.refreshDe(solicitud);
+        if (refresh.isBlank()) return falloRefresh(null, ip, "sin-cookie-de-refresh");
+
+        Claims claims;
+        try {
+            claims = tokens.parsearRefresh(refresh);
+        } catch (JwtException | IllegalArgumentException error) {
+            return falloRefresh(null, ip, "firma-tipo-o-expiracion-invalidos");
+        }
+
+        String familyId = claims.get("fam", String.class);
+        String idToken = claims.getSubject();
+        long versionToken = claims.get("cv", Long.class);
+        String claveIp = "refresh-ip:" + ip;
+        String claveFamilia = "refresh-familia:" + familyId;
+        String claveUsuario = "refresh-usuario:" + idToken;
+        // Se contabiliza cada intento de refresh; los intentos correctos limpian las tres claves.
+        if (!rateLimit.registrar(claveIp, true) || !rateLimit.registrar(claveFamilia, true)
+                || !rateLimit.registrar(claveUsuario, true)) {
+            return falloRefresh(familyId, ip, "rate-limit");
+        }
+
+        Instant ahora = Instant.now();
+        MRefreshFamilia familia = refreshFamilias.buscar(familyId);
+        if (familia == null) return falloRefresh(familyId, ip, "familia-inexistente");
+        if (familia.estaRevocada() || familia.vencida(ahora)) {
+            return falloRefresh(familyId, ip, "familia-revocada-o-vencida");
+        }
+        if (!familia.getIdUsuario().equals(idToken)) {
+            return falloRefresh(familyId, ip, "usuario-de-la-familia-distinto");
+        }
+
+        String hash = tokens.hash(refresh);
+        SRefreshFamilias.ResultadoReuso resultado = refreshFamilias.evaluarReuso(
+                familia, hash, ip, idToken, ahora);
+        switch (resultado) {
+            case DESCONOCIDO -> { return falloRefresh(familyId, ip, "hash-desconocido"); }
+            case REUSO_DETECTADO -> { return falloRefresh(familyId, ip, "reuso-detectado"); }
+            case VIGENTE, ANTERIOR_DENTRO_GRACIA -> {
+                // ANTERIOR_DENTRO_GRACIA: solo guardamos hashes, no podemos reenviar el
+                // refresh "vigente" literal. Se emite un par nuevo y se rota de nuevo;
+                // el cliente obtiene una sesión válida y la familia queda consistente.
+            }
+        }
+
+        MUsuario usuario;
+        try {
+            usuario = this.SUsuario.buscarPorId(idToken).orElse(null);
+        } catch (Exception error) {
+            return falloRefresh(familyId, ip, "usuario-no-disponible");
+        }
+        if (usuario == null || !usuario.isActivo()
+                || usuario.getCredentialVersion() != versionToken
+                || familia.getCredentialVersion() != versionToken) {
+            return falloRefresh(familyId, ip, "credenciales-desactualizadas");
+        }
+        if (!ahora.isBefore(familia.getAbsoluteExpiresAt())) {
+            return falloRefresh(familyId, ip, "tope-absoluto-alcanzado");
+        }
+
+        String refreshNuevo = tokens.emitirRefresh(idToken, familyId, familia.getAbsoluteExpiresAt(), versionToken);
+        refreshFamilias.rotar(familia, tokens.hash(refreshNuevo), ahora);
+        String accessNuevo = tokens.emitirAccess(idToken, familyId, null, familia.getAbsoluteExpiresAt());
+        rateLimit.limpiar(claveIp);
+        rateLimit.limpiar(claveFamilia);
+        rateLimit.limpiar(claveUsuario);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.SET_COOKIE, tokens.cookieAccess(accessNuevo, sesion.accessSeconds()).toString())
+                .header(HttpHeaders.SET_COOKIE, tokens.cookieRefresh(refreshNuevo, sesion.refreshInactivitySeconds()).toString())
+                .body(RespuestaModalDTO.exito("Sesión renovada.", dtoActivo(usuario)));
+    }
+
+    private static final String RENOVACION_DESCRIPCION =
+            "Rota el refresh token y devuelve nuevas cookies FINAPP_AUTH y FINAPP_REFRESH. Sin cuerpo.";
+
+    private ResponseEntity<?> falloRefresh(String familyId, String ip, String motivo) {
+        refreshFamilias.registrarFallo(familyId, ip, motivo);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.SET_COOKIE, tokens.cookieExpirado().toString())
+                .header(HttpHeaders.SET_COOKIE, tokens.cookieRefreshExpirado().toString())
+                .body(RespuestaModalDTO.error("Tu sesión expiró o se cerró. Inicia sesión de nuevo.", null));
     }
 
     /**
@@ -133,9 +262,14 @@ public class CUsuario {
     public ResponseEntity<?> cerrarSesion(HttpServletRequest solicitud) {
         java.util.Optional<String> idSesion = usuarioActivo.obtenerIdUsuario(solicitud);
         if (idSesion.isPresent()) LOGGER.info("Cierre de sesión para usuario {}", idSesion.get());
+        // Se lee la familia incluso si el access ya expiró: el logout siempre revoca la sesión.
+        tokens.familyIdDe(solicitud, true)
+                .ifPresent(familyId -> refreshFamilias.revocar(familyId, Instant.now()));
         this.tokens.revocarToken(solicitud);
         return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.SET_COOKIE, tokens.cookieExpirado().toString())
+                .header(HttpHeaders.SET_COOKIE, tokens.cookieRefreshExpirado().toString())
                 .body(RespuestaModalDTO.exito("Sesión cerrada.", null));
     }
 
@@ -282,12 +416,10 @@ public class CUsuario {
                                        HttpServletRequest solicitud) throws Exception{
         try {
             MUsuario actualizado = this.SUsuario.modificar(cambios, idUsuario);
-            ResponseEntity.BodyBuilder respuesta = ResponseEntity.ok();
-            if (idUsuario.equals(usuarioActivo.obtenerIdUsuario(solicitud).orElse(null))) {
-                respuesta.header(HttpHeaders.SET_COOKIE,
-                        tokens.cookie(tokens.emitir(actualizado.getIdUsuario())).toString());
-            }
-            return respuesta.body(RespuestaModalDTO.exito("Perfil actualizado.", UsuarioDTO.desde(actualizado)));
+            // No se reemite el access aquí: si cambió la contraseña, las familias ya fueron
+            // revocadas y el usuario debe renovar con /usuario/refresh o iniciar sesión de nuevo.
+            return ResponseEntity.ok()
+                    .body(RespuestaModalDTO.exito("Perfil actualizado.", UsuarioDTO.desde(actualizado)));
         } catch (IllegalStateException error) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(RespuestaModalDTO.error(error.getMessage(), "idUsuario"));

@@ -24,6 +24,9 @@ public class EspecificaPublicaApi {
         paths.put("/usuario/login", ruta("post", "Inicia sesión con usuario y contraseña.",
                 cuerpoCredenciales("usuario"),
                 respuestas("200", "Sesión iniciada.", "401", "Credenciales incorrectas.")));
+        paths.put("/usuario/refresh", ruta("post", "Renueva access y refresh con rotación (sin cuerpo).",
+                cuerpoVacio(),
+                respuestas("200", "Sesión renovada.", "401", "Sesión expirada o cerrada.")));
         paths.put("/usuario/admin-login", ruta("post", "Inicia sesión administrativa para operación y pruebas.",
                 cuerpoCredenciales("admin"),
                 respuestas("200", "Sesión administrativa iniciada.",
@@ -64,6 +67,7 @@ public class EspecificaPublicaApi {
     public List<String> rutasPublicas() {
         List<String> rutas = new ArrayList<>();
         rutas.add("/usuario/login");
+        rutas.add("/usuario/refresh");
         rutas.add("/usuario/admin-login");
         rutas.add("/usuario");
         rutas.add("/asistente/publico");

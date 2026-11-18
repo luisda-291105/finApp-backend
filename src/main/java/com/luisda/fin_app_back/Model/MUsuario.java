@@ -41,6 +41,14 @@ public class MUsuario implements Persistable<String> {
     @Column(length = 255, nullable = false)
     private String contrasena;
 
+    /** Una cuenta recién creada está activa; la desactivación revoca todas sus sesiones. */
+    @Column(name = "activo", nullable = false)
+    private Boolean activo = Boolean.TRUE;
+
+    /** Solo se incrementa al cambiar la contraseña; invalida todas las familias de refresh. */
+    @Column(name = "credential_version", nullable = false)
+    private long credentialVersion = 0L;
+
     @Column(nullable = false)
     private LocalDate fechaCreacion;
 
@@ -111,6 +119,12 @@ public class MUsuario implements Persistable<String> {
     public void setContrasena(String contrasena) {
         this.contrasena = contrasena;
     }
+
+    public boolean isActivo() { return Boolean.TRUE.equals(activo); }
+    public void setActivo(boolean activo) { this.activo = activo; }
+
+    public long getCredentialVersion() { return credentialVersion; }
+    public void setCredentialVersion(long credentialVersion) { this.credentialVersion = credentialVersion; }
 
     public LocalDate getFechaCreacion() {
         return fechaCreacion;

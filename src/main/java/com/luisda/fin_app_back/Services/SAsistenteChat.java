@@ -800,7 +800,7 @@ public class SAsistenteChat {
             else if (!servicioContactos.eliminarPropio(accion.id(), idUsuario)) throw new IllegalArgumentException("No se encontró el contacto propio.");
         } else if ("BOLSILLO".equals(accion.entidad())) {
             BolsilloSolicitudDTO dto = new BolsilloSolicitudDTO(texto(datos.get("nombre")), booleanONull(datos.get("estado")),
-                    decimalONull(datos.get("montoObjetivo")), texto(datos.get("tipo")));
+                    decimalONull(datos.get("montoObjetivo")), texto(datos.get("tipo")), textoONull(datos.get("descripcion")), null);
             if ("CREAR".equals(accion.accion())) servicioBolsillos.crear(idUsuario, dto);
             else if ("ACTUALIZAR".equals(accion.accion())) servicioBolsillos.actualizar(idUsuario, accion.id(), dto);
             else servicioBolsillos.eliminar(idUsuario, accion.id());

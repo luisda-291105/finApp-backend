@@ -41,7 +41,9 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-UPDATE usuario SET activo = 1 WHERE activo IS NULL;
+-- Hibernate pudo crear `activo` sin DEFAULT y dejar a los usuarios existentes en 0.
+-- Se activan todos: el estado real de `activo` se gestiona desde SUsuario.
+UPDATE usuario SET activo = 1;
 UPDATE usuario SET credential_version = 0 WHERE credential_version IS NULL;
 
 -- DOWN (aproximado): DROP TABLE refresh_familia; ALTER TABLE usuario DROP COLUMN credential_version; ALTER TABLE usuario DROP COLUMN activo;

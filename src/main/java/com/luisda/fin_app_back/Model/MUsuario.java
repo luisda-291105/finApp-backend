@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PostPersist;
+import org.hibernate.annotations.ColumnDefault;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.domain.Persistable;
@@ -42,10 +43,12 @@ public class MUsuario implements Persistable<String> {
     private String contrasena;
 
     /** Una cuenta recién creada está activa; la desactivación revoca todas sus sesiones. */
+    @ColumnDefault("true")
     @Column(name = "activo", nullable = false)
     private Boolean activo = Boolean.TRUE;
 
     /** Solo se incrementa al cambiar la contraseña; invalida todas las familias de refresh. */
+    @ColumnDefault("0")
     @Column(name = "credential_version", nullable = false)
     private long credentialVersion = 0L;
 

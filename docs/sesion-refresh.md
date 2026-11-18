@@ -4,9 +4,9 @@
 
 La autenticación de FinApp usa dos cookies HttpOnly:
 
-| Cookie | Tipo JWT | Vigencia | Atributos | Uso |
-| --- | --- | --- | --- | --- |
-| `FINAPP_AUTH` | `tipo=access` | 15 min (`finapp.sesion.access-seconds=900`) | `HttpOnly; Secure; SameSite=Lax; Path=/` | Autentica todas las peticiones de datos |
+| Cookie           | Tipo JWT       | Vigencia                                                                | Atributos                                                  | Uso                                     |
+| ---------------- | -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
+| `FINAPP_AUTH`    | `tipo=access`  | 15 min (`finapp.sesion.access-seconds=900`)                             | `HttpOnly; Secure; SameSite=Lax; Path=/`                   | Autentica todas las peticiones de datos |
 | `FINAPP_REFRESH` | `tipo=refresh` | 30 min de inactividad (`finapp.sesion.refresh-inactivity-seconds=1800`) | `HttpOnly; Secure; SameSite=Strict; Path=/usuario/refresh` | Solo se envía a `POST /usuario/refresh` |
 
 El refresh se **rota en cada uso** y está limitado por un **tope absoluto de 8 horas**
@@ -91,14 +91,14 @@ puerto directamente no puede falsificar su IP. Por defecto solo se confía en `1
 
 Properties y variables de entorno:
 
-| Property | Variable | Default |
-| --- | --- | --- |
-| `finapp.sesion.access-seconds` | `FINAPP_SESION_ACCESS_SECONDS` | `900` |
-| `finapp.sesion.refresh-inactivity-seconds` | `FINAPP_SESION_REFRESH_INACTIVITY_SECONDS` | `1800` |
-| `finapp.sesion.absolute-seconds` | `FINAPP_SESION_ABSOLUTE_SECONDS` | `28800` |
-| `finapp.sesion.reuse-grace-seconds` | `FINAPP_SESION_REUSE_GRACE_SECONDS` | `15` |
-| `finapp.sesion.limpieza-intervalo-ms` | `FINAPP_SESION_LIMPIEZA_INTERVALO_MS` | `3600000` |
-| `finapp.seguridad.proxies-confiables` | `FINAPP_PROXIES_CONFIABLES` | `127.0.0.1/32,::1/128` |
+| Property                                   | Variable                                   | Default                |
+| ------------------------------------------ | ------------------------------------------ | ---------------------- |
+| `finapp.sesion.access-seconds`             | `FINAPP_SESION_ACCESS_SECONDS`             | `900`                  |
+| `finapp.sesion.refresh-inactivity-seconds` | `FINAPP_SESION_REFRESH_INACTIVITY_SECONDS` | `1800`                 |
+| `finapp.sesion.absolute-seconds`           | `FINAPP_SESION_ABSOLUTE_SECONDS`           | `28800`                |
+| `finapp.sesion.reuse-grace-seconds`        | `FINAPP_SESION_REUSE_GRACE_SECONDS`        | `15`                   |
+| `finapp.sesion.limpieza-intervalo-ms`      | `FINAPP_SESION_LIMPIEZA_INTERVALO_MS`      | `3600000`              |
+| `finapp.seguridad.proxies-confiables`      | `FINAPP_PROXIES_CONFIABLES`                | `127.0.0.1/32,::1/128` |
 
 `SameSite=Strict` es viable porque la web y la API están bajo el mismo sitio a través del túnel/proxy.
 Si se sirven desde dominios distintos, hay que revisar esta decisión y el CORS.

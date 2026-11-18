@@ -259,6 +259,12 @@ public class SMovimientoContable {
     private MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud,
                                         EstadoRevisionMovimiento estadoRevision, boolean omitirSaldo,
                                         String tipoMovimiento) {
+        return crear(idUsuario, solicitud, estadoRevision, omitirSaldo, tipoMovimiento, null);
+    }
+
+    private MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud,
+                                        EstadoRevisionMovimiento estadoRevision, boolean omitirSaldo,
+                                        String tipoMovimiento, String idTarjetaSugerida) {
         validarUsuario(idUsuario);
         validar(solicitud);
         if ("GMAIL".equalsIgnoreCase(solicitud.origenTipo()) && movimientos.existsByOrigenTipoAndOrigenId("GMAIL", solicitud.origenId())) {
@@ -293,6 +299,11 @@ public class SMovimientoContable {
         movimiento.setConcepto(solicitud.concepto() == null ? "" : solicitud.concepto().trim());
         movimiento.setEstadoRevision(estadoRevision);
         aplicarOrigen(movimiento, origen, tipo);
+        // La tarjeta vinculada vive en contabilidad: sugerida por la importación Gmail o por el origen manual CUENTA.
+        String idTarjetaVinculada = idTarjetaSugerida != null && !idTarjetaSugerida.isBlank()
+                ? idTarjetaSugerida
+                : "CUENTA".equalsIgnoreCase(origen.tipo()) && movimiento.getOrigenId() != null ? origen.id() : null;
+        movimiento.setIdTarjeta(idTarjetaVinculada);
         return dto(movimientos.save(movimiento));
     }
 
@@ -305,7 +316,17 @@ public class SMovimientoContable {
             String idUsuario, String tipo, java.time.LocalDate fecha, BigDecimal monto,
             String categoria, String concepto, String origenId, String origenNombre,
             ResultadoClasificacion clasificacion) {
+        return crearAutomaticamenteDesdeGmail(idUsuario, tipo, fecha, monto, categoria, concepto,
+                origenId, origenNombre, clasificacion, null);
+    }
+
+    @Transactional
+    public java.util.Optional<MovimientoContableDTO> crearAutomaticamenteDesdeGmail(
+            String idUsuario, String tipo, java.time.LocalDate fecha, BigDecimal monto,
+            String categoria, String concepto, String origenId, String origenNombre,
+            ResultadoClasificacion clasificacion, String cuentaOrigen) {
         validarUsuario(idUsuario);
+        String idTarjetaVinculada = resolverTarjetaPorSufijo(idUsuario, cuentaOrigen);
         boolean revisar = clasificacion == null || clasificacion.revisar();
         MBolsillo bolsillo;
         if (revisar) {
@@ -327,7 +348,7 @@ public class SMovimientoContable {
             else {
                 if ("GASTO".equalsIgnoreCase(tipo) || "INGRESO".equalsIgnoreCase(tipo)) {
                     return java.util.Optional.of(crearMovimientoGlobalGmail(idUsuario, tipo, fecha, monto,
-                            categoria, concepto, origenId, origenNombre));
+                            categoria, concepto, origenId, origenNombre, idTarjetaVinculada));
                 }
                 revisar = true;
                 bolsillo = servicioBolsillo.obtenerOCrearPorRevisar(idUsuario);
@@ -341,12 +362,23 @@ public class SMovimientoContable {
                 "GMAIL", origenId, origenNombre);
         EstadoRevisionMovimiento estado = revisar
                 ? EstadoRevisionMovimiento.POR_REVISAR : EstadoRevisionMovimiento.CONFIRMADO;
-        return java.util.Optional.of(crear(idUsuario, solicitud, estado, revisar, tipo));
+        return java.util.Optional.of(crear(idUsuario, solicitud, estado, revisar, tipo, idTarjetaVinculada));
+    }
+
+    /**
+     * Vincula el movimiento con la tarjeta propia cuyo PAN enmascarado termina en el sufijo del correo
+     * (p. ej. "desde tu cuenta *5201"). Solo cuando la coincidencia es única; si es ambigua o no hay
+     * coincidencia, el movimiento queda sin tarjeta (idTarjeta nulo).
+     */
+    private String resolverTarjetaPorSufijo(String idUsuario, String cuentaOrigen) {
+        if (cuentaOrigen == null || cuentaOrigen.isBlank()) return null;
+        List<MTarjeta> coincidentes = tarjetas.buscarPorSufijoPan(idUsuario, cuentaOrigen.trim());
+        return coincidentes.size() == 1 ? coincidentes.getFirst().getIdTarjeta() : null;
     }
 
     private MovimientoContableDTO crearMovimientoGlobalGmail(String idUsuario, String tipo,
             java.time.LocalDate fecha, BigDecimal monto, String categoria, String concepto,
-            String origenId, String origenNombre) {
+            String origenId, String origenNombre, String idTarjetaVinculada) {
         if (movimientos.existsByOrigenTipoAndOrigenId("GMAIL", origenId)) {
             throw new IllegalStateException("Este correo ya fue importado como movimiento.");
         }
@@ -362,6 +394,7 @@ public class SMovimientoContable {
         movimiento.setOrigenTipo("GMAIL");
         movimiento.setOrigenId(origenId);
         movimiento.setOrigenNombre(origenNombre);
+        movimiento.setIdTarjeta(idTarjetaVinculada);
         movimiento.setEstadoRevision(EstadoRevisionMovimiento.CONFIRMADO);
         return dto(movimientos.save(movimiento));
     }

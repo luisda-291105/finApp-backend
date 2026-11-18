@@ -12,12 +12,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class ParserMovimientoBancolombia {
     private static final Pattern MONTO_ETIQUETADO = Pattern.compile(
-            "(?i)(?:valor(?:\\s+de\\s+la\\s+compra|\\s+de\\s+la\\s+transacci[oó]n)?|monto(?:\\s+total)?|total(?:\\s+pagado)?|por\\s+valor\\s+de|pagaste|compraste|recibiste|retiraste|compra(?:ste)?\\s+(?:fue\\s+)?por|pago\\s+por|abono\\s+(?:por|de)|abonaron\\s+(?:por|de)|abonamos\\s+(?:por|de)|transferencia\\s+por|transacci[oó]n\\s+por|d[eé]bito\\s+por|consignaci[oó]n\\s+(?:por|de)|dep[oó]sito\\s+(?:por|de)|n[oó]mina\\s+(?:por|de))"
+            "(?i)(?:valor(?:\\s+de\\s+la\\s+compra|\\s+de\\s+la\\s+transacci[oó]n)?|monto(?:\\s+total)?|total(?:\\s+pagado)?|por\\s+valor\\s+de|pagaste|compraste|recibiste|retiraste|compra(?:ste)?\\s+(?:fue\\s+)?por|pago\\s+por|abono\\s+(?:por|de)|abonaron\\s+(?:por|de)|abonamos\\s+(?:por|de)|transferencia\\s+por|transferiste|transacci[oó]n\\s+por|d[eé]bito\\s+por|consignaci[oó]n\\s+(?:por|de)|dep[oó]sito\\s+(?:por|de)|n[oó]mina\\s+(?:por|de))"
                     + "\\D{0,32}(?:cop\\s*)?\\$?\\s*([0-9][0-9.,]*)");
     private static final Pattern PATRON_GASTO = Pattern.compile(
-            "\\b(compra|compraste|pagaste|pago|debito|debitaron|retiro|retiraste|cargo|descont|transferencia enviada|enviaste)\\b");
+            "\\b(compra|compraste|pagaste|pago|debito|debitaron|retiro|retiraste|cargo|descont|transferencia enviada|enviaste|transferiste)\\b");
     private static final Pattern PATRON_INGRESO = Pattern.compile(
             "\\b(recibiste|recibimos|abono|abonaron|abonamos|consignacion|deposito|transferencia recibida|te pagaron|nomina|reembolso|devolucion|devolvieron)\\b");
+    /** Sufijo de la cuenta o tarjeta de origen: "desde tu cuenta *5201", "desde tu cuenta *2531". */
+    private static final Pattern PATRON_CUENTA_ORIGEN = Pattern.compile(
+            "(?i)desde\\s+tu\\s+cuenta\\s*\\*?\\s*(\\d{4})\\b");
 
     public Optional<Movimiento> extraer(String asunto, String contenido) {
         return extraer(asunto, contenido, true);
@@ -51,10 +54,24 @@ public class ParserMovimientoBancolombia {
         String concepto = asunto == null || asunto.isBlank() ? "Movimiento Bancolombia" : asunto.trim();
         if (concepto.length() > 160) concepto = concepto.substring(0, 160);
         String tipo = ingreso ? "INGRESO" : "GASTO";
-        String categoria = ingreso ? "Ingresos"
-                : normalizado.matches("(?s).*(suscrip|recurren|netflix|spotify|youtube|disney|prime video).*")
-                    ? "Suscripciones" : "Compras y pagos";
-        return Optional.of(new Movimiento(tipo, monto.get(), categoria, concepto));
+        String cuentaOrigen = extraerCuentaOrigen(cuerpo);
+        String categoria;
+        if (ingreso) {
+            categoria = "Ingresos";
+        } else if (normalizado.matches("(?s).*(suscrip|recurren|netflix|spotify|youtube|disney|prime video).*")) {
+            categoria = "Suscripciones";
+        } else if (cuentaOrigen != null) {
+            categoria = "Pagos con tarjetas";
+        } else {
+            categoria = "Compras y pagos";
+        }
+        return Optional.of(new Movimiento(tipo, monto.get(), categoria, concepto, cuentaOrigen));
+    }
+
+    /** Devuelve los últimos cuatro dígitos de la cuenta de origen indicada en el cuerpo, o null si no aparece. */
+    private String extraerCuentaOrigen(String texto) {
+        Matcher cuenta = PATRON_CUENTA_ORIGEN.matcher(texto);
+        return cuenta.find() ? cuenta.group(1) : null;
     }
 
     private Optional<BigDecimal> extraerMonto(String texto) {
@@ -92,5 +109,5 @@ public class ParserMovimientoBancolombia {
                 .toLowerCase(Locale.ROOT);
     }
 
-    public record Movimiento(String tipo, BigDecimal monto, String categoria, String concepto) { }
+    public record Movimiento(String tipo, BigDecimal monto, String categoria, String concepto, String cuentaOrigen) { }
 }

@@ -1,7 +1,9 @@
 package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.DTO.TarjetaSolicitudDTO;
+import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Model.MTarjeta;
+import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.springframework.stereotype.Service;
@@ -10,16 +12,42 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.text.Normalizer;
+import java.util.Locale;
+import java.util.Set;
 
 /** Gestiona el CRUD de tarjetas propias y enmascara el PAN antes de persistir. */
 @Service
 public class STarjeta {
+    private static final Set<String> TIPOS_CUENTA = Set.of("AHORRO", "CREDITO", "CORRIENTE");
+
+    /**
+     * Normaliza el tipo de cuenta a mayúsculas sin acentos. Devuelve null cuando no es
+     * «ahorro», «crédito» o «corriente» (exacto, insensible a acentos y mayúsculas).
+     */
+    public static String normalizarTipoCuenta(String valor) {
+        if (valor == null) return null;
+        String normalizado = Normalizer.normalize(valor.trim(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z]", "");
+        return TIPOS_CUENTA.contains(normalizado) ? normalizado : null;
+    }
+
     private final ITarjeta tarjetas;
     private final IUsuario usuarios;
+    private final IMovimientoContable movimientos;
 
-    public STarjeta(ITarjeta tarjetas, IUsuario usuarios) {
+    public STarjeta(ITarjeta tarjetas, IUsuario usuarios, IMovimientoContable movimientos) {
         this.tarjetas = tarjetas;
         this.usuarios = usuarios;
+        this.movimientos = movimientos;
+    }
+
+    /** Historial de movimientos de contabilidad vinculados a una tarjeta propia del usuario. */
+    public List<MMovimientoContable> historialMovimientos(String idTarjeta, String idUsuario) {
+        if (buscarPorIdPropio(idTarjeta, idUsuario).isEmpty()) return null;
+        return movimientos.findByIdUsuarioAndIdTarjetaOrderByFechaDesc(idUsuario, idTarjeta);
     }
 
     public List<MTarjeta> buscarPorUsuario(String idUsuario) {
@@ -42,6 +70,7 @@ public class STarjeta {
         tarjeta.setExpiracion(solicitud.expiracion());
         tarjeta.setNumero(enmascararPan(solicitud.numero()));
         tarjeta.setCvv(""); // Compatibilidad con bases antiguas: solo se escribe el valor vacío, nunca un CVV.
+        tarjeta.setTipoCuenta(normalizarTipoCuenta(solicitud.tipoCuenta()));
         return tarjetas.save(tarjeta);
     }
 
@@ -56,6 +85,7 @@ public class STarjeta {
                 ? enmascararPan(existente.getNumero())
                 : enmascararPan(solicitud.numero()));
         existente.setCvv("");
+        existente.setTipoCuenta(normalizarTipoCuenta(solicitud.tipoCuenta()));
         return tarjetas.save(existente);
     }
 
@@ -80,6 +110,10 @@ public class STarjeta {
         if (solicitud.titular().trim().length() > 100) throw new IllegalArgumentException("El titular no puede superar 100 caracteres.");
         if (solicitud.entidad() == null || solicitud.entidad().isBlank()) throw new IllegalArgumentException("La entidad financiera es obligatoria.");
         if (solicitud.entidad().trim().length() > 100) throw new IllegalArgumentException("La entidad no puede superar 100 caracteres.");
+        String tipoCuenta = normalizarTipoCuenta(solicitud.tipoCuenta());
+        if (tipoCuenta == null) {
+            throw new IllegalArgumentException("El tipo de cuenta es obligatorio. Usa ahorro, crédito o corriente.");
+        }
         if (solicitud.expiracion() == null) throw new IllegalArgumentException("El vencimiento es obligatorio.");
         LocalDate mesActual = LocalDate.now().withDayOfMonth(1);
         if (solicitud.expiracion().withDayOfMonth(1).isBefore(mesActual)) {

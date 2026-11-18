@@ -1002,7 +1002,7 @@ public class CGmail {
                     cuenta.getUsuario().getIdUsuario(), sugerencia.tipo(),
                     LocalDate.ofInstant(mensaje.getFechaInterna(), java.time.ZoneId.of("America/Bogota")),
                     sugerencia.monto(), sugerencia.categoria(), sugerencia.concepto(), origenId,
-                    remitente, clasificacion);
+                    remitente, clasificacion, sugerencia.cuentaOrigen());
             if (registrado.isEmpty()) {
                 mensaje.setMovimientoAutomaticoEstado("PENDIENTE_BOLSILLO");
             } else {

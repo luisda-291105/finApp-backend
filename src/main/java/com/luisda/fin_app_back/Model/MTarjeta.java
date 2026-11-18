@@ -37,6 +37,9 @@ public class MTarjeta {
     @Column(length = 100, nullable = false)
     private String entidad;
 
+    @Column(length = 20)
+    private String tipoCuenta;
+
     // Relaciones entre clase usuario y tarjeta
     @ManyToOne(optional = false)
     @JoinColumn(name = "idUsuario", nullable = false)
@@ -104,6 +107,14 @@ public class MTarjeta {
 
     public void setEntidad(String entidad) {
         this.entidad = entidad;
+    }
+
+    public String getTipoCuenta() {
+        return tipoCuenta;
+    }
+
+    public void setTipoCuenta(String tipoCuenta) {
+        this.tipoCuenta = tipoCuenta;
     }
 
     public MUsuario getUsuario() { return usuario; }

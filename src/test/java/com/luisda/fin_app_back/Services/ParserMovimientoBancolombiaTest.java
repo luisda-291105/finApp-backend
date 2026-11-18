@@ -84,4 +84,47 @@ class ParserMovimientoBancolombiaTest {
         assertEquals("GASTO", resultado.get().tipo());
         assertEquals(new BigDecimal("300000.00"), resultado.get().monto());
     }
+
+    @Test
+    void extraeTransferenciaSalienteConFormatoTransferisteYCuentaOrigen() {
+        var resultado = parser.extraerDesdeRemitenteVerificado("Bancolombia: Transferiste",
+                "Bancolombia: Transferiste $1,000,000 desde tu cuenta *5201 a la cuenta *25310487123 el 16/11/2026 a las 16:03. ¿Dudas? Llamanos al 018000931987. Estamos cerca.");
+
+        assertTrue(resultado.isPresent());
+        assertEquals("GASTO", resultado.get().tipo());
+        assertEquals(new BigDecimal("1000000.00"), resultado.get().monto());
+        assertEquals("Pagos con tarjetas", resultado.get().categoria());
+        assertEquals("5201", resultado.get().cuentaOrigen());
+    }
+
+    @Test
+    void extraeTransferenciaConMilesSeparadosPorPunto() {
+        var resultado = parser.extraerDesdeRemitenteVerificado("Alerta",
+                "Transferiste $50.000 desde tu cuenta *4471 a la cuenta *99887766 el 17/11/2026 a las 08:12.");
+
+        assertTrue(resultado.isPresent());
+        assertEquals("GASTO", resultado.get().tipo());
+        assertEquals(new BigDecimal("50000.00"), resultado.get().monto());
+        assertEquals("4471", resultado.get().cuentaOrigen());
+    }
+
+    @Test
+    void transferenciaRecibidaSigueSiendoIngresoSinCuentaOrigen() {
+        var resultado = parser.extraerDesdeRemitenteVerificado("Alerta",
+                "Recibiste una transferencia por $80.000 de parte de Ana el 17/11/2026.");
+
+        assertTrue(resultado.isPresent());
+        assertEquals("INGRESO", resultado.get().tipo());
+        assertEquals("Ingresos", resultado.get().categoria());
+        assertEquals(null, resultado.get().cuentaOrigen());
+    }
+
+    @Test
+    void compraSinCuentaOrigenConservaCategoriaComprasYPagos() {
+        var resultado = parser.extraerDesdeRemitenteVerificado("Alerta", "Realizaste una compra por valor de $ 125.000.");
+
+        assertTrue(resultado.isPresent());
+        assertEquals("Compras y pagos", resultado.get().categoria());
+        assertEquals(null, resultado.get().cuentaOrigen());
+    }
 }

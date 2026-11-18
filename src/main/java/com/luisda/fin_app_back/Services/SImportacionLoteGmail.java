@@ -123,7 +123,8 @@ public class SImportacionLoteGmail {
                         mensaje.remitente(), mensaje.asunto() + "\n" + mensaje.contenido());
                 MovimientoContableDTO guardado = movimientos.crearAutomaticamenteDesdeGmail(lote.idUsuario,
                         movimiento.tipo(), mensaje.fecha(), movimiento.monto(), movimiento.categoria(),
-                        movimiento.concepto(), origenId, mensaje.remitente(), clasificacion).orElseThrow();
+                        movimiento.concepto(), origenId, mensaje.remitente(), clasificacion,
+                        movimiento.cuentaOrigen()).orElseThrow();
                 String estado = guardado.estadoRevision() == EstadoRevisionMovimiento.POR_REVISAR
                         ? ESTADO_POR_REVISAR : ESTADO_IMPORTADO;
                 completar(lote, resultado(mensaje, estado,

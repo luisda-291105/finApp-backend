@@ -411,6 +411,11 @@ public class SMovimientoContable {
             throw new IllegalArgumentException("Activa el bolsillo para asignarle este movimiento.");
         }
         String tipo = tipoBolsillo(bolsillo);
+        // El bolsillo «Por revisar» (y cualquier otro sin tipo clasificable) no define el tipo del
+        // movimiento: asignarle uno lo dejaría como POR_REVISAR y fuera de los totales. Obliga a elegir.
+        if ("POR_REVISAR".equals(tipo) || "OTROS".equals(tipo)) {
+            throw new IllegalArgumentException("Asigna el movimiento a un bolsillo de tipo GASTO, INGRESO o AHORRO.");
+        }
         Origen origen = resolverOrigen(idUsuario, solicitud, tipo, movimiento.getIdMovimiento());
         String idMovimientoExcluir = origen.bolsillo() != null && origen.bolsillo().getIdBolsillo().equals(movimiento.getOrigenId())
                 ? movimiento.getIdMovimiento() : null;

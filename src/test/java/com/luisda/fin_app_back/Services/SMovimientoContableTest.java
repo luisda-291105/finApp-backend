@@ -1,6 +1,7 @@
 package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.DTO.MovimientoContableDTO;
+import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
 import com.luisda.fin_app_back.Filtrado.ResultadoClasificacion;
 import com.luisda.fin_app_back.Filtrado.TipoBolsillo;
 import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -114,6 +116,30 @@ class SMovimientoContableTest {
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, captor.getValue().getEstadoRevision());
         assertEquals(null, captor.getValue().getBolsillo());
         verify(servicioBolsillo, never()).obtenerOCrearPorRevisar(USUARIO);
+    }
+
+    @Test
+    void actualizarRechazaAsignarElMovimientoAlBolsilloPorRevisar() {
+        MBolsillo revisarPorTipo = bolsillo("bolsillo-por-revisar", "Por revisar", "POR_REVISAR", true);
+        when(bolsillos.findByIdBolsilloAndIdUsuario("bolsillo-por-revisar", USUARIO))
+                .thenReturn(Optional.of(revisarPorTipo));
+        MMovimientoContable movimiento = new MMovimientoContable();
+        movimiento.setIdMovimiento("mov-1");
+        movimiento.setIdUsuario(USUARIO);
+        movimiento.setTipo("GASTO");
+        movimiento.setEstadoRevision(EstadoRevisionMovimiento.POR_REVISAR);
+        when(movimientos.buscarPropioIncluyendoGlobal("mov-1", USUARIO)).thenReturn(Optional.of(movimiento));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> servicio.actualizar(USUARIO, "mov-1", solicitudGmail("bolsillo-por-revisar")));
+        assertThrows(IllegalArgumentException.class,
+                () -> servicio.actualizar(USUARIO, "mov-1", solicitudGmail("bolsillo-revisar")));
+        verify(movimientos, never()).save(any(MMovimientoContable.class));
+    }
+
+    private static MovimientoContableSolicitudDTO solicitudGmail(String idBolsillo) {
+        return new MovimientoContableSolicitudDTO(idBolsillo, "GASTO", LocalDate.of(2026, 11, 10),
+                new BigDecimal("20000"), "Compras", "Alerta", "GMAIL", "correo-1", "banColombia");
     }
 
     private MovimientoContableDTO importarConClasificacionConfiable() {

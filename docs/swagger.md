@@ -13,6 +13,42 @@ Las operaciones están agrupadas por dominio: sesión y usuarios, Gmail, asisten
 
 El CRUD de suscripciones manuales (tabla única `suscripcion`, con `origen` MANUAL/GMAIL) está documentado en [`docs/suscripciones.md`](suscripciones.md).
 
+## Llegada de correos Gmail (cola por mensaje)
+
+Los correos entrantes ya no se procesan dentro del webhook: cada mensaje queda **en espera en la
+base de datos** (tabla `gmail_entrada_pendiente`, entidad `MGmailEntradaPendiente`) y un worker
+lo descarga y guarda de a uno por vez. Un fallo o un reinicio del backend no pierde correos.
+
+| Pieza | Comportamiento |
+|-------|----------------|
+| `POST /api/gmail/webhook/pubsub` | Valida el token OIDC y **solo encola** la notificación; responde `202 Accepted` |
+| `POST /api/gmail/cuentas/{cuentaId}/watch` | Registra el watch y **encola un trigger inmediato** (no espera el ciclo de 5 min) |
+| `POST /api/gmail/callback` (conectar cuenta) | Registra el watch y encola la primera sincronización |
+| `procesarEntradasPendientes` (`@Scheduled`) | Worker cada `finapp.google.entradas-intervalo-ms` (10 s por defecto): expande el `historyId` a mensajes y procesa uno por uno |
+| `sincronizarCuentasGmail` (5 min) | Red de seguridad: si el `historyId` cambió, encola la llegada |
+| `GET /api/gmail/cuentas/{cuentaId}/estado` | Estado de la cola y la sincronización de la cuenta (lo consume la bandeja del frontend) |
+
+Estados de cada entrada: `EN_ESPERA` → `PROCESANDO` → se elimina al guardar el mensaje, o
+`ERROR` terminal tras 5 intentos con backoff (30 s, 60 s, 120 s, 240 s, 480 s). Las entradas
+en `ERROR` quedan guardadas con `ultimo_error` para inspección. Si el backend se reinicia con
+entradas en `PROCESANDO`, el worker las devuelve a `EN_ESPERA` tras 10 minutos sin avanzar.
+
+`GET /api/gmail/cuentas/{cuentaId}/estado` devuelve el resumen para la UI:
+
+```json
+{
+  "cuenta_id": "…", "correo": "…@gmail.com",
+  "actualizando": true, "en_espera": 3, "procesando": 1, "errores": 0,
+  "ultimo_error": "", "ultima_sincronizacion": "2026-11-17T23:40:12Z",
+  "watch_expira_en": "2026-11-18T23:40:12Z"
+}
+```
+
+La bandeja del frontend consulta este estado cada 15 s mientras está abierta; cuando la cola
+drena invalida la caché de mensajes y los recarga sin esperar el ciclo de 5 minutos.
+
+Instalaciones sin `ddl-auto=update` deben aplicar `sql/073_cola_entrada_gmail.sql`.
+
 ## Almacenamiento en la nube (B1–B8)
 
 Rutas del dominio `finapp.almacenamiento.*`, con proveedor por conexión (`GOOGLE_DRIVE`, `NEXTCLOUD`) vía `SArchivosPorConexion`.

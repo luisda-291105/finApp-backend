@@ -213,7 +213,11 @@ public class CGmail {
             fuente.setAccessTokenCifrado(cifrar(accessToken, credenciales.clientSecret()));
             if (!refreshToken.isBlank()) fuente.setRefreshTokenCifrado(cifrar(refreshToken, credenciales.clientSecret()));
             fuente.setExpiraEn(Instant.now().plusSeconds(expiraEn));
+            // RF-24: se persiste el permiso realmente concedido por Google (pudo conceder menos de lo pedido).
+            fuente.setGmailScopeConcedido(respuesta.scope());
             fuente = fuentes.save(fuente);
+
+            if (!fuente.tienePermisoModificarGmail()) return respuestaScopeNoAutorizado();
 
             Map<String, Object> respuestaConexion = new LinkedHashMap<>();
             respuestaConexion.put("email", correo);
@@ -1293,6 +1297,15 @@ public class CGmail {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                 "requires_reconnect", true,
                 "message", "La autorización de esta cuenta Gmail ya no se puede renovar. Vuelve a conectarla desde Configuración."
+        ));
+    }
+
+    /** 409 cuando Google no concedió el permiso ampliado (RF-23/RF-24), distinto de {@link #respuestaReconexionRequerida()}. */
+    private ResponseEntity<Map<String, Object>> respuestaScopeNoAutorizado() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "requires_scope_authorization", true,
+                "message", "FinApp necesita permiso para modificar tus correos (además de leerlos) en esta cuenta. "
+                        + "Autoriza el permiso ampliado para usar la Papelera."
         ));
     }
 

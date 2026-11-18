@@ -64,6 +64,8 @@ public class SGmailMensajes {
     private static final long PAUSA_BASE_REINTENTO_GMAIL_MS = 15000;
     private static final int INTENTOS_GMAIL = 6;
     private static final int LARGO_CONTENIDO_MAXIMO = 12000;
+    /** Etiqueta de Gmail que marca un correo en la papelera (RF-29). */
+    private static final String ETIQUETA_PAPELERA = "TRASH";
     private static final Logger LOGGER = LoggerFactory.getLogger(SGmailMensajes.class);
 
     private volatile RestClient clienteHttp;
@@ -118,6 +120,18 @@ public class SGmailMensajes {
             return;
         }
         persistirMensaje(cuenta, mensaje);
+    }
+
+    /**
+     * Descarta de forma persistente la alerta de movimiento pendiente al mover un correo a la
+     * papelera (RF-28). El movimiento contable ya registrado no se toca (RF-27).
+     */
+    public void descartarAlertaMovimiento(MFuente cuenta, String mensajeId) {
+        mensajes.findByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId).ifPresent(entidad -> {
+            entidad.setAlertaMovimientoDescartada(true);
+            entidad.setMovimientoAlertaPendiente(false);
+            mensajes.save(entidad);
+        });
     }
 
     private JsonNode respuestaJsonConReintentos(URI uri, String token) {
@@ -198,6 +212,12 @@ public class SGmailMensajes {
     private void persistirMensaje(MFuente cuenta, JsonNode mensaje) throws IOException, GeneralSecurityException {
         if (mensaje == null || mensaje.path("id").asText("").isBlank()) return;
         String mensajeId = mensaje.path("id").asText("");
+        // Un correo que Gmail tiene en la papelera no se guarda ni reaparece en la bandeja (RF-29):
+        // el punto único de escritura elimina la fila local y omite el guardado.
+        if (etiquetasContienen(mensaje.path("labelIds"), ETIQUETA_PAPELERA)) {
+            mensajes.deleteByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId);
+            return;
+        }
         if (!fuentes.existsById(cuenta.getIdFuente())) {
             return;
         }
@@ -250,6 +270,13 @@ public class SGmailMensajes {
         if (headers == null || !headers.isArray()) return "";
         for (JsonNode header : headers) if (nombre.equalsIgnoreCase(header.path("name").asText())) return header.path("value").asText("");
         return "";
+    }
+
+    /** Indica si la lista de etiquetas de Gmail contiene la etiqueta indicada. */
+    private static boolean etiquetasContienen(JsonNode etiquetas, String etiqueta) {
+        if (etiquetas == null || !etiquetas.isArray()) return false;
+        for (JsonNode item : etiquetas) if (etiqueta.equals(item.asText())) return true;
+        return false;
     }
 
     private static String nombreEtiqueta(String id) {

@@ -85,6 +85,20 @@ public class CSuscripcion {
         }
     }
 
+    /**
+     * Cobros recurrentes del usuario tomados de sus suscripciones activas con monto y fecha de cobro.
+     */
+    @GetMapping("/recurrentes")
+    @Operation(summary = "Lista los cobros recurrentes del usuario",
+            description = "Devuelve un cobro por cada suscripción activa que tenga monto y fecha de cobro, "
+                    + "ordenados por la fecha del próximo cobro. Como la suscripción no guarda periodicidad, "
+                    + "se informa una frecuencia mensual estimada.")
+    public ResponseEntity<?> listarRecurrentes(HttpServletRequest request) {
+        Optional<String> idUsuario = this.usuarioActivo.obtenerIdUsuario(request);
+        if (idUsuario.isEmpty()) return noAutorizado();
+        return ResponseEntity.ok(this.suscripciones.listarRecurrentes(idUsuario.get()));
+    }
+
     /** Obtiene una suscripción del usuario por identificador. */
     @GetMapping("/{idSuscripcion}")
     @Operation(summary = "Consulta una suscripción por identificador",

@@ -2,11 +2,11 @@ package com.luisda.fin_app_back.Repository;
 
 import com.luisda.fin_app_back.Model.MGmailEntradaPendiente;
 import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.util.List;
 
+
 /** Acceso a la cola de correos Gmail en espera de procesarse uno por uno. */
-public interface IGmailEntradaPendiente extends JpaRepository<MGmailEntradaPendiente, Long> {
+public interface IGmailEntradaPendiente extends JpaRepository<MGmailEntradaPendiente, String> {
 
     /** Entradas en espera, las más antiguas primero. */
     List<MGmailEntradaPendiente> findTop200ByEstadoOrderByFechaCreacionAsc(String estado);

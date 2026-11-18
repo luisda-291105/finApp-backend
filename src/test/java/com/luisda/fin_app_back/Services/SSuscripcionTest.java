@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.DTO.SuscripcionAjustesDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionDTO;
+import com.luisda.fin_app_back.DTO.SuscripcionRecurrenteDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionSolicitudDTO;
 import com.luisda.fin_app_back.Model.MSuscripcion;
 import com.luisda.fin_app_back.Model.MUsuario;
@@ -200,6 +201,46 @@ class SSuscripcionTest {
 
         assertThrows(SSuscripcion.DatosInvalidosException.class, () -> servicio.actualizarAjustes("usuario-1", "manual-1",
                 new SuscripcionAjustesDTO(null, "Urgente", null)));
+    }
+
+    @Test
+    void listaLosCobrosRecurrentesDeLasSuscripcionesConMontoYFecha() {
+        MSuscripcion conDatos = manual("manual-1", "claro", LocalDate.of(2026, 12, 3));
+        conDatos.setMonto(new BigDecimal("47067.11"));
+        conDatos.setCategoria("Comunicación");
+        MSuscripcion sinFecha = manual("manual-2", "Netflix", null);
+        sinFecha.setMonto(null);
+        MSuscripcion pausada = manual("manual-3", "Gimnasio", LocalDate.of(2026, 12, 20));
+        pausada.setActiva(false);
+        when(repositorio.findDelUsuario("usuario-1")).thenReturn(List.of(conDatos, sinFecha, pausada));
+
+        List<SuscripcionRecurrenteDTO> resultado = servicio.listarRecurrentes("usuario-1");
+
+        assertEquals(1, resultado.size());
+        SuscripcionRecurrenteDTO cobro = resultado.get(0);
+        assertEquals("manual-1", cobro.id());
+        assertEquals("claro", cobro.nombre());
+        assertEquals("Comunicación", cobro.categoria());
+        assertEquals(new BigDecimal("47067.11"), cobro.monto());
+        assertEquals("Mensual", cobro.frecuencia());
+        assertEquals(30, cobro.intervaloDias());
+        assertNull(cobro.ultimoCobro());
+        assertEquals(LocalDate.of(2026, 12, 3), cobro.proximoCobro());
+        assertEquals("MANUAL", cobro.origen());
+    }
+
+    @Test
+    void muestraLasEtiquetasDeGmailComoCategoriaLegible() {
+        MSuscripcion deGmail = gmail("gmail-1", "correo@promo.com");
+        deGmail.setMonto(new BigDecimal("10000"));
+        deGmail.setFechaCobro(LocalDate.of(2026, 12, 5));
+        when(repositorio.findDelUsuario("usuario-1")).thenReturn(List.of(deGmail));
+
+        List<SuscripcionRecurrenteDTO> resultado = servicio.listarRecurrentes("usuario-1");
+
+        assertEquals(1, resultado.size());
+        assertEquals("Promociones", resultado.get(0).categoria());
+        assertEquals("GMAIL", resultado.get(0).origen());
     }
 
     private SuscripcionSolicitudDTO solicitud(String nombre, String monto, String importancia) {

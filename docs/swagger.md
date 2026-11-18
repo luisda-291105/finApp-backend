@@ -100,8 +100,11 @@ Errores frecuentes:
   la cookie no se guardó (p. ej. `Secure` en un sitio HTTP que no sea `localhost`) o el navegador bloqueó
   cookies de terceros (la web y la API están en sitios distintos). La solución robusta es servir la API
   en el **mismo origen** que la web.
-- `401 {"mensaje":"Tu sesión expiró o se cerró. Inicia sesión de nuevo."}` → había cookie, pero la sesión
-  venció (30 min de inactividad por `FINAPP_JWT_INACTIVITY_SECONDS`) o se cerró con `POST /usuario/logout`.
+- `401 {"mensaje":"Tu sesión expiró o se cerró. Inicia sesión de nuevo."}` → había cookie, pero se alcanzó la
+  expiración absoluta (8 h por `FINAPP_JWT_EXPIRATION_SECONDS`), se cerró con `POST /usuario/logout` o el token
+  es inválido. La inactividad (`FINAPP_JWT_INACTIVITY_SECONDS`, 30 min) **renueva** el JWT en la siguiente
+  petición: el backend reemite la cookie conservando la expiración absoluta y el `jti`, sin obligar a iniciar
+  sesión de nuevo.
 - `403` en escrituras → el `Origin`/`Referer` no está en `WEB_ALLOWED_ORIGINS`.
 
 ## Probar operaciones
@@ -180,8 +183,8 @@ La API usa JWT. Hay tres vías:
 ## Notas de seguridad
 
 - Sin token válido, las rutas protegidas responden `401 {"mensaje":"Inicia sesión para continuar."}`.
-- El token también expira por inactividad (`FINAPP_JWT_INACTIVITY_SECONDS`, 30 min por defecto) y de forma absoluta a las 8 h.
-- El logout revoca el token en el servidor (deny-list de `jti`), por lo que un token copiado deja de servir tras cerrar sesión.
+- La inactividad (`FINAPP_JWT_INACTIVITY_SECONDS`, 30 min por defecto) expira el claim `actividad`, pero la siguiente petición renueva la cookie automáticamente; la sesión solo se cierra de forma definitiva al llegar a la expiración absoluta (8 h) o al hacer logout.
+- El logout revoca el token en el servidor (deny-list de `jti`); la renovación conserva el mismo `jti`, así que un token copiado deja de servir tras cerrar sesión.
 
 La especificación también se puede importar en clientes compatibles con OpenAPI usando la URL `/api-docs`.
 

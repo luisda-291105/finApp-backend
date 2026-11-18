@@ -119,7 +119,7 @@ public class SMovimientoContable {
         };
         String nombre = ultimo.origenNombre() == null || ultimo.origenNombre().isBlank() ? ultimo.concepto() : ultimo.origenNombre();
         return new SuscripcionRecurrenteDTO(clave, nombre, ultimo.categoria(), promedio, frecuencia, periodo,
-                ultimo.fecha(), ultimo.fecha().plusDays(periodo), ordenados.size());
+                ultimo.fecha(), ultimo.fecha().plusDays(periodo), ordenados.size(), "MOVIMIENTOS");
     }
 
     private String claveSuscripcion(String nombre) {

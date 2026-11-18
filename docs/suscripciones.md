@@ -15,6 +15,10 @@ el CRUD solo edita las manuales. La lógica específica de Gmail vive aislada en
 
 Migración de datos: `sql/071_unificar_suscripciones.sql`.
 
+La categoría vive en una sola columna: `categoria`. En las suscripciones manuales guarda el texto elegido
+por el usuario y en las detectadas en Gmail la lista de etiquetas en formato JSON.
+Migración: `sql/074_unificar_categoria_suscripcion.sql` (elimina `categorias_json`).
+
 ## Autenticación
 
 Todas las rutas exigen sesión activa (cookie `FINAPP_AUTH` o `Authorization: Bearer <jwt>`).
@@ -35,6 +39,7 @@ Base: `/suscripcion`
 | `POST` | `/suscripcion` | Registra una suscripción manual | `SuscripcionSolicitudDTO` | `201` → `SuscripcionDTO` |
 | `GET` | `/suscripcion` | Lista las suscripciones del usuario (manuales primero, luego Gmail) | — | `200` → `[SuscripcionDTO]` |
 | `GET` | `/suscripcion?origen=MANUAL` | Filtra por procedencia (`MANUAL` o `GMAIL`) | — | `200` → `[SuscripcionDTO]` |
+| `GET` | `/suscripcion/recurrentes` | Lista los cobros recurrentes tomados de las suscripciones activas con monto y fecha de cobro | — | `200` → `[SuscripcionRecurrenteDTO]` |
 | `GET` | `/suscripcion/{idSuscripcion}` | Consulta una suscripción propia | — | `200` → `SuscripcionDTO` |
 | `PUT` | `/suscripcion/{idSuscripcion}` | Actualiza una suscripción manual | `SuscripcionSolicitudDTO` | `200` → `SuscripcionDTO` |
 | `PATCH` | `/suscripcion/{idSuscripcion}/estado` | Activa (`true`) o pausa (`false`) una manual | `{"activa": false}` | `200` → `SuscripcionDTO` |
@@ -94,8 +99,32 @@ En las suscripciones `GMAIL` los campos manuales vienen en `null` y se llenan
 `correoRemitente`, `categorias`, `cuentaGmailId`, `cuentaGmail`, `urlBaja`, `mailtoBaja`,
 `bajaConUnClic` y `ultimaActividad`.
 
-### Errores
+### `SuscripcionRecurrenteDTO` (cobros recurrentes)
 
+`GET /suscripcion/recurrentes` devuelve un cobro por cada suscripción **activa** que tenga `monto` y
+`fechaCobro`, ordenados por la fecha del próximo cobro. Como la suscripción no guarda periodicidad,
+la frecuencia informada es mensual (`"Mensual"`, `intervaloDias` 30) y el monto se toma tal cual.
+
+```json
+{
+  "id": "3088276f-c599-4374-ad5a-28cbf5f51aa6",
+  "nombre": "claro",
+  "categoria": "Comunicación",
+  "monto": 47067.11,
+  "frecuencia": "Mensual",
+  "intervaloDias": 30,
+  "ultimoCobro": null,
+  "proximoCobro": "2026-12-03",
+  "cobrosDetectados": 1,
+  "origen": "MANUAL"
+}
+```
+
+El mismo DTO lo usa `GET /movimiento/recurrentes`, que infiere cobros periódicos de los gastos reales
+confirmados: ahí `origen` vale `"MOVIMIENTOS"`, `monto` es el promedio de los cobros y `ultimoCobro` /
+`cobrosDetectados` describen el historial encontrado.
+
+### Errores
 | Código | Cuándo | Cuerpo |
 |--------|--------|--------|
 | `400` | Datos inválidos | `{"tipo":"error","mensaje":"El monto debe ser mayor que cero.","campo":"monto","datos":null}` |

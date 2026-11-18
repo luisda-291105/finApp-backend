@@ -1,11 +1,13 @@
 package com.luisda.fin_app_back.Services;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -18,6 +20,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtTokenServiceTest {
@@ -54,15 +57,17 @@ class JwtTokenServiceTest {
     }
 
     @Test
-    void rechazaTokenExpiradoPorInactividad() {
+    void renuevaTokenCaducadoPorInactividadHastaLaExpiracionAbsoluta() {
         SecretKey clave = Keys.hmacShaKeyFor(Decoders.BASE64.decode(Base64.getEncoder().encodeToString(new byte[32])));
-        Date antes = new Date(System.currentTimeMillis() - 7_200_000L);
+        Date antigua = new Date(System.currentTimeMillis() - Duration.ofHours(2).toMillis());
+        Date expira = new Date(System.currentTimeMillis() + Duration.ofHours(1).toMillis());
         String tokenInactivo = Jwts.builder()
                 .subject("usuario-3")
-                .issuedAt(antes)
-                .expiration(new Date(antes.getTime() + Duration.ofSeconds(3600).toMillis()))
-                .claim("expiraEn", antes.getTime() + Duration.ofSeconds(3600).toMillis())
-                .claim("actividad", antes.getTime())
+                .id("inactivo-1")
+                .issuedAt(antigua)
+                .expiration(expira)
+                .claim("expiraEn", expira.getTime())
+                .claim("actividad", antigua.getTime())
                 .signWith(clave)
                 .compact();
 
@@ -71,8 +76,50 @@ class JwtTokenServiceTest {
         assertFalse(tokens.obtenerIdUsuario(request).isPresent());
 
         MockHttpServletResponse response = new MockHttpServletResponse();
-        assertFalse(tokens.sesionActiva(request, response).isPresent());
-        assertEquals(200, response.getStatus());
+        assertEquals("usuario-3", tokens.sesionActiva(request, response).orElseThrow());
+        assertEquals("usuario-3", tokens.obtenerIdUsuario(request).orElseThrow());
+
+        String cabecera = response.getHeader(HttpHeaders.SET_COOKIE);
+        assertNotNull(cabecera);
+        String renovado = cabecera.substring(cabecera.indexOf('=') + 1, cabecera.indexOf(';'));
+        MockHttpServletRequest siguiente = new MockHttpServletRequest();
+        siguiente.setCookies(new Cookie(JwtTokenService.COOKIE_NAME, renovado));
+        assertEquals("usuario-3", tokens.obtenerIdUsuario(siguiente).orElseThrow());
+
+        Claims claims = Jwts.parser().verifyWith(clave).build().parseSignedClaims(renovado).getPayload();
+        assertEquals("inactivo-1", claims.getId());
+        assertEquals(expira.getTime(), claims.get("expiraEn", Long.class));
+        assertTrue(claims.get("actividad", Long.class) > antigua.getTime());
+    }
+
+    @Test
+    void rechazaTokenTrasExpiracionAbsoluta() {
+        SecretKey clave = Keys.hmacShaKeyFor(Decoders.BASE64.decode(Base64.getEncoder().encodeToString(new byte[32])));
+        Date vencida = new Date(System.currentTimeMillis() - Duration.ofMinutes(1).toMillis());
+        String tokenVencido = Jwts.builder()
+                .subject("usuario-6")
+                .issuedAt(new Date(vencida.getTime() - Duration.ofHours(1).toMillis()))
+                .expiration(vencida)
+                .claim("expiraEn", vencida.getTime())
+                .claim("actividad", System.currentTimeMillis())
+                .signWith(clave)
+                .compact();
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(JwtTokenService.COOKIE_NAME, tokenVencido));
+        assertTrue(tokens.obtenerIdUsuario(request).isEmpty());
+        assertTrue(tokens.sesionActiva(request, new MockHttpServletResponse()).isEmpty());
+    }
+
+    @Test
+    void logoutSigueRevocandoElTokenRenovado() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie(JwtTokenService.COOKIE_NAME, tokens.emitir("usuario-7")));
+        assertEquals("usuario-7", tokens.sesionActiva(request, new MockHttpServletResponse()).orElseThrow());
+
+        tokens.revocarToken(request);
+
+        assertTrue(tokens.obtenerIdUsuario(request).isEmpty());
     }
 
     @Test

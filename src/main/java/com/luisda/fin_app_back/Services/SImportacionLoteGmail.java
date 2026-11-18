@@ -4,7 +4,6 @@ import com.luisda.fin_app_back.DTO.ImportacionLoteGmailDTO;
 import com.luisda.fin_app_back.DTO.MovimientoContableDTO;
 import com.luisda.fin_app_back.Filtrado.ResultadoClasificacion;
 import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
-import com.luisda.fin_app_back.Model.MMovimientoContable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 

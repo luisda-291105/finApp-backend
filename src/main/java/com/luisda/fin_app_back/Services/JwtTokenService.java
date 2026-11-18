@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -46,6 +47,9 @@ public class JwtTokenService {
     private String sameSiteCookie = "Lax";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JwtTokenService.class);
+
+    /** Token ya renovado en esta petición; lo leen también los controladores. */
+    private static final String TOKEN_RENOVADO = "finapp.token.renovado";
 
     private final ConcurrentHashMap<String, Date> DENY_LIST = new ConcurrentHashMap<>();
 
@@ -110,6 +114,12 @@ public class JwtTokenService {
         }
     }
 
+    /**
+     * Valida la sesión y reemite el JWT con la actividad renovada. Si la inactividad superó el
+     * límite configurado, el token se renueva igualmente mientras no se haya alcanzado la
+     * expiración absoluta (`expiraEn`) ni se haya revocado; con eso basta una nueva petición
+     * para recuperar la sesión sin iniciar sesión de nuevo.
+     */
     public Optional<String> sesionActiva(HttpServletRequest request, HttpServletResponse response) {
         String token = tokenDe(request);
         if (token == null || token.isBlank()) return Optional.empty();
@@ -117,24 +127,25 @@ public class JwtTokenService {
             Claims claims = Jwts.parser().verifyWith(clave()).build()
                     .parseSignedClaims(token).getPayload();
             Date ahora = new Date();
-            Long actividad = claims.get("actividad", Long.class);
-            long ultimaActividad = actividad != null ? actividad : (claims.getIssuedAt() != null ? claims.getIssuedAt().getTime() : 0L);
             String jti = claims.getId();
             if (jti != null && estaRevocado(jti)) return Optional.empty();
-            boolean activa = ultimaActividad > 0 && (ahora.getTime() - ultimaActividad) <= Duration.ofSeconds(inactivitySeconds).toMillis();
-            if (!activa) return Optional.empty();
             String subject = claims.getSubject();
             Long expiraEn = claims.get("expiraEn", Long.class);
             if (subject == null || subject.isBlank() || expiraEn == null) return Optional.empty();
-            long segundosRestantes = Math.max(0L, (expiraEn - ahora.getTime()) / 1000);
-            String tokenRenovado = Jwts.builder()
+            long segundosRestantes = (expiraEn - ahora.getTime()) / 1000;
+            if (segundosRestantes <= 0) return Optional.empty();
+
+            // Se conserva el jti para que la denylist del logout siga aplicando al token renovado.
+            JwtBuilder constructor = Jwts.builder()
                     .subject(subject)
                     .issuedAt(ahora)
                     .expiration(new Date(expiraEn))
                     .claim("expiraEn", expiraEn)
-                    .claim("actividad", ahora.getTime())
-                    .signWith(clave())
-                    .compact();
+                    .claim("actividad", ahora.getTime());
+            if (jti != null) constructor.id(jti);
+            String tokenRenovado = constructor.signWith(clave()).compact();
+
+            request.setAttribute(TOKEN_RENOVADO, tokenRenovado);
             response.addHeader(HttpHeaders.SET_COOKIE, cookie(tokenRenovado, segundosRestantes).toString());
             return Optional.of(subject);
         } catch (JwtException | IllegalArgumentException error) {
@@ -192,6 +203,8 @@ public class JwtTokenService {
     }
 
     private String tokenDe(HttpServletRequest request) {
+        Object renovado = request.getAttribute(TOKEN_RENOVADO);
+        if (renovado instanceof String token && !token.isBlank()) return token;
         String bearer = request.getHeader("Authorization");
         if (bearer != null && bearer.startsWith("Bearer ")) {
             return bearer.substring("Bearer ".length()).trim();

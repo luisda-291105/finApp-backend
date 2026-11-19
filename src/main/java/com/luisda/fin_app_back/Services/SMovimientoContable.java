@@ -38,8 +38,9 @@ import java.util.stream.Collectors;
 @Service
 public class SMovimientoContable {
     private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO", "TRANSFERENCIA");
-    private static final Pattern CUENTA_DESTINO_TRANSFERENCIA = Pattern.compile(
-            "(?i)a\\s+la\\s+cuenta\\s*\\*?\\s*(\\d{4,})");
+    /** Cuenta propia mencionada en el correo: «desde tu cuenta *X» o «a la cuenta *X». */
+    private static final Pattern CUENTA_EN_CORREO = Pattern.compile(
+            "(?i)(?:desde\\s+tu\\s+cuenta|a\\s+la\\s+cuenta)\\s*\\*?\\s*(\\d{4,})");
     private final IMovimientoContable movimientos;
     private final IBolsillo bolsillos;
     private final IUsuario usuarios;
@@ -200,11 +201,20 @@ public class SMovimientoContable {
                 BigDecimal monto = fila[4] == null ? BigDecimal.ZERO : new BigDecimal(fila[4].toString());
                 switch (tipo) {
                     case "INGRESO" -> ingresos = ingresos.add(monto);
-                    case "GASTO" -> gastos = gastos.add(monto);
                     case "AHORRO" -> ahorros = ahorros.add(monto);
                     case "TRANSFERENCIA" -> transferencias = transferencias.add(monto);
                     default -> { }
                 }
+            }
+            // Gastos del mes: todo lo que pasó por los bolsillos de tipo Gastos (GASTO + TRANSFERENCIA),
+            // incluyendo las transferencias entre cuentas propias; los gastos globales sin bolsillo
+            // los muestra el modal de detalle del bolsillo Gastos.
+            for (Object[] fila : movimientos.resumirGastoBolsilloPorMes(idUsuario)) {
+                int anio = ((Number) fila[0]).intValue();
+                int numeroMes = ((Number) fila[1]).intValue();
+                if (anio != mes.getYear() || numeroMes != mes.getMonthValue()) continue;
+                BigDecimal monto = fila[2] == null ? BigDecimal.ZERO : new BigDecimal(fila[2].toString());
+                gastos = gastos.add(monto);
             }
             for (MBolsillo bolsillo : propios) {
                 if (bolsillo.getTipo() != null && "AHORRO".equalsIgnoreCase(normalizarTipo(bolsillo.getTipo()))
@@ -223,27 +233,51 @@ public class SMovimientoContable {
                 porRevisar, montoPorRevisar);
     }
 
-    /** Sufijos de cuenta propia configurados, normalizados. */
-    private Set<String> cuentasPropiasTransferencia() {
-        return Arrays.stream((cuentasPropiasTransferencia == null
+    /**
+     * Últimos cuatro dígitos de las cuentas propias: los de las tarjetas registradas del usuario y
+     * los de la configuración, recortados a cuatro dígitos (el resto es relleno por ahora).
+     */
+    private Set<String> propiosUltimosCuatro(String idUsuario) {
+        Set<String> propios = Arrays.stream((cuentasPropiasTransferencia == null
                         ? "" : cuentasPropiasTransferencia).split(","))
                 .map(String::trim)
                 .filter(sufijo -> !sufijo.isEmpty())
-                .collect(Collectors.toSet());
+                .map(sufijo -> sufijo.length() > 4 ? sufijo.substring(sufijo.length() - 4) : sufijo)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        if (idUsuario != null && !idUsuario.isBlank()) {
+            try {
+                for (MTarjeta tarjeta : tarjetas.findByUsuario_IdUsuario(idUsuario)) {
+                    String digitos = tarjeta.getNumero() == null ? "" : tarjeta.getNumero().replaceAll("\\D", "");
+                    if (digitos.length() >= 4) propios.add(digitos.substring(digitos.length() - 4));
+                }
+            } catch (RuntimeException error) {
+                // Si no se pueden consultar las tarjetas, la config sigue valiendo como respaldo.
+            }
+        }
+        return propios;
     }
 
     /**
-     * Detecta en el correo Gmail un «Transferiste … a la cuenta *X» cuyo destino es propio. Los pagos
-     * a terceros no se reclasifican: siguen siendo gastos reales del bolsillo.
+     * Detecta en el correo Gmail un «Transferiste … desde/a la cuenta *X» cuya cuenta coincide en
+     * sus últimos cuatro dígitos con una tarjeta registrada del usuario o con la configuración de
+     * cuentas propias. En ese caso el movimiento es una transferencia del usuario (pasa por el
+     * bolsillo Gastos como gasto corriente), no un gasto normal. Los pagos sin cuenta propia
+     * siguen siendo gastos reales.
      */
-    private boolean esTransferenciaCuentaPropia(String origenId) {
+    private boolean esTransferenciaCuentaPropia(String idUsuario, String origenId) {
         if (origenId == null || origenId.isBlank()) return false;
         String fragmento = movimientos.findFragmentoPorOrigenId(origenId);
         if (fragmento == null || fragmento.isBlank()) return false;
         String normalizado = fragmento.toLowerCase(Locale.ROOT);
-        if (!normalizado.contains("transferiste") || !normalizado.contains("a la cuenta")) return false;
-        Matcher cuenta = CUENTA_DESTINO_TRANSFERENCIA.matcher(fragmento);
-        return cuenta.find() && cuentasPropiasTransferencia().contains(cuenta.group(1));
+        if (!normalizado.contains("transferiste") && !normalizado.contains("transferencia")) return false;
+        Set<String> propios = propiosUltimosCuatro(idUsuario);
+        if (propios.isEmpty()) return false;
+        Matcher cuenta = CUENTA_EN_CORREO.matcher(fragmento);
+        while (cuenta.find()) {
+            String digitos = cuenta.group(1);
+            if (propios.contains(digitos.substring(digitos.length() - 4))) return true;
+        }
+        return false;
     }
 
     @Transactional
@@ -261,7 +295,7 @@ public class SMovimientoContable {
         String tipo = tipoManual(solicitud.tipo());
         // El destino de la transferencia viaja en el correo, no en el DTO: se resuelve aquí para que
         // la config de cuentas propias siga viviendo solo en el backend.
-        if ("GASTO".equals(tipo) && esTransferenciaCuentaPropia(solicitud.origenId())) {
+        if ("GASTO".equals(tipo) && esTransferenciaCuentaPropia(idUsuario, solicitud.origenId())) {
             tipo = "TRANSFERENCIA";
         }
         if (!"GASTO".equals(tipo) && !"INGRESO".equals(tipo) && !"TRANSFERENCIA".equals(tipo)) {
@@ -364,7 +398,7 @@ public class SMovimientoContable {
             String categoria, String concepto, String origenId, String origenNombre,
             ResultadoClasificacion clasificacion, String cuentaOrigen) {
         validarUsuario(idUsuario);
-        String tipoResuelto = "GASTO".equalsIgnoreCase(tipo) && esTransferenciaCuentaPropia(origenId)
+        String tipoResuelto = "GASTO".equalsIgnoreCase(tipo) && esTransferenciaCuentaPropia(idUsuario, origenId)
                 ? "TRANSFERENCIA" : tipo;
         String idTarjetaVinculada = resolverTarjetaPorSufijo(idUsuario, cuentaOrigen);
         boolean revisar = clasificacion == null || clasificacion.revisar();

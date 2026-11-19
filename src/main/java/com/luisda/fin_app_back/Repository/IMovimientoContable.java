@@ -21,6 +21,14 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
     Optional<MMovimientoContable> buscarPropioIncluyendoGlobal(@Param("idMovimiento") String idMovimiento,
             @Param("idUsuario") String idUsuario);
 
+    @Query("SELECT FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha), SUM(m.monto) " +
+            "FROM MMovimientoContable m JOIN m.bolsillo b WHERE b.idUsuario = :idUsuario " +
+            "AND UPPER(b.tipo) = 'GASTO' " +
+            "AND UPPER(m.tipo) IN ('GASTO', 'TRANSFERENCIA') " +
+            "AND (m.estadoRevision IS NULL OR m.estadoRevision <> com.luisda.fin_app_back.Model.EstadoRevisionMovimiento.POR_REVISAR) " +
+            "GROUP BY FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha)")
+    List<Object[]> resumirGastoBolsilloPorMes(@Param("idUsuario") String idUsuario);
+
     @Query("SELECT FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha), UPPER(m.tipo), COUNT(m), SUM(m.monto) " +
             "FROM MMovimientoContable m LEFT JOIN m.bolsillo b WHERE (b.idBolsillo IN :idsBolsillo OR " +
             "(b IS NULL AND m.idUsuario = :idUsuario)) " +

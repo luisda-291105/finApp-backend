@@ -6,6 +6,7 @@ import com.luisda.fin_app_back.DTO.ResumenGlobalContabilidadDTO;
 import com.luisda.fin_app_back.Filtrado.ResultadoClasificacion;
 import com.luisda.fin_app_back.Filtrado.TipoBolsillo;
 import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
+import com.luisda.fin_app_back.Model.MTarjeta;
 import com.luisda.fin_app_back.Model.MBolsillo;
 import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Repository.IBolsillo;
@@ -38,13 +39,14 @@ class SMovimientoContableTest {
     private SBolsillo servicioBolsillo;
     private SMovimientoContable servicio;
     private MBolsillo porRevisar;
+    private ITarjeta tarjetas;
 
     @BeforeEach
     void prepararDependencias() {
         movimientos = mock(IMovimientoContable.class);
         bolsillos = mock(IBolsillo.class);
         IUsuario usuarios = mock(IUsuario.class);
-        ITarjeta tarjetas = mock(ITarjeta.class);
+        tarjetas = mock(ITarjeta.class);
         servicioBolsillo = mock(SBolsillo.class);
         SReglaFiltro reglasFiltro = mock(SReglaFiltro.class);
         servicio = new SMovimientoContable(movimientos, bolsillos, usuarios, tarjetas, servicioBolsillo, reglasFiltro);
@@ -140,24 +142,29 @@ class SMovimientoContableTest {
     }
 
     @Test
-    void resumenGlobalUsaElTipoTransferenciaPersistidoSinCorreccionAdicional() {
+    void resumenGlobalSumaElGastoQuePasaPorElBolsilloGastos() {
         MBolsillo gastos = bolsillo("gastos", "Gastos", "GASTO", true);
         when(bolsillos.findByIdUsuarioOrderByFechaCreacionDesc(USUARIO)).thenReturn(List.of(gastos));
         when(movimientos.resumirPorMesIncluyendoGlobales(List.of("gastos"), USUARIO, true))
                 .thenReturn(List.<Object[]>of(
-                        new Object[]{2026, 11, "GASTO", 31L, new BigDecimal("2382337.00")},
-                        new Object[]{2026, 11, "TRANSFERENCIA", 1L, new BigDecimal("1000000.00")}));
+                        new Object[]{2026, 11, "INGRESO", 2L, new BigDecimal("2985989.00")},
+                        new Object[]{2026, 11, "TRANSFERENCIA", 11L, new BigDecimal("2515000.00")}));
+        when(movimientos.resumirGastoBolsilloPorMes(USUARIO))
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{2026, 11, new BigDecimal("2624212.00")}));
         when(movimientos.contarPorRevisarIncluyendoGlobales(List.of("gastos"), USUARIO)).thenReturn(0L);
         when(movimientos.sumarPorRevisarPorMes(List.of("gastos"), 2026, 11)).thenReturn(BigDecimal.ZERO);
 
         ResumenGlobalContabilidadDTO resultado = servicio.resumenGlobal(USUARIO, YearMonth.of(2026, 11));
 
-        assertEquals(0, new BigDecimal("2382337.00").compareTo(resultado.gastos()));
-        assertEquals(0, new BigDecimal("1000000.00").compareTo(resultado.transferencias()));
+        assertEquals(0, new BigDecimal("2624212.00").compareTo(resultado.gastos()));
+        assertEquals(0, new BigDecimal("2515000.00").compareTo(resultado.transferencias()));
+        assertEquals(0, new BigDecimal("2985989.00").compareTo(resultado.ingresos()));
     }
 
     @Test
     void crearGmailPorRevisarReclasificaEnvioACuentaPropiaComoTransferencia() {
+        when(tarjetas.findByUsuario_IdUsuario(USUARIO)).thenReturn(List.of(tarjetaPropia("**** 5201")));
         when(movimientos.findFragmentoPorOrigenId("cuenta:correo-propia")).thenReturn(
                 "Transferiste $1000000 desde tu cuenta *5201 a la cuenta *25310487123 el 16/11/2026.");
 
@@ -169,12 +176,25 @@ class SMovimientoContableTest {
     }
 
     @Test
-    void crearGmailPorRevisarConservaComoGastoElEnvioATerceros() {
-        when(movimientos.findFragmentoPorOrigenId("cuenta:correo-tercero")).thenReturn(
+    void crearGmailPorRevisarReclasificaComoTransferenciaElOrigenDeCuentaPropiaAunqueElDestinoSeaTercero() {
+        when(tarjetas.findByUsuario_IdUsuario(USUARIO)).thenReturn(List.of(tarjetaPropia("**** 5201")));
+        when(movimientos.findFragmentoPorOrigenId("cuenta:correo-origen-propio")).thenReturn(
                 "Transferiste $50000 desde tu cuenta *5201 a la cuenta *3107378636 el 14/11/2026.");
 
         MovimientoContableDTO resultado = servicio.crearGmailPorRevisar(USUARIO,
-                solicitudGmailImportada("cuenta:correo-tercero"));
+                solicitudGmailImportada("cuenta:correo-origen-propio"));
+
+        assertEquals("TRANSFERENCIA", resultado.tipo());
+    }
+
+    @Test
+    void crearGmailPorRevisarConservaComoGastoLaCompraSinCuentaPropia() {
+        when(tarjetas.findByUsuario_IdUsuario(USUARIO)).thenReturn(List.of(tarjetaPropia("**** 5201")));
+        when(movimientos.findFragmentoPorOrigenId("cuenta:correo-compra")).thenReturn(
+                "Compraste $16057,00 en FARM PASTEUR con tu T.Deb *9389, el 14/11/2026.");
+
+        MovimientoContableDTO resultado = servicio.crearGmailPorRevisar(USUARIO,
+                solicitudGmailImportada("cuenta:correo-compra"));
 
         assertEquals("GASTO", resultado.tipo());
     }
@@ -206,6 +226,7 @@ class SMovimientoContableTest {
 
     @Test
     void importarAutomaticamenteReclasificaEnvioACuentaPropiaComoTransferencia() {
+        when(tarjetas.findByUsuario_IdUsuario(USUARIO)).thenReturn(List.of(tarjetaPropia("**** 5201")));
         when(movimientos.findFragmentoPorOrigenId("cuenta:correo-auto")).thenReturn(
                 "Transferiste $1000000 desde tu cuenta *5201 a la cuenta *25310487123 el 16/11/2026.");
         ResultadoClasificacion clasificacion = new ResultadoClasificacion(
@@ -241,6 +262,11 @@ class SMovimientoContableTest {
         when(bolsillos.findByIdUsuarioOrderByFechaCreacionDesc(USUARIO)).thenReturn(propios);
         propios.forEach(bolsillo -> when(bolsillos.findByIdBolsilloAndIdUsuario(bolsillo.getIdBolsillo(), USUARIO))
                 .thenReturn(Optional.of(bolsillo)));
+    }
+
+    private static MTarjeta tarjetaPropia(String numero) {
+        return new MTarjeta(
+                "tarjeta-1", "Luis Daniel", numero, LocalDate.of(2034, 12, 1), "123", "Bancolombia");
     }
 
     private static MBolsillo bolsillo(String id, String nombre, String tipo, boolean activo) {

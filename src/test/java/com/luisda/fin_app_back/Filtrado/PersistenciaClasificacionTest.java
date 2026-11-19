@@ -77,7 +77,7 @@ class PersistenciaClasificacionTest {
     }
 
     @Test
-    void movimientoGlobalSeIncluyeUnaSolaVezEnResumenMensualDelPropietario() {
+    void movimientoGlobalEntraAlModalPeroNoSumaEnLaTarjetaDeGastos() {
         MBolsillo ahorro = prepararBolsillo("AHORRO");
         var clasificacion = new ResultadoClasificacion(null, TipoBolsillo.GASTO,
                 new BigDecimal("13000.00"), "Alerta bancaria", LocalDate.now(),
@@ -89,8 +89,9 @@ class PersistenciaClasificacionTest {
 
         ResumenGlobalContabilidadDTO resumen = servicioMovimientos.resumenGlobal("usuario-regla", YearMonth.of(2026, 5));
 
-        assertEquals(new BigDecimal("13000.00"), resumen.gastos());
-        assertEquals(BigDecimal.ZERO, resumen.ingresos());
+        // La tarjeta «Gastos» suma solo el bolsillo Gastos (GASTO + TRANSFERENCIA); los gastos
+        // globales sin bolsillo los muestra el modal de detalle del bolsillo Gastos.
+        assertEquals(BigDecimal.ZERO, resumen.gastos());
         assertEquals(BigDecimal.ZERO, movimientos.calcularSaldoDisponible(ahorro.getIdBolsillo(), null));
     }
 
@@ -139,7 +140,9 @@ class PersistenciaClasificacionTest {
         assertEquals(null, guardado.getBolsillo());
         assertEquals("GASTO", guardado.getTipo());
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, guardado.getEstadoRevision());
-        assertEquals(new BigDecimal("300000.00"), resumen.gastos());
+        // Gasto global sin bolsillo: no suma en la tarjeta «Gastos» (solo el bolsillo Gastos);
+        // es el modal el que lo muestra en el detalle del mes.
+        assertEquals(BigDecimal.ZERO, resumen.gastos());
         assertEquals(0, movimientos.calcularSaldoDisponible(ahorro.getIdBolsillo(), null).compareTo(BigDecimal.ZERO));
     }
 
@@ -285,15 +288,14 @@ class PersistenciaClasificacionTest {
     void resumenGlobalDelMesSeparaIngresosGastosAhorrosTransferenciasYSaldos() {
         MBolsillo origen = prepararBolsillo("AHORRO");
         MBolsillo destino = nuevoBolsillo("bolsillo-destino", "Viajes", "AHORRO", origen.getContabilidad());
+        MBolsillo gastos = nuevoBolsillo("bolsillo-gastos", "Gastos del mes", "GASTO", origen.getContabilidad());
         MBolsillo revisar = nuevoBolsillo("bolsillo-revisar", "Por revisar", "OTROS", origen.getContabilidad());
-
         MMovimientoContable ingreso = conFecha(movimiento(origen, "resumen-ingreso", new BigDecimal("100.00"),
                 EstadoRevisionMovimiento.CONFIRMADO), 2026, 5, 1);
         ingreso.setTipo("INGRESO");
-        MMovimientoContable gasto = conFecha(movimiento(destino, "resumen-gasto", new BigDecimal("30.00"),
+        MMovimientoContable gasto = conFecha(movimiento(gastos, "resumen-gasto", new BigDecimal("30.00"),
                 EstadoRevisionMovimiento.CONFIRMADO), 2026, 5, 2);
-        gasto.setOrigenTipo("BOLSILLO");
-        gasto.setOrigenId(origen.getIdBolsillo());
+        gasto.setOrigenTipo("EFECTIVO");
         MMovimientoContable transferencia = conFecha(movimiento(destino, "resumen-transferencia", new BigDecimal("40.00"),
                 EstadoRevisionMovimiento.CONFIRMADO), 2026, 5, 3);
         transferencia.setTipo("TRANSFERENCIA");
@@ -317,7 +319,7 @@ class PersistenciaClasificacionTest {
         assertEquals(new BigDecimal("30.00"), resumen.gastos());
         assertEquals(new BigDecimal("15.00"), resumen.ahorros());
         assertEquals(new BigDecimal("40.00"), resumen.transferencias());
-        assertEquals(new BigDecimal("70.00"), resumen.saldoAhorros());
+        assertEquals(new BigDecimal("100.00"), resumen.saldoAhorros());
         assertEquals(1L, resumen.porRevisar());
         assertEquals(new BigDecimal("13000.00"), resumen.montoPorRevisar());
     }

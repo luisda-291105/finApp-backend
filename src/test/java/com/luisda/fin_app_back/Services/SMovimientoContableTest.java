@@ -2,6 +2,7 @@ package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.DTO.MovimientoContableDTO;
 import com.luisda.fin_app_back.DTO.MovimientoContableSolicitudDTO;
+import com.luisda.fin_app_back.DTO.ResumenGlobalContabilidadDTO;
 import com.luisda.fin_app_back.Filtrado.ResultadoClasificacion;
 import com.luisda.fin_app_back.Filtrado.TipoBolsillo;
 import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
@@ -17,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
@@ -137,9 +139,94 @@ class SMovimientoContableTest {
         verify(movimientos, never()).save(any(MMovimientoContable.class));
     }
 
+    @Test
+    void resumenGlobalUsaElTipoTransferenciaPersistidoSinCorreccionAdicional() {
+        MBolsillo gastos = bolsillo("gastos", "Gastos", "GASTO", true);
+        when(bolsillos.findByIdUsuarioOrderByFechaCreacionDesc(USUARIO)).thenReturn(List.of(gastos));
+        when(movimientos.resumirPorMesIncluyendoGlobales(List.of("gastos"), USUARIO, true))
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{2026, 11, "GASTO", 31L, new BigDecimal("2382337.00")},
+                        new Object[]{2026, 11, "TRANSFERENCIA", 1L, new BigDecimal("1000000.00")}));
+        when(movimientos.contarPorRevisarIncluyendoGlobales(List.of("gastos"), USUARIO)).thenReturn(0L);
+        when(movimientos.sumarPorRevisarPorMes(List.of("gastos"), 2026, 11)).thenReturn(BigDecimal.ZERO);
+
+        ResumenGlobalContabilidadDTO resultado = servicio.resumenGlobal(USUARIO, YearMonth.of(2026, 11));
+
+        assertEquals(0, new BigDecimal("2382337.00").compareTo(resultado.gastos()));
+        assertEquals(0, new BigDecimal("1000000.00").compareTo(resultado.transferencias()));
+    }
+
+    @Test
+    void crearGmailPorRevisarReclasificaEnvioACuentaPropiaComoTransferencia() {
+        when(movimientos.findFragmentoPorOrigenId("cuenta:correo-propia")).thenReturn(
+                "Transferiste $1000000 desde tu cuenta *5201 a la cuenta *25310487123 el 16/11/2026.");
+
+        MovimientoContableDTO resultado = servicio.crearGmailPorRevisar(USUARIO,
+                solicitudGmailImportada("cuenta:correo-propia"));
+
+        assertEquals("TRANSFERENCIA", resultado.tipo());
+        assertEquals(EstadoRevisionMovimiento.POR_REVISAR, resultado.estadoRevision());
+    }
+
+    @Test
+    void crearGmailPorRevisarConservaComoGastoElEnvioATerceros() {
+        when(movimientos.findFragmentoPorOrigenId("cuenta:correo-tercero")).thenReturn(
+                "Transferiste $50000 desde tu cuenta *5201 a la cuenta *3107378636 el 14/11/2026.");
+
+        MovimientoContableDTO resultado = servicio.crearGmailPorRevisar(USUARIO,
+                solicitudGmailImportada("cuenta:correo-tercero"));
+
+        assertEquals("GASTO", resultado.tipo());
+    }
+
+    @Test
+    void confirmarGmailGlobalAceptaTransferenciaRevisada() {
+        MMovimientoContable movimiento = new MMovimientoContable();
+        movimiento.setIdMovimiento("mov-transferencia");
+        movimiento.setIdUsuario(USUARIO);
+        movimiento.setBolsillo(porRevisar);
+        movimiento.setTipo("TRANSFERENCIA");
+        movimiento.setFecha(LocalDate.of(2026, 11, 10));
+        movimiento.setMonto(new BigDecimal("1000000"));
+        movimiento.setCategoria("Transferencia");
+        movimiento.setConcepto("Transferencia");
+        movimiento.setOrigenTipo("GMAIL");
+        movimiento.setOrigenId("cuenta:correo-propia");
+        movimiento.setOrigenNombre("banColombia");
+        movimiento.setEstadoRevision(EstadoRevisionMovimiento.POR_REVISAR);
+        when(movimientos.buscarPropioIncluyendoGlobal("mov-transferencia", USUARIO))
+                .thenReturn(Optional.of(movimiento));
+
+        MovimientoContableDTO resultado = servicio.confirmarGmailGlobal(USUARIO, "mov-transferencia");
+
+        assertEquals("TRANSFERENCIA", resultado.tipo());
+        assertEquals(null, resultado.idBolsillo());
+        assertEquals(EstadoRevisionMovimiento.CONFIRMADO, resultado.estadoRevision());
+    }
+
+    @Test
+    void importarAutomaticamenteReclasificaEnvioACuentaPropiaComoTransferencia() {
+        when(movimientos.findFragmentoPorOrigenId("cuenta:correo-auto")).thenReturn(
+                "Transferiste $1000000 desde tu cuenta *5201 a la cuenta *25310487123 el 16/11/2026.");
+        ResultadoClasificacion clasificacion = new ResultadoClasificacion(
+                null, TipoBolsillo.GASTO, null, null, null, BigDecimal.ONE, false);
+
+        MovimientoContableDTO resultado = servicio.crearAutomaticamenteDesdeGmail(USUARIO, "GASTO",
+                LocalDate.of(2026, 11, 10), new BigDecimal("1000000"), "Transferencia", "Transferencia",
+                "cuenta:correo-auto", "banColombia", clasificacion).orElseThrow();
+
+        assertEquals("TRANSFERENCIA", resultado.tipo());
+        assertEquals(EstadoRevisionMovimiento.POR_REVISAR, resultado.estadoRevision());
+    }
+
     private static MovimientoContableSolicitudDTO solicitudGmail(String idBolsillo) {
         return new MovimientoContableSolicitudDTO(idBolsillo, "GASTO", LocalDate.of(2026, 11, 10),
                 new BigDecimal("20000"), "Compras", "Alerta", "GMAIL", "correo-1", "banColombia");
+    }
+
+    private static MovimientoContableSolicitudDTO solicitudGmailImportada(String origenId) {
+        return new MovimientoContableSolicitudDTO("bolsillo-revisar", "GASTO", LocalDate.of(2026, 11, 10),
+                new BigDecimal("1000000"), "Transferencia", "Transferencia", "GMAIL", origenId, "banColombia");
     }
 
     private MovimientoContableDTO importarConClasificacionConfiable() {

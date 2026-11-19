@@ -45,14 +45,14 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpStatusCodeException;
+
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.time.Instant;
@@ -64,7 +64,7 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Set;
+
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -82,6 +82,9 @@ public class CGmail {
     /** La retención de correos y los remitentes prioritarios viven en SGmailMensajes. */
     private static final int RETENCION_CORREOS_DIAS = SGmailMensajes.RETENCION_CORREOS_DIAS;
     private static final int TAMANO_PAGINA_GMAIL = 500;
+    /** Un correo en TRASH no se devuelve en la bandeja aunque siga en la caché (RF-08/RF-29). */
+    private static final String ESTADO_PAPELERA = "EN_PAPELERA";
+    private static final String ETIQUETA_PAPELERA = "TRASH";
     private static final Logger LOGGER = LoggerFactory.getLogger(CGmail.class);
 
     private volatile RestClient clienteHttp;
@@ -1051,9 +1054,14 @@ public class CGmail {
         Instant desde = Instant.now().minus(java.time.Duration.ofDays(RETENCION_CORREOS_DIAS));
         List<GmailMensajeDTO> resultado = new ArrayList<>();
         for (IGmailMensajes.Resumen mensaje : mensajes.findResumenesByCuentaAndFecha(cuenta.getIdFuente(), desde)) {
+            // Evita que un correo ya movido a la Papelera vuelva a la bandeja y se reimporte como
+            // movimiento por revisar: el criterio de papelera lo define Gmail (RF-08) y el estado
+            // local lo refleja hasta que la reconciliación elimina la fila (RF-29).
+            if (ESTADO_PAPELERA.equals(mensaje.getPapeleraEstado())) continue;
             boolean dirigido = direcciones.stream().anyMatch(d -> contieneDireccion(mensaje.getDestinatario(), d));
             if (!dirigido) continue;
             List<String> etiquetasIds = leerListaJson(mensaje.getEtiquetasJson());
+            if (etiquetasIds.contains(ETIQUETA_PAPELERA)) continue;
             List<String> nombresEtiquetas = leerListaJson(mensaje.getNombresEtiquetasJson());
             resultado.add(new GmailMensajeDTO(
                     mensaje.getGoogleMessageId(),

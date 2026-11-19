@@ -10,7 +10,7 @@ import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Model.MReglaFiltro;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Model.TipoReglaFiltro;
-import com.luisda.fin_app_back.Repository.IBolsillo;
+// import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IReglaFiltro;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Services.SClasificadorMovimiento;
@@ -49,7 +49,7 @@ class PersistenciaClasificacionTest {
     @Autowired private EntityManager entityManager;
     @Autowired private IReglaFiltro reglas;
     @Autowired private IMovimientoContable movimientos;
-    @Autowired private IBolsillo bolsillos;
+//     @Autowired private IBolsillo bolsillos;
     @Autowired private SMovimientoContable servicioMovimientos;
     @Autowired private MockMvc mockMvc;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new ObjectMapper();

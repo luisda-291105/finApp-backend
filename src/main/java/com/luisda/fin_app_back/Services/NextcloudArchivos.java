@@ -458,10 +458,10 @@ public class NextcloudArchivos implements SAlmacenamientoArchivos {
                 enlaceWeb(href));
     }
 
-    private static String rutaArchivosDeHref(String href) {
-        int indice = href.indexOf("/remote.php/dav/files/");
-        return indice < 0 ? "" : href.substring(0, indice + "/remote.php/dav/files/".length());
-    }
+    // private static String rutaArchivosDeHref(String href) {
+    //     int indice = href.indexOf("/remote.php/dav/files/");
+    //     return indice < 0 ? "" : href.substring(0, indice + "/remote.php/dav/files/".length());
+    // }
 
     /** Carpeta contenedora de un href relativa a la raíz de archivos del usuario (sin el segmento del usuario). */
     private static String padreDeHref(String href) {

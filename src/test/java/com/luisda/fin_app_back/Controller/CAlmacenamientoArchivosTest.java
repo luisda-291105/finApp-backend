@@ -1,6 +1,6 @@
 package com.luisda.fin_app_back.Controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+// import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.Model.MAlmacenamientoConexion;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IAlmacenamientoConexiones;
@@ -31,7 +31,7 @@ class CAlmacenamientoArchivosTest {
     private IAlmacenamientoConexiones repositorio;
     private SAlmacenamientoArchivos proveedor;
     private MockMvc mockMvc;
-    private final ObjectMapper json = new ObjectMapper();
+//     private final ObjectMapper json = new ObjectMapper();
 
     @BeforeEach
     void preparar() {
@@ -51,7 +51,7 @@ class CAlmacenamientoArchivosTest {
         when(repositorio.findByIdConexionAndUsuario_IdUsuario("c1", "1101383776")).thenReturn(Optional.of(conexion));
     }
 
-    private static final Object[] ORIGEN = {HttpHeaders.ORIGIN, "http://localhost:5173"};
+//     private static final Object[] ORIGEN = {HttpHeaders.ORIGIN, "http://localhost:5173"};
 
     @Test
     void sinSesionResponde401() throws Exception {

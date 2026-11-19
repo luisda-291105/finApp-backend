@@ -18,6 +18,7 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
         String getFragmento();
         String getEtiquetasJson();
         String getNombresEtiquetasJson();
+        String getPapeleraEstado();
         Instant getFechaInterna();
     }
 
@@ -25,7 +26,8 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
             SELECT m.googleMessageId AS googleMessageId, m.remitente AS remitente,
                    m.destinatario AS destinatario, m.asunto AS asunto,
                    m.fragmento AS fragmento, m.etiquetasJson AS etiquetasJson,
-                   m.nombresEtiquetasJson AS nombresEtiquetasJson, m.fechaInterna AS fechaInterna
+                   m.nombresEtiquetasJson AS nombresEtiquetasJson, m.papeleraEstado AS papeleraEstado,
+                   m.fechaInterna AS fechaInterna
             FROM MGmailMensaje m
             WHERE m.cuenta.idFuente = :idFuente AND m.fechaInterna > :fecha
             ORDER BY m.fechaInterna DESC

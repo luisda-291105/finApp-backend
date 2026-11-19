@@ -125,8 +125,7 @@ class CAlmacenamientoConexionesTest {
     void endpointRechazaSolicitudesSinSesionYOrigenNoPermitido() {
         SAlmacenamientoConexiones servicioConexiones = mock(SAlmacenamientoConexiones.class);
         SUsuarioActivo usuarioActivo = mock(SUsuarioActivo.class);
-        IAlmacenamientoConexiones repositorio = mock(IAlmacenamientoConexiones.class);
-        CAlmacenamiento controller = new CAlmacenamiento(servicioConexiones, usuarioActivo, repositorio,
+        CAlmacenamiento controller = new CAlmacenamiento(servicioConexiones, usuarioActivo,
                 "http://localhost:5173");
 
         HttpServletRequest sinSesion = mock(HttpServletRequest.class);

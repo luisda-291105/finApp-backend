@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luisda.fin_app_back.DTO.SuscripcionAjustesDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionDTO;
+import com.luisda.fin_app_back.DTO.SuscripcionRecurrenteDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionSolicitudDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MSuscripcion;
@@ -26,11 +27,12 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * @uso               Gestiona las suscripciones manuales y la consulta unificada de suscripciones
  * @capa              Servicio
- * @responsabilidades CRUD de suscripciones manuales, listado unificado (manuales y de Gmail) y ajustes de organización
+ * @responsabilidades CRUD de suscripciones manuales, listado unificado (manuales y de Gmail), cobros recurrentes y ajustes de organización
  * @datos             Recibe y devuelve DTOs de Suscripcion
  * @dependencias      ISuscripcion, IUsuario
  * @usadoPor          CSuscripcion
@@ -45,8 +47,11 @@ public class SSuscripcion {
     private static final int LONGITUD_NOMBRE = 100;
     private static final int LONGITUD_CATEGORIA = 60;
     private static final int LONGITUD_APODO = 120;
+    /** Las suscripciones no guardan periodicidad: se asumen cobros mensuales. */
+    private static final String FRECUENCIA_SUSCRIPCION = "Mensual";
+    private static final int INTERVALO_SUSCRIPCION = 30;
     private static final BigDecimal MONTO_MAXIMO = new BigDecimal("9999999999.99");
-    private static final Pattern DESTINO_BAJA = Pattern.compile("(?i)<(" + "(?:https?|mailto)" + ":[^>]+)>");
+    // private static final Pattern DESTINO_BAJA = Pattern.compile("(?i)<(" + "(?:https?|mailto)" + ":[^>]+)>");
 
     private final ISuscripcion suscripciones;
     private final IUsuario usuarios;
@@ -110,6 +115,59 @@ public class SSuscripcion {
     @Transactional(readOnly = true)
     public SuscripcionDTO obtener(String idUsuario, String id) {
         return aDto(buscarPropia(idUsuario, id));
+    }
+
+    /**
+     * Cobros recurrentes del usuario tomados de sus suscripciones: las activas que
+     * tienen monto y fecha de cobro. Como la suscripción no guarda periodicidad,
+     * se informa un cobro mensual estimado.
+     */
+    @Transactional(readOnly = true)
+    public List<SuscripcionRecurrenteDTO> listarRecurrentes(String idUsuario) {
+        if (idUsuario == null || idUsuario.isBlank()) return List.of();
+        return this.suscripciones.findDelUsuario(idUsuario).stream()
+                .filter(MSuscripcion::isActiva)
+                .filter(suscripcion -> suscripcion.getMonto() != null && suscripcion.getFechaCobro() != null)
+                .sorted(Comparator.comparing(MSuscripcion::getFechaCobro)
+                        .thenComparing(suscripcion -> suscripcion.getNombre(),
+                                Comparator.nullsLast(String::compareToIgnoreCase)))
+                .map(this::aCobroRecurrente)
+                .toList();
+    }
+
+    /** Convierte una suscripción con monto y fecha de cobro en un cobro recurrente. */
+    private SuscripcionRecurrenteDTO aCobroRecurrente(MSuscripcion suscripcion) {
+        String nombre = suscripcion.getApodo() == null || suscripcion.getApodo().isBlank()
+                ? suscripcion.getNombre() : suscripcion.getApodo();
+        return new SuscripcionRecurrenteDTO(
+                suscripcion.getId(),
+                nombre,
+                categoriaLegible(suscripcion.getCategoria()),
+                suscripcion.getMonto(),
+                FRECUENCIA_SUSCRIPCION,
+                INTERVALO_SUSCRIPCION,
+                null,
+                suscripcion.getFechaCobro(),
+                1,
+                suscripcion.getOrigen() == null ? null : suscripcion.getOrigen().name());
+    }
+
+    /** La categoría puede ser texto plano (suscripciones manuales) o etiquetas JSON (Gmail). */
+    private String categoriaLegible(String valor) {
+        if (valor == null || valor.isBlank()) return null;
+        String limpio = valor.trim();
+        if (!limpio.startsWith("[")) return limpio;
+        List<String> etiquetas = leerLista(limpio);
+        if (etiquetas.isEmpty()) return null;
+        return etiquetas.stream().map(this::etiquetaLegible).collect(Collectors.joining(" · "));
+    }
+
+    private String etiquetaLegible(String etiqueta) {
+        return switch (etiqueta) {
+            case "CATEGORY_PROMOTIONS" -> "Promociones";
+            case "CATEGORY_UPDATES" -> "Actualizaciones";
+            default -> etiqueta;
+        };
     }
 
     /** Actualiza una suscripción manual. Las detectadas en Gmail no se editan desde aquí. */

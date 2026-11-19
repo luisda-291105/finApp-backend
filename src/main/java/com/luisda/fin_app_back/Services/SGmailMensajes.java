@@ -12,8 +12,8 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+// import org.slf4j.Logger;
+// import org.slf4j.LoggerFactory;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -62,7 +62,7 @@ public class SGmailMensajes {
     private static final int LARGO_CONTENIDO_MAXIMO = 12000;
     /** Etiqueta de Gmail que marca un correo en la papelera (RF-29). */
     private static final String ETIQUETA_PAPELERA = "TRASH";
-    private static final Logger LOGGER = LoggerFactory.getLogger(SGmailMensajes.class);
+    // private static final Logger LOGGER = LoggerFactory.getLogger(SGmailMensajes.class);
 
     private volatile RestClient clienteHttp;
     private final ObjectMapper objectMapper = new ObjectMapper();

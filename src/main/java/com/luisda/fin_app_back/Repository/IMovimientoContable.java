@@ -40,6 +40,14 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
             "m.estadoRevision = com.luisda.fin_app_back.Model.EstadoRevisionMovimiento.POR_REVISAR")
     long contarPorRevisarIncluyendoGlobales(@Param("idsBolsillo") List<String> idsBolsillo,
             @Param("idUsuario") String idUsuario);
+
+    /**
+     * Fragmento del correo Gmail asociado a un origenId «{cuentaId}:{mensajeId}». Permite aplicar la
+     * misma regla de cuentas propias al importar que ya se usa en la migración histórica.
+     */
+    @Query(value = "SELECT g.fragmento FROM gmail_mensaje g " +
+            "WHERE g.google_message_id = SUBSTRING(:origenId, LOCATE(':', :origenId) + 1)", nativeQuery = true)
+    String findFragmentoPorOrigenId(@Param("origenId") String origenId);
     List<MMovimientoContable> findByBolsillo_IdBolsilloOrderByFechaDesc(String idBolsillo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInOrderByFechaDesc(List<String> idsBolsillo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInAndEstadoRevisionOrderByFechaDesc(

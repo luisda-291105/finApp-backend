@@ -4,6 +4,8 @@ import org.springframework.http.HttpStatus;
 
 /** Error controlado que conserva el estado HTTP sin filtrar errores de proveedores. */
 public class ServicioChatException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
     private final HttpStatus estado;
 
     public ServicioChatException(HttpStatus estado, String mensaje) {

@@ -774,13 +774,19 @@ public class SReglaPapeleraGmail {
     }
 
     /** El `vista_previa_id` no existe o expiró: `409` (RF-39). */
-    public static class VistaPreviaNoEncontradaException extends RuntimeException { }
+    public static class VistaPreviaNoEncontradaException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** Ya hay una limpieza en curso para la cuenta: `409 limpieza_en_curso` (RF-38). */
-    public static class LimpiezaEnCursoException extends IllegalStateException { }
+    public static class LimpiezaEnCursoException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** El conteo real difiere del confirmado: `409 conteo_cambiado` con el nuevo conteo (RF-38). */
     public static class ConteoCambiadoException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+
         private final int nuevoConteo;
 
         public ConteoCambiadoException(int nuevoConteo) {

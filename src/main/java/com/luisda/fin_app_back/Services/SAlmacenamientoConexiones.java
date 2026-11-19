@@ -68,10 +68,14 @@ public class SAlmacenamientoConexiones {
     public record ConexionNextcloud(String urlServidor, String usuario, String credencial) { }
 
     public static class EstadoInvalidoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public EstadoInvalidoException(String mensaje) { super(mensaje); }
     }
 
     public static class ProveedorNoSoportadoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public ProveedorNoSoportadoException(String mensaje) { super(mensaje); }
     }
 

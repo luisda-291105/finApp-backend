@@ -333,7 +333,9 @@ public class CAlmacenamientoArchivos {
                 .body(Map.of("mensaje", "No se pudo completar la operación. Inténtalo de nuevo más tarde."));
     }
 
-    static class SesionRequeridaException extends RuntimeException { }
+    static class SesionRequeridaException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
 
     public record SolicitudCarpeta(String carpetaId, String nombre) { }
     public record SolicitudActualizar(String nombre, String idNuevoPadre, Boolean destacar) { }

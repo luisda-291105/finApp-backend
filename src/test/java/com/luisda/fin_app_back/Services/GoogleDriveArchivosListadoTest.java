@@ -236,6 +236,6 @@ class GoogleDriveArchivosListadoTest {
         assertEquals(pagina, cache.obtener(conexion, "consulta"));
         cache.invalidar(conexion);
         assertEquals(null, cache.obtener(conexion, "consulta"));
-        assertFalse(cache.ttl().isNegative());
+        assertFalse(SCacheListadosAlmacenamiento.ttl().isNegative());
     }
 }

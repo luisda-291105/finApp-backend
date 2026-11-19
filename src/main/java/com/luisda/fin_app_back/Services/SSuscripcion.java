@@ -332,6 +332,8 @@ public class SSuscripcion {
 
     /** Error de validación con el campo que se debe corregir en el formulario. */
     public static class DatosInvalidosException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         private final String campo;
 
         public DatosInvalidosException(String mensaje, String campo) {
@@ -344,6 +346,8 @@ public class SSuscripcion {
 
     /** La suscripción pertenece a Gmail y no admite edición manual. */
     public static class NoEditableException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public NoEditableException(String mensaje) {
             super(mensaje);
         }

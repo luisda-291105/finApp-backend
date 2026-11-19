@@ -1311,5 +1311,7 @@ public class CGmail {
 
     public record SolicitudCodigo(String code, @com.fasterxml.jackson.annotation.JsonProperty("expected_account_id") String expectedAccountId) { }
     public record SolicitudMensajes(@com.fasterxml.jackson.annotation.JsonProperty("fuentes_ids") List<String> fuentesIds) { }
-    private static class CuentaGmailRequiereReconectarException extends IllegalStateException { }
+    private static class CuentaGmailRequiereReconectarException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+    }
 }

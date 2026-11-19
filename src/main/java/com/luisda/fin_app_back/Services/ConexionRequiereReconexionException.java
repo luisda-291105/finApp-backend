@@ -9,6 +9,8 @@ package com.luisda.fin_app_back.Services;
  * @usadoPor          SAlmacenamientoTokens, GoogleDriveArchivos, CAlmacenamientoArchivos
  */
 public class ConexionRequiereReconexionException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
     public ConexionRequiereReconexionException(String mensaje) { super(mensaje); }
     public ConexionRequiereReconexionException(String mensaje, Throwable causa) { super(mensaje, causa); }
 }

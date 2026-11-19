@@ -465,20 +465,32 @@ public class SPapeleraGmail {
     }
 
     /** La cuenta necesita reconectarse: no hay token vigente ni refresh token utilizable (RF-26). */
-    public static class CuentaGmailRequiereReconectarException extends IllegalStateException { }
+    public static class CuentaGmailRequiereReconectarException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** El correo ya fue eliminado definitivamente por Gmail (purgado): `410` (RF-18/RF-19). */
-    public static class CorreoPurgadoException extends RuntimeException { }
+    public static class CorreoPurgadoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** El correo ya no está disponible en la vista Papelera: `409 mail_unavailable` (RF-20). */
-    public static class CorreoNoDisponibleException extends RuntimeException { }
+    public static class CorreoNoDisponibleException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** El mensaje no pertenece a la cuenta indicada: `404`. */
-    public static class CorreoNoEncontradoException extends RuntimeException { }
+    public static class CorreoNoEncontradoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** Activar categorías exige el permiso ampliado de Gmail: `409 requires_scope_authorization`. */
-    public static class RequiereScopeException extends IllegalStateException { }
+    public static class RequiereScopeException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+    }
 
     /** El remitente no está en la lista blanca de la cuenta: `404`. */
-    public static class RemitenteNoEncontradoException extends RuntimeException { }
+    public static class RemitenteNoEncontradoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
 }

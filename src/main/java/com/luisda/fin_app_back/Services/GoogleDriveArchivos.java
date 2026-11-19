@@ -166,7 +166,7 @@ public class GoogleDriveArchivos implements SAlmacenamientoArchivos {
         partes.part("archivo", new ByteArrayResource(contenido) {
             @Override public String getFilename() { return nombreArchivo; }
         }).contentType(mime == null || mime.isBlank() ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(mime));
-        JsonNode respuesta = ejecutarMultipart(conexion, destino, (MultiValueMap<String, org.springframework.http.HttpEntity<?>>) partes.build());
+        JsonNode respuesta = ejecutarMultipart(conexion, destino, partes.build());
         cache.invalidar(conexion);
         return aDto(respuesta);
     }

@@ -5,6 +5,7 @@ import com.luisda.fin_app_back.Repository.IGrupo;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Repository.IFuentes;
+import com.luisda.fin_app_back.Repository.IGrupoMensaje;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,11 +28,13 @@ public class SGrupo {
     private final IGrupo IGrupo;
     private final IUsuario IUsuario;
     private final IFuentes IFuentes;
+    private final IGrupoMensaje IGrupoMensaje;
 
-    public SGrupo(IGrupo iGrupo, IUsuario iUsuario, IFuentes iFuentes) {
+    public SGrupo(IGrupo iGrupo, IUsuario iUsuario, IFuentes iFuentes, IGrupoMensaje iGrupoMensaje) {
         IGrupo = iGrupo;
         IUsuario = iUsuario;
         IFuentes = iFuentes;
+        IGrupoMensaje = iGrupoMensaje;
     }
 
     /** Crea un grupo usando siempre el usuario suministrado por la sesión autenticada. */
@@ -154,6 +157,8 @@ public class SGrupo {
         try {
             Optional<MGrupo> grupoEncontrado = this.IGrupo.findById(idGrupo);
             if (grupoEncontrado.isPresent() && grupoEncontrado.get().getUsuario().getIdUsuario().equals(idUsuario)) {
+                // El chat del grupo vive y muere con él.
+                this.IGrupoMensaje.deleteByIdGrupo(idGrupo);
                 this.IGrupo.deleteById(idGrupo);
                 return true;
             } else {

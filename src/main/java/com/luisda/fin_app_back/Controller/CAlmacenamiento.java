@@ -33,10 +33,9 @@ import java.util.Map;
  * @estados Ninguno
  * @usadoPor Frontend (almacenamientoServicio)
  */
-
 @RestController
 @Tag(name = "Almacenamiento", description = "Conexiones de almacenamiento en la nube (Google Drive, OneDrive, Nextcloud).")
-@RequestMapping("/api/almacenamiento")
+@RequestMapping("/api/almacenamiento/conexiones")
 public class CAlmacenamiento {
 
     private final SAlmacenamientoConexiones conexiones;
@@ -51,7 +50,7 @@ public class CAlmacenamiento {
     }
 
     /** Lista las conexiones de almacenamiento del usuario activo. */
-    @GetMapping("/conexiones")
+    @GetMapping
     public ResponseEntity<?> listarConexiones(HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null)
@@ -63,7 +62,7 @@ public class CAlmacenamiento {
     /**
      * Devuelve la URL de autorización del proveedor con un state de un solo uso.
      */
-    @PostMapping("/conexiones/iniciar")
+    @PostMapping("/iniciar")
     public ResponseEntity<?> iniciarConexion(@RequestBody SolicitudIniciar solicitud, HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null)
@@ -83,7 +82,7 @@ public class CAlmacenamiento {
      * Completa el OAuth validando el state de un solo uso asociado a la sesión
      * iniciadora.
      */
-    @PostMapping("/conexiones/callback")
+    @PostMapping("/callback")
     public ResponseEntity<?> completarConexion(@RequestBody SolicitudCallback solicitud, HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null)
@@ -111,7 +110,7 @@ public class CAlmacenamiento {
     }
 
     /** Conecta una cuenta Nextcloud con URL, usuario y contraseña de aplicación. */
-    @PostMapping("/conexiones/nextcloud")
+    @PostMapping("/nextcloud")
     public ResponseEntity<?> conectarNextcloud(@RequestBody SAlmacenamientoConexiones.ConexionNextcloud solicitud,
             HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
@@ -137,7 +136,7 @@ public class CAlmacenamiento {
      * Elimina la conexión propia, borra la credencial local e intenta revocar la
      * autorización remota.
      */
-    @DeleteMapping("/conexiones/{id}")
+    @DeleteMapping("/{id}")
     public ResponseEntity<?> desconectar(@PathVariable String id, HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
         if (usuario == null)

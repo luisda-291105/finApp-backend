@@ -6,7 +6,6 @@ import com.luisda.fin_app_back.DTO.AlmacenamientoArchivoDTO;
 import com.luisda.fin_app_back.DTO.AlmacenamientoPermisoDTO;
 import com.luisda.fin_app_back.Model.MAlmacenamientoConexion;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;

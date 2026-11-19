@@ -12,7 +12,6 @@ import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MGmailMensaje;
 import com.luisda.fin_app_back.Model.MGmailPapeleraCategoria;
 import com.luisda.fin_app_back.Model.MGmailPapeleraConfiguracion;
-import com.luisda.fin_app_back.Model.MGmailPapeleraListaBlanca;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGmailMensajes;
 import com.luisda.fin_app_back.Repository.IGmailPapeleraCategoria;

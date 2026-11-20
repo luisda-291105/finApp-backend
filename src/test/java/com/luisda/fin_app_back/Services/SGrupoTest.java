@@ -5,6 +5,7 @@ import com.luisda.fin_app_back.Model.MGrupo;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Repository.IFuentes;
 import com.luisda.fin_app_back.Repository.IGrupo;
+import com.luisda.fin_app_back.Repository.IGrupoMiembro;
 import com.luisda.fin_app_back.Repository.IGrupoMensaje;
 import com.luisda.fin_app_back.Repository.IUsuario;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ class SGrupoTest {
     private IGrupo grupos;
     private IFuentes fuentes;
     private IGrupoMensaje mensajes;
+    private IGrupoMiembro miembros;
     private SGrupo servicio;
     private MGrupo grupo;
     private MFuente fuente;
@@ -33,7 +35,8 @@ class SGrupoTest {
         grupos = mock(IGrupo.class);
         fuentes = mock(IFuentes.class);
         mensajes = mock(IGrupoMensaje.class);
-        servicio = new SGrupo(grupos, mock(IUsuario.class), fuentes, mensajes);
+        miembros = mock(IGrupoMiembro.class);
+        servicio = new SGrupo(grupos, mock(IUsuario.class), fuentes, mensajes, miembros);
         grupo = new MGrupo();
         grupo.setIdGrupo("grupo-1");
         grupo.setUsuario(usuario("usuario-1"));
@@ -113,6 +116,7 @@ class SGrupoTest {
         servicio.eliminar("grupo-1", "usuario-1");
 
         verify(mensajes).deleteByIdGrupo("grupo-1");
+        verify(miembros).deleteByIdGrupo("grupo-1");
         verify(grupos).deleteById("grupo-1");
         verify(fuentes, never()).deleteById("fuente-1");
     }

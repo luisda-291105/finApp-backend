@@ -36,4 +36,16 @@ public interface IUsuario extends JpaRepository<MUsuario , String> {
             @Param("nombre") String nombreUsuario
     );
 
+    /**
+     * Busca usuarios por fragmento de nombre, correo o teléfono, o por su identificador exacto.
+     * Vacío nunca; se acota el volumen con los límites del consumidor.
+     */
+    @Query("SELECT u FROM MUsuario u WHERE " +
+            "LOWER(u.nombre) LIKE LOWER(CONCAT('%', :consulta, '%')) OR " +
+            "LOWER(u.correo) LIKE LOWER(CONCAT('%', :consulta, '%')) OR " +
+            "LOWER(u.telefono) LIKE LOWER(CONCAT('%', :consulta, '%')) OR " +
+            "u.idUsuario = :consulta " +
+            "ORDER BY u.nombre ASC")
+    List<MUsuario> buscarPorTermino(@Param("consulta") String consulta);
+
 }

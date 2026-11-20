@@ -127,15 +127,20 @@ class SGrupoChatTest {
     void elPropietarioPuedeAdministrarMiembros() {
         MGrupoMiembro[] guardo = new MGrupoMiembro[1];
         when(miembros.save(any(MGrupoMiembro.class)))
-                .thenAnswer(invocacion -> { guardo[0] = invocacion.getArgument(0); return guardo[0]; });
+                .thenAnswer(invocacion -> {
+                    guardo[0] = invocacion.getArgument(0);
+                    return guardo[0];
+                });
         when(miembros.findByIdGrupo("grupo-1"))
                 .thenAnswer(invocacion -> guardo[0] == null ? List.of() : List.of(guardo[0]));
         Map<String, MUsuario> conocidos = Map.of("usuario-1", dueno, "usuario-2", otraUsuario);
         when(usuarios.findAllById(any()))
                 .thenAnswer(invocacion -> {
+                    Iterable<String> ids = invocacion.getArgument(0);
                     List<MUsuario> resultado = new java.util.ArrayList<>();
-                    for (String id : (Iterable<String>) invocacion.getArgument(0)) {
-                        if (conocidos.containsKey(id)) resultado.add(conocidos.get(id));
+                    for (String id : ids) {
+                        if (conocidos.containsKey(id))
+                            resultado.add(conocidos.get(id));
                     }
                     return resultado;
                 });

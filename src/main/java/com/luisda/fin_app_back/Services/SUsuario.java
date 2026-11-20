@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.NoSuchElementException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -57,6 +58,11 @@ public  class SUsuario {
         this.muestras = muestras;
     }
 
+    /** Indica si existe al menos una cuenta registrada (para distinguir el primer acceso). */
+    public boolean hayUsuariosRegistrados() {
+        return IUsuario.count() > 0;
+    }
+
     /** Agrega un usuario  */
     public MUsuario crear(MUsuario MUsuario) throws Exception{
         if (MUsuario == null || MUsuario.getIdUsuario() == null || MUsuario.getIdUsuario().isBlank()) {
@@ -86,6 +92,7 @@ public  class SUsuario {
         MUsuario.setIdUsuario(identificacion);
         MUsuario.setCorreo(correo);
         MUsuario.setTelefono(telefono);
+        MUsuario.setFechaCreacion(java.time.LocalDate.now());
         MUsuario.setContrasena(verificador.codificar(MUsuario.getContrasena()));
         return IUsuario.save(MUsuario);
     }
@@ -104,6 +111,10 @@ public  class SUsuario {
             IUsuario.findByTelefono(telefono).ifPresent(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
         }
         IUsuario.findByNombreIgnoreCase(valor).forEach(usuario -> candidatos.put(usuario.getIdUsuario(), usuario));
+
+        if (candidatos.isEmpty()) {
+            throw new NoSuchElementException("El usuario no está registrado.");
+        }
 
         List<MUsuario> validos = new ArrayList<>();
         for (MUsuario usuario : candidatos.values()) {

@@ -18,9 +18,9 @@ public class ParserMovimientoBancolombia {
             "\\b(compra|compraste|pagaste|pago|debito|debitaron|retiro|retiraste|cargo|descont|transferencia enviada|enviaste|transferiste)\\b");
     private static final Pattern PATRON_INGRESO = Pattern.compile(
             "\\b(recibiste|recibimos|abono|abonaron|abonamos|consignacion|deposito|transferencia recibida|te pagaron|nomina|reembolso|devolucion|devolvieron)\\b");
-    /** Sufijo de la cuenta o tarjeta de origen: "desde tu cuenta *5201", "desde tu cuenta *2531". */
+    /** Sufijo de la cuenta o tarjeta de origen: "desde tu cuenta *5201", "de tu T.Déb **9389", "con tu tarjeta *1234". */
     private static final Pattern PATRON_CUENTA_ORIGEN = Pattern.compile(
-            "(?i)desde\\s+tu\\s+cuenta\\s*\\*?\\s*(\\d{4})\\b");
+            "(?i)(?:desde\\s+tu\\s+cuenta|(?:con\\s+)?tu\\s+t\\.?\\s*(?:d[eé]b(?:ito)?|cred(?:ito)?)|tu\\s+tarjeta(?:\\s+de\\s+d[eé]bito|\\s+de\\s+cr[eé]dito)?|tarjeta\\s+(?:de\\s+d[eé]bito|de\\s+cr[eé]dito))\\s*\\*{0,2}\\s*(\\d{4,})\\b");
 
     public Optional<Movimiento> extraer(String asunto, String contenido) {
         return extraer(asunto, contenido, true);
@@ -42,6 +42,8 @@ public class ParserMovimientoBancolombia {
 
         boolean gasto = PATRON_GASTO.matcher(normalizado).find();
         boolean ingreso = PATRON_INGRESO.matcher(normalizado).find();
+        boolean transferencia = normalizado.matches("(?s).*\\btransferiste\\b.*");
+        if (transferencia) ingreso = false;
         if (normalizado.matches("(?s).*\\brecibiste\\s+(?:un\\s+)?pago\\s+de\\s+nomina\\b.*")) {
             gasto = false;
             ingreso = true;
@@ -53,7 +55,7 @@ public class ParserMovimientoBancolombia {
 
         String concepto = asunto == null || asunto.isBlank() ? "Movimiento Bancolombia" : asunto.trim();
         if (concepto.length() > 160) concepto = concepto.substring(0, 160);
-        String tipo = ingreso ? "INGRESO" : "GASTO";
+        String tipo = transferencia ? "TRANSFERENCIA" : ingreso ? "INGRESO" : "GASTO";
         String cuentaOrigen = extraerCuentaOrigen(cuerpo);
         String categoria;
         if (ingreso) {
@@ -68,10 +70,13 @@ public class ParserMovimientoBancolombia {
         return Optional.of(new Movimiento(tipo, monto.get(), categoria, concepto, cuentaOrigen));
     }
 
-    /** Devuelve los últimos cuatro dígitos de la cuenta de origen indicada en el cuerpo, o null si no aparece. */
+    /** Devuelve los últimos cuatro dígitos de la cuenta o tarjeta de origen indicada en el cuerpo, o null si no aparece. */
     private String extraerCuentaOrigen(String texto) {
         Matcher cuenta = PATRON_CUENTA_ORIGEN.matcher(texto);
-        return cuenta.find() ? cuenta.group(1) : null;
+        if (!cuenta.find()) return null;
+        String digitos = cuenta.group(1);
+        if (digitos == null || digitos.length() < 4) return null;
+        return digitos.length() > 4 ? digitos.substring(digitos.length() - 4) : digitos;
     }
 
     private Optional<BigDecimal> extraerMonto(String texto) {

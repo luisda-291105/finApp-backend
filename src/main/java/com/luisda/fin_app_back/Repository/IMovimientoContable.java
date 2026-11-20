@@ -75,6 +75,10 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
     boolean existsByOrigenTipoAndOrigenId(String origenTipo, String origenId);
     List<MMovimientoContable> findByOrigenTipoAndOrigenIdInAndBolsillo_IdUsuario(String origenTipo, List<String> origenes, String idUsuario);
     List<MMovimientoContable> findByIdUsuarioAndIdTarjetaOrderByFechaDesc(String idUsuario, String idTarjeta);
+    List<MMovimientoContable> findByIdUsuarioAndOrigenTipoIgnoreCaseOrderByFechaDesc(
+            String idUsuario, String origenTipo);
+    List<MMovimientoContable> findByIdUsuarioAndBolsilloIsNullAndOrigenTipoIgnoreCaseOrderByFechaDesc(
+            String idUsuario, String origenTipo);
     Optional<MMovimientoContable> findByIdMovimientoAndBolsillo_IdUsuario(String idMovimiento, String idUsuario);
 
     @Query(value = "SELECT COALESCE(SUM(CASE " +

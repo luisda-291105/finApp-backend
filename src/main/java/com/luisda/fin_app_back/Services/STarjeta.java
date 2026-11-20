@@ -3,6 +3,7 @@ package com.luisda.fin_app_back.Services;
 import com.luisda.fin_app_back.DTO.TarjetaSolicitudDTO;
 import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Model.MTarjeta;
+import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Repository.IUsuario;
@@ -10,7 +11,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Optional;
+import java.util.Comparator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.UUID;
 import java.text.Normalizer;
 import java.util.Locale;
@@ -19,6 +24,8 @@ import java.util.Set;
 /** Gestiona el CRUD de tarjetas propias y enmascara el PAN antes de persistir. */
 @Service
 public class STarjeta {
+    private static final Pattern CUENTA_EN_CORREO = Pattern.compile(
+            "(?i)(?:cuenta(?:\\s+(?:origen|destino))?|tarjeta(?:\\s+(?:de\\s+)?(?:d[eé]bito|cr[eé]dito))?|t\\.\\s*(?:cred|d[eé]b)\\.?)\\D{0,16}(\\d{4,})");
     private static final Set<String> TIPOS_CUENTA = Set.of("AHORRO", "CREDITO", "CORRIENTE");
 
     /**
@@ -46,8 +53,37 @@ public class STarjeta {
 
     /** Historial de movimientos de contabilidad vinculados a una tarjeta propia del usuario. */
     public List<MMovimientoContable> historialMovimientos(String idTarjeta, String idUsuario) {
-        if (buscarPorIdPropio(idTarjeta, idUsuario).isEmpty()) return null;
-        return movimientos.findByIdUsuarioAndIdTarjetaOrderByFechaDesc(idUsuario, idTarjeta);
+        Optional<MTarjeta> tarjetaPropia = buscarPorIdPropio(idTarjeta, idUsuario);
+        if (tarjetaPropia.isEmpty()) return null;
+        String digitos = tarjetaPropia.get().getNumero() == null
+                ? "" : tarjetaPropia.get().getNumero().replaceAll("\\D", "");
+        String sufijo = digitos.length() < 4 ? "" : digitos.substring(digitos.length() - 4);
+        LinkedHashMap<String, MMovimientoContable> historial = new LinkedHashMap<>();
+        movimientos.findByIdUsuarioAndIdTarjetaOrderByFechaDesc(idUsuario, idTarjeta)
+                .forEach(movimiento -> historial.put(movimiento.getIdMovimiento(), movimiento));
+        if (!sufijo.isEmpty()) {
+            movimientos.findByIdUsuarioAndOrigenTipoIgnoreCaseOrderByFechaDesc(
+                    idUsuario, "GMAIL").stream()
+                    .filter(movimiento -> movimiento.getEstadoRevision() != EstadoRevisionMovimiento.POR_REVISAR)
+                    .filter(movimiento -> coincideSufijoCuenta(movimiento.getOrigenId(), sufijo))
+                    .forEach(movimiento -> historial.putIfAbsent(movimiento.getIdMovimiento(), movimiento));
+        }
+        return historial.values().stream()
+                .sorted(Comparator.comparing(MMovimientoContable::getFecha,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private boolean coincideSufijoCuenta(String origenId, String sufijo) {
+        if (origenId == null || origenId.isBlank()) return false;
+        String fragmento = movimientos.findFragmentoPorOrigenId(origenId);
+        if (fragmento == null || fragmento.isBlank()) return false;
+        Matcher matcher = CUENTA_EN_CORREO.matcher(fragmento);
+        while (matcher.find()) {
+            String digitos = matcher.group(1);
+            if (digitos.length() >= 4 && digitos.endsWith(sufijo)) return true;
+        }
+        return false;
     }
 
     public List<MTarjeta> buscarPorUsuario(String idUsuario) {

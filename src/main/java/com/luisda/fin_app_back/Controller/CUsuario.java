@@ -8,6 +8,7 @@ import com.luisda.fin_app_back.Services.JwtTokenService;
 import com.luisda.fin_app_back.Services.SIntentosRateLimit;
 import com.luisda.fin_app_back.Services.SAccesoAdmin;
 import io.swagger.v3.oas.annotations.Operation;
+import com.luisda.fin_app_back.DTO.EstadoRegistroDTO;
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
 import com.luisda.fin_app_back.DTO.UsuarioLoginDTO;
 import com.luisda.fin_app_back.DTO.UsuarioDTO;
@@ -23,6 +24,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
  * @uso               dar puntos de coneccion con la api
@@ -57,10 +59,23 @@ public class CUsuario {
         this.accesoAdmin = accesoAdmin;
     }
 
+    /** Consulta pública del estado del registro: permite guiar el primer acceso sin sesión. */
+    @GetMapping("/hay-registrados")
+    @Operation(summary = "Estado del registro", description = "Indica si ya existe al menos una cuenta registrada. No requiere sesión.")
+    public ResponseEntity<?> hayRegistrados() {
+        return ResponseEntity.ok(RespuestaModalDTO.exito("Estado del registro consultado.",
+                new EstadoRegistroDTO(this.SUsuario.hayUsuariosRegistrados())));
+    }
+
     @PostMapping("/login")
     public ResponseEntity<?> iniciarSesion(@RequestBody UsuarioLoginDTO credenciales, HttpServletRequest solicitud) {
         if (credenciales == null || credenciales.identificador() == null || credenciales.contrasena() == null) {
             return ResponseEntity.badRequest().body(RespuestaModalDTO.error("Ingresa tu nombre, identificación, correo o teléfono y contraseña.", "credenciales"));
+        }
+        // Sin cuentas registradas no hay credenciales que validar: se guía al alta y no se
+        // registra un fallo de autenticación (evita ruido en logs y contadores de rate limit).
+        if (!this.SUsuario.hayUsuariosRegistrados()) {
+            return ResponseEntity.ok(RespuestaModalDTO.aviso("Aún no hay cuentas registradas. Crea una cuenta para comenzar.", "credenciales"));
         }
         String clave = "login:" + (solicitud.getRemoteAddr() == null ? "ip-desconocida" : solicitud.getRemoteAddr())
                 + ":" + credenciales.identificador().trim().toLowerCase(java.util.Locale.ROOT);
@@ -81,6 +96,8 @@ public class CUsuario {
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, tokens.cookie(tokens.emitir(usuario.getIdUsuario())).toString())
                     .body(RespuestaModalDTO.exito("Sesión iniciada.", dtoActivo(usuario)));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.ok(RespuestaModalDTO.aviso("El usuario no está registrado.", "credenciales"));
         } catch (IllegalStateException error) {
             this.rateLimit.registrar(clave, true);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -140,6 +157,10 @@ public class CUsuario {
 
     @GetMapping("/activo")
     public ResponseEntity<?> usuarioActivo(HttpServletRequest solicitud) {
+        if (!this.SUsuario.hayUsuariosRegistrados()) {
+            return ResponseEntity.ok(RespuestaModalDTO.exito(
+                    "Aún no hay cuentas registradas. Crea una cuenta para comenzar.", null));
+        }
         return usuarioActivo.obtenerUsuario(solicitud)
                 .<ResponseEntity<?>>map(usuario -> ResponseEntity.ok(RespuestaModalDTO.exito(
                         "Usuario activo.", dtoActivo(usuario))))

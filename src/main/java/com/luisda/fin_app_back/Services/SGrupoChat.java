@@ -49,7 +49,6 @@ public class SGrupoChat {
      */
     @Transactional
     public List<GrupoMensajeDTO> enviar(String idUsuario, String idGrupo, GrupoMensajeSolicitudDTO solicitud) {
-        MGrupo grupo = propio(idUsuario, idGrupo);
         String texto = solicitud == null || solicitud.texto() == null ? "" : solicitud.texto().trim();
         if (texto.isEmpty()) throw new IllegalArgumentException("Escribe un mensaje.");
         if (texto.length() > MAX_CARACTERES_MENSAJE)

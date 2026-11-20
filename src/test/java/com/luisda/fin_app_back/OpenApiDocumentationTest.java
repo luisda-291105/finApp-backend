@@ -29,6 +29,7 @@ class OpenApiDocumentationTest {
         mockMvc.perform(get("/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("FinApp API"))
+                .andExpect(jsonPath("$.paths['/usuario/hay-registrados'].get").exists())
                 .andExpect(jsonPath("$.paths['/usuario/login'].post").exists())
                 .andExpect(jsonPath("$.paths['/usuario/admin-login'].post").exists())
                 .andExpect(jsonPath("$.paths['/bolsillo'].get").doesNotExist())

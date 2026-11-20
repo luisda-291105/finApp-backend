@@ -1,6 +1,7 @@
 package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.DTO.RespuestaModalDTO;
+import com.luisda.fin_app_back.DTO.SuscripcionAjustesDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionEstadoDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionSolicitudDTO;
 import com.luisda.fin_app_back.Model.OrigenSuscripcion;
@@ -84,6 +85,20 @@ public class CSuscripcion {
         }
     }
 
+    /**
+     * Cobros recurrentes del usuario tomados de sus suscripciones activas con monto y fecha de cobro.
+     */
+    @GetMapping("/recurrentes")
+    @Operation(summary = "Lista los cobros recurrentes del usuario",
+            description = "Devuelve un cobro por cada suscripción activa que tenga monto y fecha de cobro, "
+                    + "ordenados por la fecha del próximo cobro. Como la suscripción no guarda periodicidad, "
+                    + "se informa una frecuencia mensual estimada.")
+    public ResponseEntity<?> listarRecurrentes(HttpServletRequest request) {
+        Optional<String> idUsuario = this.usuarioActivo.obtenerIdUsuario(request);
+        if (idUsuario.isEmpty()) return noAutorizado();
+        return ResponseEntity.ok(this.suscripciones.listarRecurrentes(idUsuario.get()));
+    }
+
     /** Obtiene una suscripción del usuario por identificador. */
     @GetMapping("/{idSuscripcion}")
     @Operation(summary = "Consulta una suscripción por identificador",
@@ -116,6 +131,27 @@ public class CSuscripcion {
         } catch (SSuscripcion.NoEditableException error) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(RespuestaModalDTO.error(error.getMessage(), null));
+        } catch (NoSuchElementException error) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(RespuestaModalDTO.error(error.getMessage(), null));
+        }
+    }
+
+    /** Ajusta importancia, prioridad y apodo de una suscripción del usuario, sea manual o detectada en Gmail. */
+    @PatchMapping("/{idSuscripcion}/ajustes")
+    @Operation(summary = "Ajusta importancia, prioridad y apodo",
+            description = "Actualiza los ajustes de organización de cualquier suscripción del usuario de la sesión "
+                    + "(manual o detectada en Gmail). Cada campo es opcional; omitirlo conserva el valor actual. "
+                    + "importancia y prioridad aceptan Alta, Media o Baja. apodo vacío limpia el alias guardado.")
+    public ResponseEntity<?> ajustar(@PathVariable String idSuscripcion,
+                                     @RequestBody SuscripcionAjustesDTO ajustes,
+                                     HttpServletRequest request) {
+        Optional<String> idUsuario = this.usuarioActivo.obtenerIdUsuario(request);
+        if (idUsuario.isEmpty()) return noAutorizado();
+        try {
+            return ResponseEntity.ok(this.suscripciones.actualizarAjustes(idUsuario.get(), idSuscripcion, ajustes));
+        } catch (SSuscripcion.DatosInvalidosException error) {
+            return ResponseEntity.badRequest().body(RespuestaModalDTO.error(error.getMessage(), error.getCampo()));
         } catch (NoSuchElementException error) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(RespuestaModalDTO.error(error.getMessage(), null));

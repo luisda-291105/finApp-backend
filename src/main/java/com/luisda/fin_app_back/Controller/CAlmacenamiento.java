@@ -2,7 +2,6 @@ package com.luisda.fin_app_back.Controller;
 
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.OrigenesWeb;
-import com.luisda.fin_app_back.Repository.IAlmacenamientoConexiones;
 import com.luisda.fin_app_back.Services.SAlmacenamientoConexiones;
 import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,58 +15,62 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
 
 import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.Map;
 
 /**
- * @uso               Endpoints autenticados de conexiones de almacenamiento en la nube
- * @funciones         listar, iniciarOAuth, completarOAuth, conectarNextcloud, desconectar
- * @datos             Determina al usuario desde la sesión JWT; nunca acepta un userId del cliente
- * @eventos           Ninguno
- * @estados           Ninguno
- * @usadoPor          Frontend (almacenamientoServicio)
+ * @uso Endpoints autenticados de conexiones de almacenamiento en la nube
+ * @funciones listar, iniciarOAuth, completarOAuth, conectarNextcloud,
+ *            desconectar
+ * @datos Determina al usuario desde la sesión JWT; nunca acepta un userId del
+ *        cliente
+ * @eventos Ninguno
+ * @estados Ninguno
+ * @usadoPor Frontend (almacenamientoServicio)
  */
 @RestController
 @Tag(name = "Almacenamiento", description = "Conexiones de almacenamiento en la nube (Google Drive, OneDrive, Nextcloud).")
-@RequestMapping("/api/almacenamiento")
+@RequestMapping("/api/almacenamiento/conexiones")
 public class CAlmacenamiento {
 
     private final SAlmacenamientoConexiones conexiones;
     private final SUsuarioActivo usuarioActivo;
-    private final IAlmacenamientoConexiones repositorioConexiones;
     private final List<String> origenesPermitidos;
 
     public CAlmacenamiento(SAlmacenamientoConexiones conexiones, SUsuarioActivo usuarioActivo,
-                           IAlmacenamientoConexiones repositorioConexiones,
-                           @Value("${finapp.cors.allowed-origins:http://localhost:5173}") String origenesPermitidos) {
+            @Value("${finapp.cors.allowed-origins:http://localhost:5173}") String origenesPermitidos) {
         this.conexiones = conexiones;
         this.usuarioActivo = usuarioActivo;
-        this.repositorioConexiones = repositorioConexiones;
         this.origenesPermitidos = OrigenesWeb.normalizarLista(origenesPermitidos);
     }
 
     /** Lista las conexiones de almacenamiento del usuario activo. */
-    @GetMapping("/conexiones")
+    @GetMapping
     public ResponseEntity<?> listarConexiones(HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
-        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "No hay una sesión activa."));
+        if (usuario == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "No hay una sesión activa."));
         return ResponseEntity.ok(conexiones.listar(usuario));
     }
 
-    /** Devuelve la URL de autorización del proveedor con un state de un solo uso. */
-    @PostMapping("/conexiones/iniciar")
+    /**
+     * Devuelve la URL de autorización del proveedor con un state de un solo uso.
+     */
+    @PostMapping("/iniciar")
     public ResponseEntity<?> iniciarConexion(@RequestBody SolicitudIniciar solicitud, HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
-        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "No hay una sesión activa."));
-        if (!origenValido(request)) return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
+        if (usuario == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "No hay una sesión activa."));
+        if (!origenValido(request))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
         try {
             return ResponseEntity.ok(conexiones.iniciar(usuario, solicitud == null ? "" : solicitud.proveedor()));
         } catch (SAlmacenamientoConexiones.ProveedorNoSoportadoException error) {
@@ -75,14 +78,19 @@ public class CAlmacenamiento {
         }
     }
 
-    /** Completa el OAuth validando el state de un solo uso asociado a la sesión iniciadora. */
-    @PostMapping("/conexiones/callback")
+    /**
+     * Completa el OAuth validando el state de un solo uso asociado a la sesión
+     * iniciadora.
+     */
+    @PostMapping("/callback")
     public ResponseEntity<?> completarConexion(@RequestBody SolicitudCallback solicitud, HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
-        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "Inicia sesión en FinApp antes de conectar almacenamiento."));
-        if (!origenValido(request)) return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
+        if (usuario == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Inicia sesión en FinApp antes de conectar almacenamiento."));
+        if (!origenValido(request))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
         String origen = request.getHeader(HttpHeaders.ORIGIN);
         try {
             return ResponseEntity.ok(conexiones.completarOAuth(usuario,
@@ -90,7 +98,8 @@ public class CAlmacenamiento {
                     solicitud == null ? null : solicitud.code(),
                     solicitud == null ? null : solicitud.state(),
                     origen));
-        } catch (SAlmacenamientoConexiones.EstadoInvalidoException | SAlmacenamientoConexiones.ProveedorNoSoportadoException error) {
+        } catch (SAlmacenamientoConexiones.EstadoInvalidoException
+                | SAlmacenamientoConexiones.ProveedorNoSoportadoException error) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", error.getMessage()));
         } catch (IllegalStateException error) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("message", error.getMessage()));
@@ -101,14 +110,16 @@ public class CAlmacenamiento {
     }
 
     /** Conecta una cuenta Nextcloud con URL, usuario y contraseña de aplicación. */
-    @PostMapping("/conexiones/nextcloud")
+    @PostMapping("/nextcloud")
     public ResponseEntity<?> conectarNextcloud(@RequestBody SAlmacenamientoConexiones.ConexionNextcloud solicitud,
-                                               HttpServletRequest request) {
+            HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
-        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "No hay una sesión activa."));
-        if (!origenValido(request)) return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
+        if (usuario == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "No hay una sesión activa."));
+        if (!origenValido(request))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Origen no autorizado para conectar almacenamiento."));
         try {
             return ResponseEntity.ok(conexiones.conectarNextcloud(usuario, solicitud));
         } catch (IllegalArgumentException error) {
@@ -121,12 +132,16 @@ public class CAlmacenamiento {
         }
     }
 
-    /** Elimina la conexión propia, borra la credencial local e intenta revocar la autorización remota. */
-    @DeleteMapping("/conexiones/{id}")
+    /**
+     * Elimina la conexión propia, borra la credencial local e intenta revocar la
+     * autorización remota.
+     */
+    @DeleteMapping("/{id}")
     public ResponseEntity<?> desconectar(@PathVariable String id, HttpServletRequest request) {
         MUsuario usuario = usuarioActivo.obtenerUsuario(request).orElse(null);
-        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("message", "No hay una sesión activa."));
+        if (usuario == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "No hay una sesión activa."));
         boolean revocacionFallida = conexiones.desconectar(id, usuario);
         if (revocacionFallida) {
             return ResponseEntity.accepted().body(Map.of(
@@ -139,6 +154,9 @@ public class CAlmacenamiento {
         return OrigenesWeb.permitido(request.getHeader(HttpHeaders.ORIGIN), origenesPermitidos);
     }
 
-    public record SolicitudIniciar(String proveedor) { }
-    public record SolicitudCallback(String proveedor, String code, String state) { }
+    public record SolicitudIniciar(String proveedor) {
+    }
+
+    public record SolicitudCallback(String proveedor, String code, String state) {
+    }
 }

@@ -9,7 +9,6 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import java.util.Optional;
 
 @Component
 public class UsuarioActivoInterceptor implements HandlerInterceptor {
@@ -33,7 +32,7 @@ public class UsuarioActivoInterceptor implements HandlerInterceptor {
         String path = req.getRequestURI();
 
         boolean exento = path.equals("/usuario") || path.equals("/usuario/login") || path.equals("/usuario/logout")
-                || path.equals("/usuario/admin-login")
+                || path.equals("/usuario/hay-registrados") || path.equals("/usuario/admin-login")
                 || path.equals("/api/gmail/callback") || path.equals("/api/gmail/webhook/pubsub")
                 || path.equals("/asistente/publico");
         if (exento) return true;

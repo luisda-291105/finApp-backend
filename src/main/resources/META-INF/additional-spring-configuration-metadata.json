@@ -85,6 +85,11 @@
     "description": "Ruta del JSON de cuenta de servicio para verificar eventos Pub/Sub de Gmail."
   },
   {
+    "name": "finapp.google.entradas-intervalo-ms",
+    "type": "java.lang.Long",
+    "description": "Intervalo entre ciclos del worker que procesa la cola de correos Gmail entrantes (por defecto 10000 ms)."
+  },
+  {
     "name": "finapp.almacenamiento.cipher-secret",
     "type": "java.lang.String",
     "description": "Secreto usado para derivar la clave AES-GCM que cifra los tokens de conexiones de almacenamiento."

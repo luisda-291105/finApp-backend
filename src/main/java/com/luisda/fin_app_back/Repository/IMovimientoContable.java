@@ -21,6 +21,14 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
     Optional<MMovimientoContable> buscarPropioIncluyendoGlobal(@Param("idMovimiento") String idMovimiento,
             @Param("idUsuario") String idUsuario);
 
+    @Query("SELECT FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha), SUM(m.monto) " +
+            "FROM MMovimientoContable m JOIN m.bolsillo b WHERE b.idUsuario = :idUsuario " +
+            "AND UPPER(b.tipo) = 'GASTO' " +
+            "AND UPPER(m.tipo) IN ('GASTO', 'TRANSFERENCIA') " +
+            "AND (m.estadoRevision IS NULL OR m.estadoRevision <> com.luisda.fin_app_back.Model.EstadoRevisionMovimiento.POR_REVISAR) " +
+            "GROUP BY FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha)")
+    List<Object[]> resumirGastoBolsilloPorMes(@Param("idUsuario") String idUsuario);
+
     @Query("SELECT FUNCTION('YEAR', m.fecha), FUNCTION('MONTH', m.fecha), UPPER(m.tipo), COUNT(m), SUM(m.monto) " +
             "FROM MMovimientoContable m LEFT JOIN m.bolsillo b WHERE (b.idBolsillo IN :idsBolsillo OR " +
             "(b IS NULL AND m.idUsuario = :idUsuario)) " +
@@ -40,6 +48,14 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
             "m.estadoRevision = com.luisda.fin_app_back.Model.EstadoRevisionMovimiento.POR_REVISAR")
     long contarPorRevisarIncluyendoGlobales(@Param("idsBolsillo") List<String> idsBolsillo,
             @Param("idUsuario") String idUsuario);
+
+    /**
+     * Fragmento del correo Gmail asociado a un origenId «{cuentaId}:{mensajeId}». Permite aplicar la
+     * misma regla de cuentas propias al importar que ya se usa en la migración histórica.
+     */
+    @Query(value = "SELECT g.fragmento FROM gmail_mensaje g " +
+            "WHERE g.google_message_id = SUBSTRING(:origenId, LOCATE(':', :origenId) + 1)", nativeQuery = true)
+    String findFragmentoPorOrigenId(@Param("origenId") String origenId);
     List<MMovimientoContable> findByBolsillo_IdBolsilloOrderByFechaDesc(String idBolsillo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInOrderByFechaDesc(List<String> idsBolsillo);
     List<MMovimientoContable> findByBolsillo_IdBolsilloInAndEstadoRevisionOrderByFechaDesc(
@@ -58,6 +74,11 @@ public interface IMovimientoContable extends JpaRepository<MMovimientoContable, 
     boolean existsByBolsillo_IdBolsillo(String idBolsillo);
     boolean existsByOrigenTipoAndOrigenId(String origenTipo, String origenId);
     List<MMovimientoContable> findByOrigenTipoAndOrigenIdInAndBolsillo_IdUsuario(String origenTipo, List<String> origenes, String idUsuario);
+    List<MMovimientoContable> findByIdUsuarioAndIdTarjetaOrderByFechaDesc(String idUsuario, String idTarjeta);
+    List<MMovimientoContable> findByIdUsuarioAndOrigenTipoIgnoreCaseOrderByFechaDesc(
+            String idUsuario, String origenTipo);
+    List<MMovimientoContable> findByIdUsuarioAndBolsilloIsNullAndOrigenTipoIgnoreCaseOrderByFechaDesc(
+            String idUsuario, String origenTipo);
     Optional<MMovimientoContable> findByIdMovimientoAndBolsillo_IdUsuario(String idMovimiento, String idUsuario);
 
     @Query(value = "SELECT COALESCE(SUM(CASE " +

@@ -21,7 +21,7 @@ import java.time.LocalDate;
  * @capa              Modelo
  * @responsabilidades Guardar en una sola tabla las suscripciones manuales y las detectadas en Gmail
  * @datos             Identificador, propietario, origen, nombre, categoría, monto, fecha de cobro,
- *                    importancia, estado, cuenta de correo, remitente, baja y fechas de control
+ *                    importancia, prioridad, apodo, estado, cuenta de correo, remitente, baja y fechas de control
  * @dependencias      JPA
  * @usadoPor          ISuscripcion
  */
@@ -50,13 +50,12 @@ public class MSuscripcion {
     @Column(length = 500)
     private String nombre;
 
-    /** Categoría elegida por el usuario (suscripciones manuales). */
-    @Column(length = 60)
+    /**
+     * Categoría de la suscripción. Las manuales guardan el nombre elegido por el usuario
+     * y las detectadas en Gmail guardan la lista de etiquetas en formato JSON.
+     */
+    @Column(columnDefinition = "TEXT")
     private String categoria;
-
-    /** Etiquetas detectadas en el correo (suscripciones de Gmail). */
-    @Column(name = "categorias_json", columnDefinition = "TEXT")
-    private String categoriasJson;
 
     @Column(precision = 12, scale = 2)
     private BigDecimal monto;
@@ -66,6 +65,14 @@ public class MSuscripcion {
 
     @Column(length = 10)
     private String importancia;
+
+    /** Prioridad elegida por el usuario (ALTA, MEDIA o BAJA). */
+    @Column(length = 10)
+    private String prioridad;
+
+    /** Apodo o alias elegido por el usuario para reconocer la suscripción. */
+    @Column(length = 120)
+    private String apodo;
 
     @Column(nullable = false)
     private boolean activa;
@@ -110,9 +117,6 @@ public class MSuscripcion {
     public String getCategoria() { return categoria; }
     public void setCategoria(String categoria) { this.categoria = categoria; }
 
-    public String getCategoriasJson() { return categoriasJson; }
-    public void setCategoriasJson(String categoriasJson) { this.categoriasJson = categoriasJson; }
-
     public BigDecimal getMonto() { return monto; }
     public void setMonto(BigDecimal monto) { this.monto = monto; }
 
@@ -121,6 +125,12 @@ public class MSuscripcion {
 
     public String getImportancia() { return importancia; }
     public void setImportancia(String importancia) { this.importancia = importancia; }
+
+    public String getPrioridad() { return prioridad; }
+    public void setPrioridad(String prioridad) { this.prioridad = prioridad; }
+
+    public String getApodo() { return apodo; }
+    public void setApodo(String apodo) { this.apodo = apodo; }
 
     public boolean isActiva() { return activa; }
     public void setActiva(boolean activa) { this.activa = activa; }

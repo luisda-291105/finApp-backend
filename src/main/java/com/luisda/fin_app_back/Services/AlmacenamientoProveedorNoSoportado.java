@@ -9,5 +9,7 @@ package com.luisda.fin_app_back.Services;
  * @usadoPor          CAlmacenamientoArchivos
  */
 public class AlmacenamientoProveedorNoSoportado extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
     public AlmacenamientoProveedorNoSoportado(String mensaje) { super(mensaje); }
 }

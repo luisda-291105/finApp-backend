@@ -83,7 +83,7 @@ public class SBolsillo {
                         adoptado.setTipo(tipo);
                         return bolsillos.save(adoptado);
                     }
-                    return persistirNuevo(idUsuario, new BolsilloSolicitudDTO(nombre, true, BigDecimal.ZERO, tipo));
+                    return persistirNuevo(idUsuario, new BolsilloSolicitudDTO(nombre, true, BigDecimal.ZERO, tipo, null, null));
                 });
         for (MBolsillo duplicado : homonimos) {
             if (duplicado == canonico || duplicado.getIdBolsillo().equals(canonico.getIdBolsillo())) continue;
@@ -148,6 +148,8 @@ public class SBolsillo {
         bolsillo.setTipo(solicitud.tipo());
         bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
         bolsillo.setEstado(true);
+        bolsillo.setDescripcion(normalizarDescripcion(solicitud.descripcion()));
+        bolsillo.setOrigenes(serializarOrigenes(solicitud.origenes()));
         bolsillo.setFechaCreacion(LocalDate.now());
         return bolsillos.save(bolsillo);
     }
@@ -156,7 +158,7 @@ public class SBolsillo {
     @Transactional
     public MBolsillo obtenerOCrearPorRevisar(String idUsuario) {
         return obtenerPorRevisar(idUsuario).orElseGet(() -> persistirNuevo(idUsuario,
-                new BolsilloSolicitudDTO("Por revisar", true, BigDecimal.ZERO, "POR_REVISAR")));
+                new BolsilloSolicitudDTO("Por revisar", true, BigDecimal.ZERO, "POR_REVISAR", null, null)));
     }
 
     @Transactional
@@ -177,6 +179,8 @@ public class SBolsillo {
         bolsillo.setNombre(solicitud.nombre().trim());
         if (solicitud.estado() != null) bolsillo.setEstado(solicitud.estado());
         bolsillo.setMontoObjetivo(solicitud.montoObjetivo());
+        bolsillo.setDescripcion(normalizarDescripcion(solicitud.descripcion()));
+        bolsillo.setOrigenes(serializarOrigenes(solicitud.origenes()));
         return bolsillos.save(bolsillo);
     }
 
@@ -279,4 +283,26 @@ public class SBolsillo {
         return "GASTO";
     }
 
+    /** Normaliza descripción libre; null/blank queda null y se conserva null. */
+    private static String normalizarDescripcion(String descripcion) {
+        if (descripcion == null) return null;
+        String limpio = descripcion.trim();
+        return limpio.isEmpty() ? null : limpio;
+    }
+
+    /** Serializa la lista de orígenes a JSON; lista vacía/blank/null queda null. */
+    private static String serializarOrigenes(List<String> origenes) {
+        if (origenes == null) return null;
+        List<String> limpios = origenes.stream()
+                .map(valor -> valor == null ? "" : valor.trim())
+                .filter(valor -> !valor.isEmpty())
+                .distinct()
+                .toList();
+        if (limpios.isEmpty()) return null;
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(limpios);
+        } catch (Exception error) {
+            throw new IllegalArgumentException("No se pudo serializar la lista de orígenes.", error);
+        }
+    }
 }

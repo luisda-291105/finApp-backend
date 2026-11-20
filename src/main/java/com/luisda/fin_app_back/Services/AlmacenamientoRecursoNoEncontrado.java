@@ -9,6 +9,8 @@ package com.luisda.fin_app_back.Services;
  * @usadoPor          GoogleDriveArchivos, CAlmacenamientoArchivos
  */
 public class AlmacenamientoRecursoNoEncontrado extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
     public AlmacenamientoRecursoNoEncontrado() { super("El recurso solicitado no existe."); }
     public AlmacenamientoRecursoNoEncontrado(String mensaje) { super(mensaje); }
 }

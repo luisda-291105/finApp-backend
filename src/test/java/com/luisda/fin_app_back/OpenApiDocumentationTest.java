@@ -29,11 +29,14 @@ class OpenApiDocumentationTest {
         mockMvc.perform(get("/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("FinApp API"))
+                .andExpect(jsonPath("$.paths['/usuario/hay-registrados'].get").exists())
                 .andExpect(jsonPath("$.paths['/usuario/login'].post").exists())
                 .andExpect(jsonPath("$.paths['/usuario/admin-login'].post").exists())
                 .andExpect(jsonPath("$.paths['/bolsillo'].get").doesNotExist())
                 .andExpect(jsonPath("$.paths['/grupo'].get").doesNotExist())
-                .andExpect(jsonPath("$.paths['/movimiento'].get").doesNotExist());
+                .andExpect(jsonPath("$.paths['/movimiento'].get").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera'].get").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/limpieza/{loteId}'].get").doesNotExist());
     }
 
     @Test
@@ -45,7 +48,9 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.info.title").value("FinApp API"))
                 .andExpect(jsonPath("$.paths['/usuario/login'].post").exists())
                 .andExpect(jsonPath("$.paths['/bolsillo'].get").exists())
-                .andExpect(jsonPath("$.paths['/grupo'].get").exists());
+                .andExpect(jsonPath("$.paths['/grupo'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/gmail/cuentas/{cuentaId}/papelera/limpieza/{loteId}'].get").exists());
     }
 
     @Test

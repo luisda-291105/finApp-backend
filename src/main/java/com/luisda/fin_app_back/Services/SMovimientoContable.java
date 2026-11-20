@@ -14,6 +14,7 @@ import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Repository.ITarjeta;
 import com.luisda.fin_app_back.Repository.IUsuario;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,9 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Arrays;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.text.Normalizer;
 import java.time.temporal.ChronoUnit;
 import java.time.YearMonth;
@@ -34,12 +38,19 @@ import java.util.stream.Collectors;
 @Service
 public class SMovimientoContable {
     private static final Set<String> TIPOS_BASE = Set.of("INGRESO", "GASTO", "AHORRO", "TRANSFERENCIA");
+    /** Cuenta propia mencionada en el correo: «desde tu cuenta *X» o «a la cuenta *X». */
+    private static final Pattern CUENTA_EN_CORREO = Pattern.compile(
+            "(?i)(?:desde\\s+tu\\s+cuenta|a\\s+la\\s+cuenta)\\s*\\*?\\s*(\\d{4,})");
     private final IMovimientoContable movimientos;
     private final IBolsillo bolsillos;
     private final IUsuario usuarios;
     private final ITarjeta tarjetas;
     private final SBolsillo servicioBolsillo;
     private final SReglaFiltro reglasFiltro;
+
+    /** Cuentas propias (sufijos separados por coma) cuyos envíos Gmail no son gastos. */
+    @Value("${finapp.contabilidad.cuentas-propias-transferencia:25310487123}")
+    private String cuentasPropiasTransferencia = "25310487123";
 
     public SMovimientoContable(IMovimientoContable movimientos, IBolsillo bolsillos,
                                IUsuario usuarios, ITarjeta tarjetas,
@@ -52,15 +63,16 @@ public class SMovimientoContable {
         this.reglasFiltro = reglasFiltro;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<MovimientoContableDTO> listar(String idUsuario, String idBolsillo, String tipo) {
         return listar(idUsuario, idBolsillo, tipo, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<MovimientoContableDTO> listar(String idUsuario, String idBolsillo, String tipo,
                                               EstadoRevisionMovimiento estadoRevision) {
         validarUsuario(idUsuario);
+        asignarCorreosConfirmadosASusBolsillos(idUsuario);
         String filtro = tipo == null ? "TODOS" : tipo.trim().toUpperCase(Locale.ROOT);
         if (!filtro.equals("TODOS") && (filtro.isBlank() || filtro.length() > 40)) {
             throw new IllegalArgumentException("El filtro debe ser Todos o un tipo de movimiento válido.");
@@ -75,6 +87,34 @@ public class SMovimientoContable {
                         || (movimiento.getBolsillo() != null
                         && idBolsillo.equals(movimiento.getBolsillo().getIdBolsillo())))
                 .map(SMovimientoContable::dto).toList();
+    }
+
+    /** Repara registros Gmail confirmados antiguos que quedaron globales sin bolsillo. */
+    private void asignarCorreosConfirmadosASusBolsillos(String idUsuario) {
+        List<MMovimientoContable> sinBolsillo = movimientos
+                .findByIdUsuarioAndBolsilloIsNullAndOrigenTipoIgnoreCaseOrderByFechaDesc(idUsuario, "GMAIL");
+        MBolsillo bolsilloGastos = null;
+        MBolsillo bolsilloIngresos = null;
+        for (MMovimientoContable movimiento : sinBolsillo) {
+            if (movimiento.getEstadoRevision() == EstadoRevisionMovimiento.POR_REVISAR) continue;
+            String tipo = String.valueOf(movimiento.getTipo()).trim().toUpperCase(Locale.ROOT);
+            MBolsillo destino = null;
+            if ("GASTO".equals(tipo)) {
+                if (bolsilloGastos == null) bolsilloGastos = obtenerBolsilloFijo(idUsuario, "GASTO");
+                destino = bolsilloGastos;
+            } else if ("INGRESO".equals(tipo)) {
+                if (bolsilloIngresos == null) bolsilloIngresos = obtenerBolsilloFijo(idUsuario, "INGRESO");
+                destino = bolsilloIngresos;
+            } else if ("TRANSFERENCIA".equals(tipo)
+                    && coincideTarjetaRegistradaEnCorreo(idUsuario, movimiento.getOrigenId())) {
+                if (bolsilloGastos == null) bolsilloGastos = obtenerBolsilloFijo(idUsuario, "GASTO");
+                destino = bolsilloGastos;
+            }
+            if (destino != null) {
+                movimiento.setBolsillo(destino);
+                movimientos.save(movimiento);
+            }
+        }
     }
 
     /** Detecta cobros repetidos y periódicos entre los gastos reales confirmados del usuario. */
@@ -119,7 +159,7 @@ public class SMovimientoContable {
         };
         String nombre = ultimo.origenNombre() == null || ultimo.origenNombre().isBlank() ? ultimo.concepto() : ultimo.origenNombre();
         return new SuscripcionRecurrenteDTO(clave, nombre, ultimo.categoria(), promedio, frecuencia, periodo,
-                ultimo.fecha(), ultimo.fecha().plusDays(periodo), ordenados.size());
+                ultimo.fecha(), ultimo.fecha().plusDays(periodo), ordenados.size(), "MOVIMIENTOS");
     }
 
     private String claveSuscripcion(String nombre) {
@@ -135,9 +175,10 @@ public class SMovimientoContable {
         return movimientos.listarOrigenesImportadosDelUsuario("GMAIL", origenesCorreo, idUsuario);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<ResumenMovimientoBolsilloDTO> resumir(String idUsuario) {
         validarUsuario(idUsuario);
+        asignarCorreosConfirmadosASusBolsillos(idUsuario);
         List<MBolsillo> propios = bolsillosPropios(idUsuario);
         if (propios.isEmpty()) return List.of();
         Map<String, BigDecimal[]> totales = new LinkedHashMap<>();
@@ -167,9 +208,10 @@ public class SMovimientoContable {
         }).toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ResumenGlobalContabilidadDTO resumenGlobal(String idUsuario, YearMonth mes) {
         validarUsuario(idUsuario);
+        asignarCorreosConfirmadosASusBolsillos(idUsuario);
         if (mes == null) throw new IllegalArgumentException("Indica un mes válido para consultar el resumen.");
 
         List<MBolsillo> propios = bolsillosPropios(idUsuario);
@@ -190,11 +232,20 @@ public class SMovimientoContable {
                 BigDecimal monto = fila[4] == null ? BigDecimal.ZERO : new BigDecimal(fila[4].toString());
                 switch (tipo) {
                     case "INGRESO" -> ingresos = ingresos.add(monto);
-                    case "GASTO" -> gastos = gastos.add(monto);
                     case "AHORRO" -> ahorros = ahorros.add(monto);
                     case "TRANSFERENCIA" -> transferencias = transferencias.add(monto);
                     default -> { }
                 }
+            }
+            // Gastos del mes: todo lo que pasó por los bolsillos de tipo Gastos (GASTO + TRANSFERENCIA),
+            // incluyendo las transferencias entre cuentas propias; los gastos globales sin bolsillo
+            // los muestra el modal de detalle del bolsillo Gastos.
+            for (Object[] fila : movimientos.resumirGastoBolsilloPorMes(idUsuario)) {
+                int anio = ((Number) fila[0]).intValue();
+                int numeroMes = ((Number) fila[1]).intValue();
+                if (anio != mes.getYear() || numeroMes != mes.getMonthValue()) continue;
+                BigDecimal monto = fila[2] == null ? BigDecimal.ZERO : new BigDecimal(fila[2].toString());
+                gastos = gastos.add(monto);
             }
             for (MBolsillo bolsillo : propios) {
                 if (bolsillo.getTipo() != null && "AHORRO".equalsIgnoreCase(normalizarTipo(bolsillo.getTipo()))
@@ -213,6 +264,53 @@ public class SMovimientoContable {
                 porRevisar, montoPorRevisar);
     }
 
+    /**
+     * Últimos cuatro dígitos de las cuentas propias: los de las tarjetas registradas del usuario y
+     * los de la configuración, recortados a cuatro dígitos (el resto es relleno por ahora).
+     */
+    private Set<String> propiosUltimosCuatro(String idUsuario) {
+        Set<String> propios = Arrays.stream((cuentasPropiasTransferencia == null
+                        ? "" : cuentasPropiasTransferencia).split(","))
+                .map(String::trim)
+                .filter(sufijo -> !sufijo.isEmpty())
+                .map(sufijo -> sufijo.length() > 4 ? sufijo.substring(sufijo.length() - 4) : sufijo)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        if (idUsuario != null && !idUsuario.isBlank()) {
+            try {
+                for (MTarjeta tarjeta : tarjetas.findByUsuario_IdUsuario(idUsuario)) {
+                    String digitos = tarjeta.getNumero() == null ? "" : tarjeta.getNumero().replaceAll("\\D", "");
+                    if (digitos.length() >= 4) propios.add(digitos.substring(digitos.length() - 4));
+                }
+            } catch (RuntimeException error) {
+                // Si no se pueden consultar las tarjetas, la config sigue valiendo como respaldo.
+            }
+        }
+        return propios;
+    }
+
+    /**
+     * Detecta en el correo Gmail un «Transferiste … desde/a la cuenta *X» cuya cuenta coincide en
+     * sus últimos cuatro dígitos con una tarjeta registrada del usuario o con la configuración de
+     * cuentas propias. En ese caso el movimiento es una transferencia del usuario (pasa por el
+     * bolsillo Gastos como gasto corriente), no un gasto normal. Los pagos sin cuenta propia
+     * siguen siendo gastos reales.
+     */
+    private boolean esTransferenciaCuentaPropia(String idUsuario, String origenId) {
+        if (origenId == null || origenId.isBlank()) return false;
+        String fragmento = movimientos.findFragmentoPorOrigenId(origenId);
+        if (fragmento == null || fragmento.isBlank()) return false;
+        String normalizado = fragmento.toLowerCase(Locale.ROOT);
+        if (!normalizado.contains("transferiste") && !normalizado.contains("transferencia")) return false;
+        Set<String> propios = propiosUltimosCuatro(idUsuario);
+        if (propios.isEmpty()) return false;
+        Matcher cuenta = CUENTA_EN_CORREO.matcher(fragmento);
+        while (cuenta.find()) {
+            String digitos = cuenta.group(1);
+            if (propios.contains(digitos.substring(digitos.length() - 4))) return true;
+        }
+        return false;
+    }
+
     @Transactional
     public MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud) {
         return crear(idUsuario, solicitud, null, false, null);
@@ -226,17 +324,23 @@ public class SMovimientoContable {
             throw new IllegalArgumentException("La sugerencia debe provenir de un correo Gmail.");
         }
         String tipo = tipoManual(solicitud.tipo());
-        if (!"GASTO".equals(tipo) && !"INGRESO".equals(tipo)) {
-            throw new IllegalArgumentException("El movimiento Gmail debe ser un GASTO o INGRESO.");
+        // El destino de la transferencia viaja en el correo, no en el DTO: se resuelve aquí para que
+        // la config de cuentas propias siga viviendo solo en el backend.
+        if ("GASTO".equals(tipo) && esTransferenciaCuentaPropia(idUsuario, solicitud.origenId())) {
+            tipo = "TRANSFERENCIA";
+        }
+        if (!"GASTO".equals(tipo) && !"INGRESO".equals(tipo) && !"TRANSFERENCIA".equals(tipo)) {
+            throw new IllegalArgumentException("El movimiento Gmail debe ser un GASTO, INGRESO o TRANSFERENCIA.");
         }
         MBolsillo porRevisar = servicioBolsillo.obtenerOCrearPorRevisar(idUsuario);
         MovimientoContableSolicitudDTO pendiente = new MovimientoContableSolicitudDTO(
                 porRevisar.getIdBolsillo(), tipo, solicitud.fecha(), solicitud.monto(), solicitud.categoria(),
                 solicitud.concepto(), "GMAIL", solicitud.origenId(), solicitud.origenNombre());
-        return crear(idUsuario, pendiente, EstadoRevisionMovimiento.POR_REVISAR, true, tipo);
+        String idTarjeta = resolverTarjetaPorSufijo(idUsuario, solicitud.cuentaOrigen());
+        return crear(idUsuario, pendiente, EstadoRevisionMovimiento.POR_REVISAR, true, tipo, idTarjeta);
     }
 
-    /** Confirma como movimiento global el tipo GASTO/INGRESO revisado por el usuario. */
+    /** Confirma como movimiento global el tipo GASTO/INGRESO/TRANSFERENCIA revisado por el usuario. */
     @Transactional
     public MovimientoContableDTO confirmarGmailGlobal(String idUsuario, String idMovimiento) {
         validarUsuario(idUsuario);
@@ -246,10 +350,16 @@ public class SMovimientoContable {
             throw new IllegalArgumentException("Solo se pueden confirmar globalmente movimientos Gmail por revisar.");
         }
         String tipo = tipoManual(movimiento.getTipo());
-        if (!"GASTO".equals(tipo) && !"INGRESO".equals(tipo)) {
-            throw new IllegalArgumentException("El movimiento Gmail debe ser un GASTO o INGRESO.");
+        if (!"GASTO".equals(tipo) && !"INGRESO".equals(tipo) && !"TRANSFERENCIA".equals(tipo)) {
+            throw new IllegalArgumentException("El movimiento Gmail debe ser un GASTO, INGRESO o TRANSFERENCIA.");
         }
-        movimiento.setBolsillo(null);
+        MBolsillo bolsilloFijo = null;
+        if ("GASTO".equals(tipo)) bolsilloFijo = obtenerBolsilloFijo(idUsuario, "GASTO");
+        else if ("INGRESO".equals(tipo)) bolsilloFijo = obtenerBolsilloFijo(idUsuario, "INGRESO");
+        else if (coincideTarjetaRegistradaEnCorreo(idUsuario, movimiento.getOrigenId())) {
+            bolsilloFijo = obtenerBolsilloFijo(idUsuario, "GASTO");
+        }
+        movimiento.setBolsillo(bolsilloFijo);
         movimiento.setIdUsuario(idUsuario);
         movimiento.setTipo(tipo);
         movimiento.setEstadoRevision(EstadoRevisionMovimiento.CONFIRMADO);
@@ -259,6 +369,12 @@ public class SMovimientoContable {
     private MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud,
                                         EstadoRevisionMovimiento estadoRevision, boolean omitirSaldo,
                                         String tipoMovimiento) {
+        return crear(idUsuario, solicitud, estadoRevision, omitirSaldo, tipoMovimiento, null);
+    }
+
+    private MovimientoContableDTO crear(String idUsuario, MovimientoContableSolicitudDTO solicitud,
+                                        EstadoRevisionMovimiento estadoRevision, boolean omitirSaldo,
+                                        String tipoMovimiento, String idTarjetaSugerida) {
         validarUsuario(idUsuario);
         validar(solicitud);
         if ("GMAIL".equalsIgnoreCase(solicitud.origenTipo()) && movimientos.existsByOrigenTipoAndOrigenId("GMAIL", solicitud.origenId())) {
@@ -293,6 +409,11 @@ public class SMovimientoContable {
         movimiento.setConcepto(solicitud.concepto() == null ? "" : solicitud.concepto().trim());
         movimiento.setEstadoRevision(estadoRevision);
         aplicarOrigen(movimiento, origen, tipo);
+        // La tarjeta vinculada vive en contabilidad: sugerida por la importación Gmail o por el origen manual CUENTA.
+        String idTarjetaVinculada = idTarjetaSugerida != null && !idTarjetaSugerida.isBlank()
+                ? idTarjetaSugerida
+                : "CUENTA".equalsIgnoreCase(origen.tipo()) && movimiento.getOrigenId() != null ? origen.id() : null;
+        movimiento.setIdTarjeta(idTarjetaVinculada);
         return dto(movimientos.save(movimiento));
     }
 
@@ -305,7 +426,19 @@ public class SMovimientoContable {
             String idUsuario, String tipo, java.time.LocalDate fecha, BigDecimal monto,
             String categoria, String concepto, String origenId, String origenNombre,
             ResultadoClasificacion clasificacion) {
+        return crearAutomaticamenteDesdeGmail(idUsuario, tipo, fecha, monto, categoria, concepto,
+                origenId, origenNombre, clasificacion, null);
+    }
+
+    @Transactional
+    public java.util.Optional<MovimientoContableDTO> crearAutomaticamenteDesdeGmail(
+            String idUsuario, String tipo, java.time.LocalDate fecha, BigDecimal monto,
+            String categoria, String concepto, String origenId, String origenNombre,
+            ResultadoClasificacion clasificacion, String cuentaOrigen) {
         validarUsuario(idUsuario);
+        String tipoResuelto = "GASTO".equalsIgnoreCase(tipo) && esTransferenciaCuentaPropia(idUsuario, origenId)
+                ? "TRANSFERENCIA" : tipo;
+        String idTarjetaVinculada = resolverTarjetaPorSufijo(idUsuario, cuentaOrigen);
         boolean revisar = clasificacion == null || clasificacion.revisar();
         MBolsillo bolsillo;
         if (revisar) {
@@ -314,20 +447,20 @@ public class SMovimientoContable {
             bolsillo = bolsilloPropio(idUsuario, clasificacion.idBolsillo());
             if (!bolsillo.isEstado() || clasificacion.bolsillo() == null
                     || !clasificacion.bolsillo().name().equalsIgnoreCase(normalizarTipo(bolsillo.getTipo()))
-                    || !tipo.equalsIgnoreCase(normalizarTipo(bolsillo.getTipo()))) {
+                    || !tipoResuelto.equalsIgnoreCase(normalizarTipo(bolsillo.getTipo()))) {
                 revisar = true;
                 bolsillo = servicioBolsillo.obtenerOCrearPorRevisar(idUsuario);
             }
-        } else if (clasificacion.bolsillo() != null && clasificacion.bolsillo().name().equalsIgnoreCase(tipo)) {
+        } else if (clasificacion.bolsillo() != null && clasificacion.bolsillo().name().equalsIgnoreCase(tipoResuelto)) {
             List<MBolsillo> compatibles = bolsillosPropios(idUsuario).stream()
                     .filter(MBolsillo::isEstado)
-                    .filter(item -> item.getTipo() != null && tipo.equalsIgnoreCase(normalizarTipo(item.getTipo())))
+                    .filter(item -> item.getTipo() != null && tipoResuelto.equalsIgnoreCase(normalizarTipo(item.getTipo())))
                     .toList();
             if (compatibles.size() == 1) bolsillo = compatibles.getFirst();
             else {
-                if ("GASTO".equalsIgnoreCase(tipo) || "INGRESO".equalsIgnoreCase(tipo)) {
-                    return java.util.Optional.of(crearMovimientoGlobalGmail(idUsuario, tipo, fecha, monto,
-                            categoria, concepto, origenId, origenNombre));
+                if ("GASTO".equalsIgnoreCase(tipoResuelto) || "INGRESO".equalsIgnoreCase(tipoResuelto)) {
+                    return java.util.Optional.of(crearMovimientoGlobalGmail(idUsuario, tipoResuelto, fecha, monto,
+                            categoria, concepto, origenId, origenNombre, idTarjetaVinculada));
                 }
                 revisar = true;
                 bolsillo = servicioBolsillo.obtenerOCrearPorRevisar(idUsuario);
@@ -337,23 +470,63 @@ public class SMovimientoContable {
             bolsillo = servicioBolsillo.obtenerOCrearPorRevisar(idUsuario);
         }
         MovimientoContableSolicitudDTO solicitud = new MovimientoContableSolicitudDTO(
-                bolsillo.getIdBolsillo(), tipo, fecha, monto, categoria, concepto,
+                bolsillo.getIdBolsillo(), tipoResuelto, fecha, monto, categoria, concepto,
                 "GMAIL", origenId, origenNombre);
         EstadoRevisionMovimiento estado = revisar
                 ? EstadoRevisionMovimiento.POR_REVISAR : EstadoRevisionMovimiento.CONFIRMADO;
-        return java.util.Optional.of(crear(idUsuario, solicitud, estado, revisar, tipo));
+        return java.util.Optional.of(crear(idUsuario, solicitud, estado, revisar, tipoResuelto, idTarjetaVinculada));
+    }
+
+    /**
+     * Vincula el movimiento con la tarjeta propia cuyo PAN enmascarado termina en el sufijo del correo
+     * (p. ej. "desde tu cuenta *5201"). Solo cuando la coincidencia es única; si es ambigua o no hay
+     * coincidencia, el movimiento queda sin tarjeta (idTarjeta nulo).
+     */
+    private String resolverTarjetaPorSufijo(String idUsuario, String cuentaOrigen) {
+        if (cuentaOrigen == null || cuentaOrigen.isBlank()) return null;
+        String sufijo = cuentaOrigen.trim().replaceAll("\\D", "");
+        // El PAN mínimo es de 14 dígitos: la vinculación se hace por los últimos 4.
+        if (sufijo.length() < 4) return null;
+        sufijo = sufijo.substring(sufijo.length() - 4);
+        List<MTarjeta> coincidentes = tarjetas.buscarPorSufijoPan(idUsuario, sufijo);
+        return coincidentes.size() == 1 ? coincidentes.getFirst().getIdTarjeta() : null;
+    }
+
+    private MBolsillo obtenerBolsilloFijo(String idUsuario, String tipo) {
+        return servicioBolsillo.listar(idUsuario).stream()
+                .filter(SBolsillo::esFijo)
+                .filter(bolsillo -> tipo.equalsIgnoreCase(bolsillo.getTipo()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No se encontró el bolsillo fijo " + tipo + "."));
+    }
+
+    /** Coincide por los últimos cuatro dígitos de cualquiera de las cuentas del correo. */
+    private boolean coincideTarjetaRegistradaEnCorreo(String idUsuario, String origenId) {
+        if (origenId == null || origenId.isBlank()) return false;
+        String fragmento = movimientos.findFragmentoPorOrigenId(origenId);
+        if (fragmento == null || fragmento.isBlank()) return false;
+        Matcher cuenta = CUENTA_EN_CORREO.matcher(fragmento);
+        while (cuenta.find()) {
+            String digitos = cuenta.group(1).replaceAll("\\D", "");
+            if (digitos.length() < 4) continue;
+            String sufijo = digitos.substring(digitos.length() - 4);
+            if (!tarjetas.buscarPorSufijoPan(idUsuario, sufijo).isEmpty()) return true;
+        }
+        return false;
     }
 
     private MovimientoContableDTO crearMovimientoGlobalGmail(String idUsuario, String tipo,
             java.time.LocalDate fecha, BigDecimal monto, String categoria, String concepto,
-            String origenId, String origenNombre) {
+            String origenId, String origenNombre, String idTarjetaVinculada) {
         if (movimientos.existsByOrigenTipoAndOrigenId("GMAIL", origenId)) {
             throw new IllegalStateException("Este correo ya fue importado como movimiento.");
         }
         MMovimientoContable movimiento = new MMovimientoContable();
         movimiento.setIdMovimiento(UUID.randomUUID().toString());
         movimiento.setIdUsuario(idUsuario);
-        movimiento.setBolsillo(null);
+        movimiento.setBolsillo(
+                "GASTO".equalsIgnoreCase(tipo) || "INGRESO".equalsIgnoreCase(tipo)
+                        ? obtenerBolsilloFijo(idUsuario, tipo) : null);
         movimiento.setTipo(tipo);
         movimiento.setFecha(fecha);
         movimiento.setMonto(monto);
@@ -362,6 +535,7 @@ public class SMovimientoContable {
         movimiento.setOrigenTipo("GMAIL");
         movimiento.setOrigenId(origenId);
         movimiento.setOrigenNombre(origenNombre);
+        movimiento.setIdTarjeta(idTarjetaVinculada);
         movimiento.setEstadoRevision(EstadoRevisionMovimiento.CONFIRMADO);
         return dto(movimientos.save(movimiento));
     }
@@ -378,6 +552,11 @@ public class SMovimientoContable {
             throw new IllegalArgumentException("Activa el bolsillo para asignarle este movimiento.");
         }
         String tipo = tipoBolsillo(bolsillo);
+        // El bolsillo «Por revisar» (y cualquier otro sin tipo clasificable) no define el tipo del
+        // movimiento: asignarle uno lo dejaría como POR_REVISAR y fuera de los totales. Obliga a elegir.
+        if ("POR_REVISAR".equals(tipo) || "OTROS".equals(tipo)) {
+            throw new IllegalArgumentException("Asigna el movimiento a un bolsillo de tipo GASTO, INGRESO o AHORRO.");
+        }
         Origen origen = resolverOrigen(idUsuario, solicitud, tipo, movimiento.getIdMovimiento());
         String idMovimientoExcluir = origen.bolsillo() != null && origen.bolsillo().getIdBolsillo().equals(movimiento.getOrigenId())
                 ? movimiento.getIdMovimiento() : null;
@@ -481,8 +660,10 @@ public class SMovimientoContable {
 
     private Origen resolverOrigen(String idUsuario, MovimientoContableSolicitudDTO solicitud, String tipo, String idMovimiento) {
         String origenTipo = solicitud.origenTipo() == null ? "" : solicitud.origenTipo().trim().toUpperCase(Locale.ROOT);
-        if ("TRANSFERENCIA".equalsIgnoreCase(tipo) && !"BOLSILLO".equals(origenTipo)) {
-            throw new IllegalArgumentException("Una transferencia requiere origen en otro bolsillo.");
+        // Las transferencias Gmail a cuenta propia son globales: no hay bolsillo origen que descontar.
+        if ("TRANSFERENCIA".equalsIgnoreCase(tipo) && !"BOLSILLO".equals(origenTipo)
+                && !"GMAIL".equals(origenTipo)) {
+            throw new IllegalArgumentException("Una transferencia requiere origen en otro bolsillo o en un correo Gmail.");
         }
         // For INGRESO or GASTO without an explicit origin, skip origin resolution
         if (("INGRESO".equalsIgnoreCase(tipo) || "GASTO".equalsIgnoreCase(tipo)) && !"GMAIL".equals(origenTipo) && !"EFECTIVO".equals(origenTipo) && !"BOLSILLO".equals(origenTipo) && !"CUENTA".equals(origenTipo)) {
@@ -544,6 +725,7 @@ public class SMovimientoContable {
                 movimiento.getBolsillo() == null ? null : movimiento.getBolsillo().getIdBolsillo(),
                 movimiento.getBolsillo() == null ? null : movimiento.getBolsillo().getNombre(),
                 movimiento.getFecha(), movimiento.getMonto(), movimiento.getTipo(), movimiento.getCategoria(), movimiento.getConcepto(),
-                movimiento.getOrigenTipo(), movimiento.getOrigenId(), movimiento.getOrigenNombre(), movimiento.getEstadoRevision());
+                movimiento.getOrigenTipo(), movimiento.getOrigenId(), movimiento.getOrigenNombre(),
+                movimiento.getEstadoRevision(), movimiento.getIdTarjeta());
     }
 }

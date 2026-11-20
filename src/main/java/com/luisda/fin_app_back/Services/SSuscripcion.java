@@ -2,7 +2,9 @@ package com.luisda.fin_app_back.Services;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.luisda.fin_app_back.DTO.SuscripcionAjustesDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionDTO;
+import com.luisda.fin_app_back.DTO.SuscripcionRecurrenteDTO;
 import com.luisda.fin_app_back.DTO.SuscripcionSolicitudDTO;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Model.MSuscripcion;
@@ -25,11 +27,12 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * @uso               Gestiona las suscripciones manuales y la consulta unificada de suscripciones
  * @capa              Servicio
- * @responsabilidades CRUD de suscripciones manuales y listado unificado (manuales y de Gmail)
+ * @responsabilidades CRUD de suscripciones manuales, listado unificado (manuales y de Gmail), cobros recurrentes y ajustes de organización
  * @datos             Recibe y devuelve DTOs de Suscripcion
  * @dependencias      ISuscripcion, IUsuario
  * @usadoPor          CSuscripcion
@@ -38,12 +41,17 @@ import java.util.regex.Pattern;
 public class SSuscripcion {
 
     public static final String IMPORTANCIA_ALTA = "ALTA";
+    public static final String IMPORTANCIA_MEDIA = "MEDIA";
     public static final String IMPORTANCIA_BAJA = "BAJA";
 
     private static final int LONGITUD_NOMBRE = 100;
     private static final int LONGITUD_CATEGORIA = 60;
+    private static final int LONGITUD_APODO = 120;
+    /** Las suscripciones no guardan periodicidad: se asumen cobros mensuales. */
+    private static final String FRECUENCIA_SUSCRIPCION = "Mensual";
+    private static final int INTERVALO_SUSCRIPCION = 30;
     private static final BigDecimal MONTO_MAXIMO = new BigDecimal("9999999999.99");
-    private static final Pattern DESTINO_BAJA = Pattern.compile("(?i)<(" + "(?:https?|mailto)" + ":[^>]+)>");
+    // private static final Pattern DESTINO_BAJA = Pattern.compile("(?i)<(" + "(?:https?|mailto)" + ":[^>]+)>");
 
     private final ISuscripcion suscripciones;
     private final IUsuario usuarios;
@@ -69,6 +77,8 @@ public class SSuscripcion {
         suscripcion.setMonto(datos.monto());
         suscripcion.setFechaCobro(datos.fechaCobro());
         suscripcion.setImportancia(datos.importancia());
+        suscripcion.setPrioridad(datos.prioridad());
+        suscripcion.setApodo(datos.apodo());
         suscripcion.setActiva(datos.activa() == null || datos.activa());
         suscripcion.setFechaCreacion(ahora);
         suscripcion.setFechaActualizacion(ahora);
@@ -107,6 +117,59 @@ public class SSuscripcion {
         return aDto(buscarPropia(idUsuario, id));
     }
 
+    /**
+     * Cobros recurrentes del usuario tomados de sus suscripciones: las activas que
+     * tienen monto y fecha de cobro. Como la suscripción no guarda periodicidad,
+     * se informa un cobro mensual estimado.
+     */
+    @Transactional(readOnly = true)
+    public List<SuscripcionRecurrenteDTO> listarRecurrentes(String idUsuario) {
+        if (idUsuario == null || idUsuario.isBlank()) return List.of();
+        return this.suscripciones.findDelUsuario(idUsuario).stream()
+                .filter(MSuscripcion::isActiva)
+                .filter(suscripcion -> suscripcion.getMonto() != null && suscripcion.getFechaCobro() != null)
+                .sorted(Comparator.comparing(MSuscripcion::getFechaCobro)
+                        .thenComparing(suscripcion -> suscripcion.getNombre(),
+                                Comparator.nullsLast(String::compareToIgnoreCase)))
+                .map(this::aCobroRecurrente)
+                .toList();
+    }
+
+    /** Convierte una suscripción con monto y fecha de cobro en un cobro recurrente. */
+    private SuscripcionRecurrenteDTO aCobroRecurrente(MSuscripcion suscripcion) {
+        String nombre = suscripcion.getApodo() == null || suscripcion.getApodo().isBlank()
+                ? suscripcion.getNombre() : suscripcion.getApodo();
+        return new SuscripcionRecurrenteDTO(
+                suscripcion.getId(),
+                nombre,
+                categoriaLegible(suscripcion.getCategoria()),
+                suscripcion.getMonto(),
+                FRECUENCIA_SUSCRIPCION,
+                INTERVALO_SUSCRIPCION,
+                null,
+                suscripcion.getFechaCobro(),
+                1,
+                suscripcion.getOrigen() == null ? null : suscripcion.getOrigen().name());
+    }
+
+    /** La categoría puede ser texto plano (suscripciones manuales) o etiquetas JSON (Gmail). */
+    private String categoriaLegible(String valor) {
+        if (valor == null || valor.isBlank()) return null;
+        String limpio = valor.trim();
+        if (!limpio.startsWith("[")) return limpio;
+        List<String> etiquetas = leerLista(limpio);
+        if (etiquetas.isEmpty()) return null;
+        return etiquetas.stream().map(this::etiquetaLegible).collect(Collectors.joining(" · "));
+    }
+
+    private String etiquetaLegible(String etiqueta) {
+        return switch (etiqueta) {
+            case "CATEGORY_PROMOTIONS" -> "Promociones";
+            case "CATEGORY_UPDATES" -> "Actualizaciones";
+            default -> etiqueta;
+        };
+    }
+
     /** Actualiza una suscripción manual. Las detectadas en Gmail no se editan desde aquí. */
     @Transactional
     public SuscripcionDTO actualizar(String idUsuario, String id, SuscripcionSolicitudDTO solicitud) {
@@ -118,7 +181,42 @@ public class SSuscripcion {
         suscripcion.setMonto(datos.monto());
         suscripcion.setFechaCobro(datos.fechaCobro());
         suscripcion.setImportancia(datos.importancia());
+        suscripcion.setPrioridad(datos.prioridad());
+        suscripcion.setApodo(datos.apodo());
         if (datos.activa() != null) suscripcion.setActiva(datos.activa());
+        suscripcion.setFechaActualizacion(Instant.now());
+        return aDto(this.suscripciones.save(suscripcion));
+    }
+
+    /**
+     * Actualiza los ajustes de organización de una suscripción del usuario,
+     * sea manual o detectada en Gmail: importancia, prioridad y apodo.
+     * Omitir un campo (null) conserva el valor actual.
+     */
+    @Transactional
+    public SuscripcionDTO actualizarAjustes(String idUsuario, String id, SuscripcionAjustesDTO ajustes) {
+        if (ajustes == null) {
+            throw new DatosInvalidosException("Indica qué ajustes quieres guardar.", null);
+        }
+        MSuscripcion suscripcion = buscarPropia(idUsuario, id);
+        boolean cambio = false;
+        if (ajustes.importancia() != null) {
+            // Vacío explícito limpia a NULL («No definido» en la UI); antes el vacío conservaba el valor.
+            suscripcion.setImportancia(ajustes.importancia().isBlank() ? null : normalizarNivel(ajustes.importancia(), "importancia", IMPORTANCIA_ALTA));
+            cambio = true;
+        }
+        if (ajustes.prioridad() != null) {
+            // Vacío explícito limpia a NULL («No definido» en la UI); antes el vacío conservaba el valor.
+            suscripcion.setPrioridad(ajustes.prioridad().isBlank() ? null : normalizarNivel(ajustes.prioridad(), "prioridad", IMPORTANCIA_MEDIA));
+            cambio = true;
+        }
+        if (ajustes.apodo() != null) {
+            suscripcion.setApodo(normalizarOpcional(ajustes.apodo(), "apodo", LONGITUD_APODO));
+            cambio = true;
+        }
+        if (!cambio) {
+            throw new DatosInvalidosException("Indica al menos un ajuste para guardar.", null);
+        }
         suscripcion.setFechaActualizacion(Instant.now());
         return aDto(this.suscripciones.save(suscripcion));
     }
@@ -148,15 +246,20 @@ public class SSuscripcion {
     public SuscripcionDTO aDto(MSuscripcion suscripcion) {
         String unsubscribe = valorSeguro(suscripcion.getListUnsubscribe());
         MFuente cuenta = suscripcion.getCuenta();
+        boolean deGmail = suscripcion.getOrigen() == OrigenSuscripcion.GMAIL;
+        String categoria = deGmail ? null : suscripcion.getCategoria();
+        List<String> categorias = deGmail ? leerLista(suscripcion.getCategoria()) : List.of();
         return new SuscripcionDTO(
                 suscripcion.getId(),
                 suscripcion.getOrigen() == null ? null : suscripcion.getOrigen().name(),
                 suscripcion.getNombre(),
-                suscripcion.getCategoria(),
-                leerLista(suscripcion.getCategoriasJson()),
+                categoria,
+                categorias,
                 suscripcion.getMonto(),
                 suscripcion.getFechaCobro(),
                 suscripcion.getImportancia(),
+                suscripcion.getPrioridad(),
+                suscripcion.getApodo(),
                 suscripcion.isActiva(),
                 suscripcion.getCorreoRemitente(),
                 cuenta == null ? null : cuenta.getIdFuente(),
@@ -230,17 +333,30 @@ public class SSuscripcion {
         if (fechaCobro == null) {
             throw new DatosInvalidosException("La fecha de cobro es obligatoria.", "fechaCobro");
         }
+        String prioridad = normalizarNivel(solicitud.prioridad(), "prioridad", IMPORTANCIA_MEDIA);
+        String apodo = normalizarOpcional(solicitud.apodo(), "apodo", LONGITUD_APODO);
         return new Datos(nombre, categoria, monto, fechaCobro,
-                normalizarImportancia(solicitud.importancia()), solicitud.activa());
+                normalizarNivel(solicitud.importancia(), "importancia", IMPORTANCIA_ALTA), prioridad, apodo, solicitud.activa());
     }
 
-    private String normalizarImportancia(String valor) {
-        if (valor == null || valor.isBlank()) return IMPORTANCIA_ALTA;
+    private String normalizarNivel(String valor, String campo, String porDefecto) {
+        if (valor == null || valor.isBlank()) return porDefecto;
         return switch (valor.trim().toUpperCase(Locale.ROOT)) {
             case "ALTA", "ALTO", "IMPORTANTE" -> IMPORTANCIA_ALTA;
+            case "MEDIA", "MEDIO" -> IMPORTANCIA_MEDIA;
             case "BAJA", "BAJO" -> IMPORTANCIA_BAJA;
-            default -> throw new DatosInvalidosException("La importancia debe ser Alta o Baja.", "importancia");
+            default -> throw new DatosInvalidosException(
+                    "La " + campo + " debe ser Alta, Media o Baja.", campo);
         };
+    }
+
+    private String normalizarOpcional(String valor, String campo, int longitud) {
+        String limpio = normalizar(valor);
+        if (limpio != null && limpio.length() > longitud) {
+            throw new DatosInvalidosException(
+                    "El " + campo + " no puede superar " + longitud + " caracteres.", campo);
+        }
+        return limpio;
     }
 
     private String normalizar(String valor) {
@@ -270,10 +386,12 @@ public class SSuscripcion {
 
     /** Datos ya validados y normalizados de la solicitud. */
     private record Datos(String nombre, String categoria, BigDecimal monto, LocalDate fechaCobro,
-                         String importancia, Boolean activa) { }
+                         String importancia, String prioridad, String apodo, Boolean activa) { }
 
     /** Error de validación con el campo que se debe corregir en el formulario. */
     public static class DatosInvalidosException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         private final String campo;
 
         public DatosInvalidosException(String mensaje, String campo) {
@@ -286,6 +404,8 @@ public class SSuscripcion {
 
     /** La suscripción pertenece a Gmail y no admite edición manual. */
     public static class NoEditableException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public NoEditableException(String mensaje) {
             super(mensaje);
         }

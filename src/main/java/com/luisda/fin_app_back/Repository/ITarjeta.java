@@ -27,6 +27,10 @@ public interface ITarjeta extends JpaRepository<MTarjeta,String> {
     List<MTarjeta> buscarPropias(@Param("idUsuario") String idUsuario, @Param("termino") String termino, Pageable pageable);
     Optional<MTarjeta> findByIdTarjetaAndUsuario_IdUsuario(String idTarjeta, String idUsuario);
 
+    /** Tarjetas propias cuyo PAN enmascarado ("**** 5201") termina en el sufijo indicado. */
+    @Query("SELECT t FROM MTarjeta t WHERE t.usuario.idUsuario = :idUsuario AND t.numero LIKE CONCAT('% ', :sufijo)")
+    List<MTarjeta> buscarPorSufijoPan(@Param("idUsuario") String idUsuario, @Param("sufijo") String sufijo);
+
     @Query("SELECT t FROM MTarjeta t WHERE t.titular = :titular ")
     List<MTarjeta> buscarPorTitular(
             @Param("titular") String titular

@@ -10,7 +10,7 @@ import com.luisda.fin_app_back.Model.MMovimientoContable;
 import com.luisda.fin_app_back.Model.MReglaFiltro;
 import com.luisda.fin_app_back.Model.MUsuario;
 import com.luisda.fin_app_back.Model.TipoReglaFiltro;
-import com.luisda.fin_app_back.Repository.IBolsillo;
+// import com.luisda.fin_app_back.Repository.IBolsillo;
 import com.luisda.fin_app_back.Repository.IReglaFiltro;
 import com.luisda.fin_app_back.Repository.IMovimientoContable;
 import com.luisda.fin_app_back.Services.SClasificadorMovimiento;
@@ -49,14 +49,14 @@ class PersistenciaClasificacionTest {
     @Autowired private EntityManager entityManager;
     @Autowired private IReglaFiltro reglas;
     @Autowired private IMovimientoContable movimientos;
-    @Autowired private IBolsillo bolsillos;
+//     @Autowired private IBolsillo bolsillos;
     @Autowired private SMovimientoContable servicioMovimientos;
     @Autowired private MockMvc mockMvc;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new ObjectMapper();
     @Autowired private JwtTokenService jwtTokens;
 
     @Test
-    void gastoConfiableSinBolsilloCompatibleSeGuardaGlobalYNoAfectaSaldoAhorro() {
+    void gastoConfiableSinBolsilloCompatibleSeAsignaAlFijoGastosSinAfectarAhorro() {
         MBolsillo ahorro = prepararBolsillo("AHORRO");
         var clasificacion = new ResultadoClasificacion(null, TipoBolsillo.GASTO,
                 new BigDecimal("13000.00"), "Alerta bancaria", LocalDate.now(),
@@ -70,14 +70,15 @@ class PersistenciaClasificacionTest {
         entityManager.clear();
 
         MMovimientoContable guardado = movimientos.findById(creado.idMovimiento()).orElseThrow();
-        assertEquals(null, guardado.getBolsillo());
+        assertEquals("Gastos", guardado.getBolsillo().getNombre());
+        assertEquals("GASTO", guardado.getBolsillo().getTipo());
         assertEquals("usuario-regla", guardado.getIdUsuario());
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, guardado.getEstadoRevision());
         assertEquals(0, movimientos.calcularSaldoDisponible(ahorro.getIdBolsillo(), null).compareTo(BigDecimal.ZERO));
     }
 
     @Test
-    void movimientoGlobalSeIncluyeUnaSolaVezEnResumenMensualDelPropietario() {
+    void movimientoGmailSinBolsilloSeAsignaYCuentaEnGastos() {
         MBolsillo ahorro = prepararBolsillo("AHORRO");
         var clasificacion = new ResultadoClasificacion(null, TipoBolsillo.GASTO,
                 new BigDecimal("13000.00"), "Alerta bancaria", LocalDate.now(),
@@ -90,7 +91,6 @@ class PersistenciaClasificacionTest {
         ResumenGlobalContabilidadDTO resumen = servicioMovimientos.resumenGlobal("usuario-regla", YearMonth.of(2026, 5));
 
         assertEquals(new BigDecimal("13000.00"), resumen.gastos());
-        assertEquals(BigDecimal.ZERO, resumen.ingresos());
         assertEquals(BigDecimal.ZERO, movimientos.calcularSaldoDisponible(ahorro.getIdBolsillo(), null));
     }
 
@@ -111,7 +111,8 @@ class PersistenciaClasificacionTest {
         MMovimientoContable guardado = movimientos.findById(creado.idMovimiento()).orElseThrow();
         ResumenGlobalContabilidadDTO resumen = servicioMovimientos.resumenGlobal("usuario-regla", YearMonth.of(2026, 11));
 
-        assertEquals(null, guardado.getBolsillo());
+        assertEquals("Ingresos", guardado.getBolsillo().getNombre());
+        assertEquals("INGRESO", guardado.getBolsillo().getTipo());
         assertEquals("usuario-regla", guardado.getIdUsuario());
         assertEquals("INGRESO", guardado.getTipo());
         assertEquals(new BigDecimal("25000.00"), resumen.ingresos());
@@ -119,7 +120,7 @@ class PersistenciaClasificacionTest {
     }
 
     @Test
-    void sugerenciaGmailSeGuardaPorRevisarYSeConfirmaGlobalSinTocarAhorro() {
+    void sugerenciaGmailConfirmadaSeAsignaAFijoGastosSinTocarAhorro() {
         MBolsillo ahorro = prepararBolsillo("AHORRO");
         MovimientoContableSolicitudDTO solicitud = new MovimientoContableSolicitudDTO(null, "GASTO",
                 LocalDate.of(2026, 11, 9), new BigDecimal("300000.00"), "Retiros", "Retiro Bancolombia",
@@ -136,7 +137,8 @@ class PersistenciaClasificacionTest {
         MMovimientoContable guardado = movimientos.findById(confirmado.idMovimiento()).orElseThrow();
         ResumenGlobalContabilidadDTO resumen = servicioMovimientos.resumenGlobal("usuario-regla", YearMonth.of(2026, 11));
 
-        assertEquals(null, guardado.getBolsillo());
+        assertEquals("Gastos", guardado.getBolsillo().getNombre());
+        assertEquals("GASTO", guardado.getBolsillo().getTipo());
         assertEquals("GASTO", guardado.getTipo());
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, guardado.getEstadoRevision());
         assertEquals(new BigDecimal("300000.00"), resumen.gastos());
@@ -285,15 +287,14 @@ class PersistenciaClasificacionTest {
     void resumenGlobalDelMesSeparaIngresosGastosAhorrosTransferenciasYSaldos() {
         MBolsillo origen = prepararBolsillo("AHORRO");
         MBolsillo destino = nuevoBolsillo("bolsillo-destino", "Viajes", "AHORRO", origen.getContabilidad());
+        MBolsillo gastos = nuevoBolsillo("bolsillo-gastos", "Gastos del mes", "GASTO", origen.getContabilidad());
         MBolsillo revisar = nuevoBolsillo("bolsillo-revisar", "Por revisar", "OTROS", origen.getContabilidad());
-
         MMovimientoContable ingreso = conFecha(movimiento(origen, "resumen-ingreso", new BigDecimal("100.00"),
                 EstadoRevisionMovimiento.CONFIRMADO), 2026, 5, 1);
         ingreso.setTipo("INGRESO");
-        MMovimientoContable gasto = conFecha(movimiento(destino, "resumen-gasto", new BigDecimal("30.00"),
+        MMovimientoContable gasto = conFecha(movimiento(gastos, "resumen-gasto", new BigDecimal("30.00"),
                 EstadoRevisionMovimiento.CONFIRMADO), 2026, 5, 2);
-        gasto.setOrigenTipo("BOLSILLO");
-        gasto.setOrigenId(origen.getIdBolsillo());
+        gasto.setOrigenTipo("EFECTIVO");
         MMovimientoContable transferencia = conFecha(movimiento(destino, "resumen-transferencia", new BigDecimal("40.00"),
                 EstadoRevisionMovimiento.CONFIRMADO), 2026, 5, 3);
         transferencia.setTipo("TRANSFERENCIA");
@@ -317,7 +318,7 @@ class PersistenciaClasificacionTest {
         assertEquals(new BigDecimal("30.00"), resumen.gastos());
         assertEquals(new BigDecimal("15.00"), resumen.ahorros());
         assertEquals(new BigDecimal("40.00"), resumen.transferencias());
-        assertEquals(new BigDecimal("70.00"), resumen.saldoAhorros());
+        assertEquals(new BigDecimal("100.00"), resumen.saldoAhorros());
         assertEquals(1L, resumen.porRevisar());
         assertEquals(new BigDecimal("13000.00"), resumen.montoPorRevisar());
     }
@@ -365,7 +366,8 @@ class PersistenciaClasificacionTest {
         MContabilidad contabilidad = new MContabilidad("contabilidad-regla", "Contabilidad", 0, true, LocalDate.now());
         contabilidad.setUsuario(usuario);
         entityManager.persist(contabilidad);
-        MBolsillo bolsillo = nuevoBolsillo("bolsillo-regla", "Gastos", tipo, contabilidad);
+        String nombre = "AHORRO".equalsIgnoreCase(tipo) ? "Ahorros" : "Gastos";
+        MBolsillo bolsillo = nuevoBolsillo("bolsillo-regla", nombre, tipo, contabilidad);
         entityManager.flush();
         return bolsillo;
     }

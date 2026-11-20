@@ -52,6 +52,21 @@ public class CTarjeta {
                 .orElseGet(this::noEncontrado);
     }
 
+    /** Historial de movimientos de contabilidad vinculados a la tarjeta (pagos con tarjeta). */
+    @GetMapping("/{idTarjeta}/movimientos")
+    public ResponseEntity<?> historialMovimientos(@PathVariable String idTarjeta, HttpServletRequest solicitud) {
+        Optional<String> idUsuario = idUsuarioActivo(solicitud);
+        if (idUsuario.isEmpty()) return noAutorizado();
+        List<com.luisda.fin_app_back.Model.MMovimientoContable> historial =
+                tarjetas.historialMovimientos(idTarjeta, idUsuario.get());
+        if (historial == null) return noEncontrado();
+        return ResponseEntity.ok(historial.stream().map(movimiento -> new com.luisda.fin_app_back.DTO.MovimientoTarjetaDTO(
+                movimiento.getIdMovimiento(), movimiento.getFecha(), movimiento.getMonto(), movimiento.getTipo(),
+                movimiento.getCategoria(), movimiento.getConcepto(), movimiento.getOrigenTipo(),
+                movimiento.getOrigenNombre(),
+                movimiento.getEstadoRevision() == null ? null : movimiento.getEstadoRevision().name())).toList());
+    }
+
     @PostMapping
     public ResponseEntity<?> crear(@RequestBody TarjetaSolicitudDTO solicitudTarjeta, HttpServletRequest solicitud) {
         Optional<String> idUsuario = idUsuarioActivo(solicitud);
@@ -108,7 +123,7 @@ public class CTarjeta {
 
     private TarjetaDTO dto(MTarjeta tarjeta) {
         return new TarjetaDTO(tarjeta.getIdTarjeta(), tarjeta.getTitular(), STarjeta.enmascararPan(tarjeta.getNumero()),
-                tarjeta.getExpiracion(), tarjeta.getEntidad());
+                tarjeta.getExpiracion(), tarjeta.getEntidad(), tarjeta.getTipoCuenta());
     }
 
     private ResponseEntity<RespuestaModalDTO> noAutorizado() {

@@ -1,15 +1,19 @@
 package com.luisda.fin_app_back.Services;
 
 import com.luisda.fin_app_back.Model.MGrupo;
+import com.luisda.fin_app_back.Model.MGrupoMiembro;
 import com.luisda.fin_app_back.Repository.IGrupo;
 import com.luisda.fin_app_back.Repository.IUsuario;
+import com.luisda.fin_app_back.Repository.IGrupoMiembro;
 import com.luisda.fin_app_back.Model.MFuente;
 import com.luisda.fin_app_back.Repository.IFuentes;
+import com.luisda.fin_app_back.Repository.IGrupoMensaje;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Optional;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -27,11 +31,16 @@ public class SGrupo {
     private final IGrupo IGrupo;
     private final IUsuario IUsuario;
     private final IFuentes IFuentes;
+    private final IGrupoMensaje IGrupoMensaje;
+    private final IGrupoMiembro IGrupoMiembro;
 
-    public SGrupo(IGrupo iGrupo, IUsuario iUsuario, IFuentes iFuentes) {
+    public SGrupo(IGrupo iGrupo, IUsuario iUsuario, IFuentes iFuentes, IGrupoMensaje iGrupoMensaje,
+                  IGrupoMiembro iGrupoMiembro) {
         IGrupo = iGrupo;
         IUsuario = iUsuario;
         IFuentes = iFuentes;
+        IGrupoMensaje = iGrupoMensaje;
+        IGrupoMiembro = iGrupoMiembro;
     }
 
     /** Crea un grupo usando siempre el usuario suministrado por la sesión autenticada. */
@@ -69,15 +78,37 @@ public class SGrupo {
                 fuentesValidadas.add(fuente);
             }
             MGrupo.setFuentes(fuentesValidadas);
-            return this.IGrupo.save(MGrupo);
+            MGrupo guardado = this.IGrupo.save(MGrupo);
+            // El creador queda como propietario y como miembro DUENO del grupo.
+            MGrupoMiembro dueno = new MGrupoMiembro();
+            dueno.setIdMiembro(UUID.randomUUID().toString());
+            dueno.setIdGrupo(guardado.getIdGrupo());
+            dueno.setIdUsuario(guardado.getUsuario().getIdUsuario());
+            dueno.setRol("DUENO");
+            dueno.setFecha(java.time.LocalDateTime.now());
+            this.IGrupoMiembro.save(dueno);
+            return guardado;
         } catch (Exception error) {
             throw new Exception(error.getMessage());
         }
     }
 
-    /** Consultar grupos del usuario indicado. */
+    /**
+     * Grupos visibles para un usuario: los que posee y aquellos en los que es integrante.
+     */
     public List<MGrupo> buscarPorUsuario(String idUsuario) throws Exception {
-        return this.IGrupo.findByUsuario_IdUsuario(idUsuario);
+        List<MGrupo> propios = this.IGrupo.findByUsuario_IdUsuario(idUsuario);
+        List<String> idsMiembro = this.IGrupoMiembro.findByIdUsuario(idUsuario)
+                .stream()
+                .map(MGrupoMiembro::getIdGrupo)
+                .toList();
+        List<MGrupo> deMiembro = idsMiembro.isEmpty()
+                ? List.of()
+                : this.IGrupo.findAllById(idsMiembro);
+        Map<String, MGrupo> fusion = new java.util.LinkedHashMap<>();
+        propios.forEach(grupo -> fusion.put(grupo.getIdGrupo(), grupo));
+        deMiembro.forEach(grupo -> fusion.putIfAbsent(grupo.getIdGrupo(), grupo));
+        return new java.util.ArrayList<>(fusion.values());
     }
 
     /** Vincula al grupo una fuente existente que pertenezca al mismo usuario. */
@@ -154,6 +185,9 @@ public class SGrupo {
         try {
             Optional<MGrupo> grupoEncontrado = this.IGrupo.findById(idGrupo);
             if (grupoEncontrado.isPresent() && grupoEncontrado.get().getUsuario().getIdUsuario().equals(idUsuario)) {
+                // Los mensajes y la membresía mueren con el grupo.
+                this.IGrupoMensaje.deleteByIdGrupo(idGrupo);
+                this.IGrupoMiembro.deleteByIdGrupo(idGrupo);
                 this.IGrupo.deleteById(idGrupo);
                 return true;
             } else {

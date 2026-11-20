@@ -46,6 +46,14 @@ public class MBolsillo {
     @Column(nullable = false)
     private LocalDate fechaCreacion;
 
+    /** Texto libre para descripción del bolsillo (opcional). */
+    @Column(name = "descripcion", columnDefinition = "TEXT")
+    private String descripcion;
+
+    /** Orígenes que el usuario asocia como fondeo del bolsillo (JSON array serializado). */
+    @Column(name = "origenes", columnDefinition = "TEXT")
+    private String origenes;
+
     public MBolsillo() {
     }
 
@@ -127,5 +135,21 @@ public class MBolsillo {
 
     public void setIdBolsillo(String idBolsillo) {
         this.idBolsillo = idBolsillo;
+    }
+
+    public String getDescripcion() {
+        return descripcion;
+    }
+
+    public void setDescripcion(String descripcion) {
+        this.descripcion = descripcion;
+    }
+
+    public String getOrigenes() {
+        return origenes;
+    }
+
+    public void setOrigenes(String origenes) {
+        this.origenes = origenes;
     }
 }

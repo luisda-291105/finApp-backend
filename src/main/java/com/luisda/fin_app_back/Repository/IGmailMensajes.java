@@ -18,6 +18,7 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
         String getFragmento();
         String getEtiquetasJson();
         String getNombresEtiquetasJson();
+        String getPapeleraEstado();
         Instant getFechaInterna();
     }
 
@@ -25,7 +26,8 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
             SELECT m.googleMessageId AS googleMessageId, m.remitente AS remitente,
                    m.destinatario AS destinatario, m.asunto AS asunto,
                    m.fragmento AS fragmento, m.etiquetasJson AS etiquetasJson,
-                   m.nombresEtiquetasJson AS nombresEtiquetasJson, m.fechaInterna AS fechaInterna
+                   m.nombresEtiquetasJson AS nombresEtiquetasJson, m.papeleraEstado AS papeleraEstado,
+                   m.fechaInterna AS fechaInterna
             FROM MGmailMensaje m
             WHERE m.cuenta.idFuente = :idFuente AND m.fechaInterna > :fecha
             ORDER BY m.fechaInterna DESC
@@ -42,6 +44,9 @@ public interface IGmailMensajes extends JpaRepository<MGmailMensaje, String> {
     List<MGmailMensaje> findByCuenta_Usuario_IdUsuarioAndMovimientoAlertaPendienteTrueOrderByFechaInternaDesc(String idUsuario);
     Optional<MGmailMensaje> findByIdAndCuenta_Usuario_IdUsuario(String id, String idUsuario);
     Optional<MGmailMensaje> findByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
+
+    /** Primer mensaje con ese id de Gmail en cualquier cuenta del usuario (para detectar cuentas ajenas). */
+    Optional<MGmailMensaje> findFirstByGoogleMessageIdAndCuenta_Usuario_IdUsuario(String googleMessageId, String idUsuario);
 
     boolean existsByCuenta_IdFuenteAndGoogleMessageId(String idFuente, String googleMessageId);
     @org.springframework.transaction.annotation.Transactional

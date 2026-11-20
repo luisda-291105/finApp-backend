@@ -222,7 +222,7 @@ class SBolsilloTest {
     }
 
     private static BolsilloSolicitudDTO solicitud(String nombre, String tipo) {
-        return new BolsilloSolicitudDTO(nombre, true, BigDecimal.ZERO, tipo);
+        return new BolsilloSolicitudDTO(nombre, true, BigDecimal.ZERO, tipo, null, null);
     }
 
     private static MBolsillo bolsillo(String id, String nombre, String tipo) {

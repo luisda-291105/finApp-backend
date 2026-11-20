@@ -16,5 +16,13 @@ public record MovimientoContableDTO(
         String origenTipo,
         String origenId,
         String origenNombre,
-        EstadoRevisionMovimiento estadoRevision
-) {}
+        EstadoRevisionMovimiento estadoRevision,
+        String idTarjeta
+) {
+    public MovimientoContableDTO(String idMovimiento, String idBolsillo, String nombreBolsillo,
+            LocalDate fecha, BigDecimal monto, String tipo, String categoria, String concepto,
+            String origenTipo, String origenId, String origenNombre, EstadoRevisionMovimiento estadoRevision) {
+        this(idMovimiento, idBolsillo, nombreBolsillo, fecha, monto, tipo, categoria, concepto,
+                origenTipo, origenId, origenNombre, estadoRevision, null);
+    }
+}

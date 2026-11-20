@@ -27,7 +27,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class GoogleDriveArchivosTest {
-    private static final String BASE = "https://www.googleapis.com/drive/v3/files";
+//     private static final String BASE = "https://www.googleapis.com/drive/v3/files";
 
     private SAlmacenamientoTokens tokens;
     private GoogleDriveArchivos drive;

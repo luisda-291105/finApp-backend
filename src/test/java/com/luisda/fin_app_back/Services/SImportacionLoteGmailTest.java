@@ -47,7 +47,7 @@ class SImportacionLoteGmailTest {
         when(clasificador.clasificar(USUARIO, SImportacionLoteGmail.REMITENTE_OFICIAL,
                 "Alerta\n" + entrada.contenido())).thenReturn(clasificacion(false));
         when(movimientos.crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), any(), anyString(),
-                anyString(), anyString(), anyString(), any())).thenReturn(Optional.of(dto(EstadoRevisionMovimiento.CONFIRMADO)));
+                anyString(), anyString(), anyString(), any(), any())).thenReturn(Optional.of(dto(EstadoRevisionMovimiento.CONFIRMADO)));
 
         var inicio = servicio.iniciar(USUARIO, CUENTA, SImportacionLoteGmail.REMITENTE_OFICIAL, List.of(entrada));
         var estado = servicio.consultar(USUARIO, CUENTA, inicio.loteId()).orElseThrow();
@@ -55,7 +55,7 @@ class SImportacionLoteGmailTest {
         assertEquals(1, estado.importados());
         assertEquals("IMPORTADO", estado.mensajes().getFirst().estado());
         verify(movimientos).crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), any(), anyString(),
-                anyString(), anyString(), anyString(), any());
+                anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -63,7 +63,7 @@ class SImportacionLoteGmailTest {
         assertThrows(IllegalArgumentException.class,
                 () -> servicio.iniciar(USUARIO, CUENTA, "info@mercadeo.correobancolombia.com", List.of()));
         verify(movimientos, never()).crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), any(), anyString(),
-                anyString(), anyString(), anyString(), any());
+                anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -85,7 +85,7 @@ class SImportacionLoteGmailTest {
         var entrada = mensaje("msg-review", SImportacionLoteGmail.REMITENTE_OFICIAL, "pagaste $2,000.00");
         when(clasificador.clasificar(anyString(), anyString(), anyString())).thenReturn(clasificacion(true));
         when(movimientos.crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), any(), anyString(),
-                anyString(), anyString(), anyString(), any())).thenReturn(Optional.of(dto(EstadoRevisionMovimiento.POR_REVISAR)));
+                anyString(), anyString(), anyString(), any(), any())).thenReturn(Optional.of(dto(EstadoRevisionMovimiento.POR_REVISAR)));
 
         var inicio = servicio.iniciar(USUARIO, CUENTA, SImportacionLoteGmail.REMITENTE_OFICIAL, List.of(entrada));
         var estado = servicio.consultar(USUARIO, CUENTA, inicio.loteId()).orElseThrow();
@@ -100,7 +100,7 @@ class SImportacionLoteGmailTest {
         var segundo = mensaje("msg-ok", SImportacionLoteGmail.REMITENTE_OFICIAL, "pagaste $3,000.00");
         when(clasificador.clasificar(anyString(), anyString(), anyString())).thenReturn(clasificacion(false));
         when(movimientos.crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), any(), anyString(),
-                anyString(), anyString(), anyString(), any()))
+                anyString(), anyString(), anyString(), any(), any()))
                 .thenThrow(new IllegalStateException("Fallo de persistencia"))
                 .thenReturn(Optional.of(dto(EstadoRevisionMovimiento.CONFIRMADO)));
 
@@ -118,13 +118,13 @@ class SImportacionLoteGmailTest {
                 "pagaste $13,000.00 por codigo QR desde tu cuenta *5201 a la llave @fritoselflaco el 10/11/2026");
         when(clasificador.clasificar(anyString(), anyString(), anyString())).thenReturn(clasificacion(false));
         when(movimientos.crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), any(), anyString(),
-                anyString(), anyString(), anyString(), any())).thenReturn(Optional.of(dto(EstadoRevisionMovimiento.CONFIRMADO)));
+                anyString(), anyString(), anyString(), any(), any())).thenReturn(Optional.of(dto(EstadoRevisionMovimiento.CONFIRMADO)));
 
         servicio.iniciar(USUARIO, CUENTA, SImportacionLoteGmail.REMITENTE_OFICIAL, List.of(entrada));
 
         ArgumentCaptor<BigDecimal> monto = ArgumentCaptor.forClass(BigDecimal.class);
         verify(movimientos).crearAutomaticamenteDesdeGmail(anyString(), anyString(), any(), monto.capture(), anyString(),
-                anyString(), anyString(), anyString(), any());
+                anyString(), anyString(), anyString(), any(), any());
         assertEquals(new BigDecimal("13000.00"), monto.getValue());
     }
 

@@ -143,6 +143,8 @@ public final class ValidadorRespuesta {
 
     /** Error controlado para respuestas vacías o que no contienen un objeto JSON. */
     public static final class RespuestaInvalidaException extends IllegalArgumentException {
+        private static final long serialVersionUID = 1L;
+
         public RespuestaInvalidaException(String mensaje) { super(mensaje); }
         public RespuestaInvalidaException(String mensaje, Throwable causa) { super(mensaje, causa); }
     }

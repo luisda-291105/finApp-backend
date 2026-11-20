@@ -51,7 +51,7 @@ class SSuscripcionGmailTest {
         assertEquals(OrigenSuscripcion.GMAIL, guardada.getOrigen());
         assertEquals("remitente@promo.com", guardada.getCorreoRemitente());
         assertEquals("usuario-1", guardada.getUsuario().getIdUsuario());
-        assertTrue(guardada.getCategoriasJson().contains("CATEGORY_PROMOTIONS"));
+        assertTrue(guardada.getCategoria().contains("CATEGORY_PROMOTIONS"));
     }
 
     @Test
@@ -72,7 +72,7 @@ class SSuscripcionGmailTest {
         org.mockito.ArgumentCaptor<MSuscripcion> captor = org.mockito.ArgumentCaptor.forClass(MSuscripcion.class);
         verify(repositorio).save(captor.capture());
         assertEquals("gmail-1", captor.getValue().getId());
-        assertTrue(captor.getValue().getCategoriasJson().contains("CATEGORY_UPDATES"));
+        assertTrue(captor.getValue().getCategoria().contains("CATEGORY_UPDATES"));
     }
 
     @Test

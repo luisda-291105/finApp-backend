@@ -67,6 +67,30 @@ public class MGmailMensaje {
     @Column(name = "movimiento_alerta_pendiente", nullable = false)
     private boolean movimientoAlertaPendiente;
 
+    /** Estado de papelera local: `EN_PAPELERA` o `EN_BANDEJA`; nulo si nunca se movió desde FinApp. */
+    @Column(name = "papelera_estado", length = 20)
+    private String papeleraEstado;
+
+    /** Marca si el correo se movió por la regla automática o la limpieza (RF-40). */
+    @Column(name = "papelera_movido_automaticamente", nullable = false)
+    private boolean papeleraMovidoAutomaticamente;
+
+    /** Causa del movimiento automático: una categoría de Gmail o `LIMPIEZA` (RF-40). */
+    @Column(name = "papelera_motivo", length = 30)
+    private String papeleraMotivo;
+
+    /** Categoría de Gmail del correo cuando se movió automáticamente (RF-40). */
+    @Column(name = "papelera_categoria", length = 30)
+    private String papeleraCategoria;
+
+    /** Descarte persistente de la alerta de movimiento pendiente al mover a la papelera (RF-28). */
+    @Column(name = "alerta_movimiento_descartada", nullable = false)
+    private boolean alertaMovimientoDescartada;
+
+    /** Exención de la regla automática, incluida la de un correo restaurado (RF-35/RF-40). */
+    @Column(name = "papelera_exenta", nullable = false)
+    private boolean papeleraExenta;
+
     protected MGmailMensaje() { }
 
     public MGmailMensaje(String id, MFuente cuenta, String googleMessageId, Instant fechaInterna) {
@@ -105,4 +129,22 @@ public class MGmailMensaje {
     public void setMovimientoAutomaticoId(String movimientoAutomaticoId) { this.movimientoAutomaticoId = movimientoAutomaticoId; }
     public boolean isMovimientoAlertaPendiente() { return movimientoAlertaPendiente; }
     public void setMovimientoAlertaPendiente(boolean movimientoAlertaPendiente) { this.movimientoAlertaPendiente = movimientoAlertaPendiente; }
+
+    public String getPapeleraEstado() { return papeleraEstado; }
+    public void setPapeleraEstado(String papeleraEstado) { this.papeleraEstado = papeleraEstado; }
+
+    public boolean isPapeleraMovidoAutomaticamente() { return papeleraMovidoAutomaticamente; }
+    public void setPapeleraMovidoAutomaticamente(boolean papeleraMovidoAutomaticamente) { this.papeleraMovidoAutomaticamente = papeleraMovidoAutomaticamente; }
+
+    public String getPapeleraMotivo() { return papeleraMotivo; }
+    public void setPapeleraMotivo(String papeleraMotivo) { this.papeleraMotivo = papeleraMotivo; }
+
+    public String getPapeleraCategoria() { return papeleraCategoria; }
+    public void setPapeleraCategoria(String papeleraCategoria) { this.papeleraCategoria = papeleraCategoria; }
+
+    public boolean isAlertaMovimientoDescartada() { return alertaMovimientoDescartada; }
+    public void setAlertaMovimientoDescartada(boolean alertaMovimientoDescartada) { this.alertaMovimientoDescartada = alertaMovimientoDescartada; }
+
+    public boolean isPapeleraExenta() { return papeleraExenta; }
+    public void setPapeleraExenta(boolean papeleraExenta) { this.papeleraExenta = papeleraExenta; }
 }

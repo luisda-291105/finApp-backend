@@ -44,6 +44,13 @@ public class MMovimientoContable {
     @Column(name = "origen_nombre", length = 120)
     private String origenNombre;
 
+    /**
+     * Tarjeta o cuenta bancaria propia a la que salió el dinero (vinculada desde contabilidad).
+     * Referencia suave: sin FK; los movimientos antiguos y los orígenes EFECTIVO/GMAIL/BOLSILLO la dejan nula.
+     */
+    @Column(name = "id_tarjeta", length = 36)
+    private String idTarjeta;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "estado_revision", length = 20)
     private EstadoRevisionMovimiento estadoRevision;
@@ -70,6 +77,8 @@ public class MMovimientoContable {
     public void setOrigenId(String origenId) { this.origenId = origenId; }
     public String getOrigenNombre() { return origenNombre; }
     public void setOrigenNombre(String origenNombre) { this.origenNombre = origenNombre; }
+    public String getIdTarjeta() { return idTarjeta; }
+    public void setIdTarjeta(String idTarjeta) { this.idTarjeta = idTarjeta; }
     public EstadoRevisionMovimiento getEstadoRevision() { return estadoRevision; }
     public void setEstadoRevision(EstadoRevisionMovimiento estadoRevision) { this.estadoRevision = estadoRevision; }
 }

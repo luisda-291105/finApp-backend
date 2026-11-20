@@ -4,7 +4,6 @@ import com.luisda.fin_app_back.DTO.ImportacionLoteGmailDTO;
 import com.luisda.fin_app_back.DTO.MovimientoContableDTO;
 import com.luisda.fin_app_back.Filtrado.ResultadoClasificacion;
 import com.luisda.fin_app_back.Model.EstadoRevisionMovimiento;
-import com.luisda.fin_app_back.Model.MMovimientoContable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -123,7 +122,8 @@ public class SImportacionLoteGmail {
                         mensaje.remitente(), mensaje.asunto() + "\n" + mensaje.contenido());
                 MovimientoContableDTO guardado = movimientos.crearAutomaticamenteDesdeGmail(lote.idUsuario,
                         movimiento.tipo(), mensaje.fecha(), movimiento.monto(), movimiento.categoria(),
-                        movimiento.concepto(), origenId, mensaje.remitente(), clasificacion).orElseThrow();
+                        movimiento.concepto(), origenId, mensaje.remitente(), clasificacion,
+                        movimiento.cuentaOrigen()).orElseThrow();
                 String estado = guardado.estadoRevision() == EstadoRevisionMovimiento.POR_REVISAR
                         ? ESTADO_POR_REVISAR : ESTADO_IMPORTADO;
                 completar(lote, resultado(mensaje, estado,

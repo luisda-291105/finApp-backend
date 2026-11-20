@@ -61,12 +61,12 @@ public class SSuscripcionGmail {
             suscripcion.setListUnsubscribePost(unsubscribePost);
         }
 
-        List<String> categorias = new ArrayList<>(leerLista(suscripcion.getCategoriasJson()));
+        List<String> categorias = new ArrayList<>(leerLista(suscripcion.getCategoria()));
         for (String categoria : etiquetas) {
             if ((categoria.equals("CATEGORY_PROMOTIONS") || categoria.equals("CATEGORY_UPDATES"))
                     && !categorias.contains(categoria)) categorias.add(categoria);
         }
-        suscripcion.setCategoriasJson(this.objectMapper.writeValueAsString(categorias));
+        suscripcion.setCategoria(this.objectMapper.writeValueAsString(categorias));
         if (actividad.isAfter(suscripcion.getUltimaActividad())) suscripcion.setUltimaActividad(actividad);
         suscripcion.setFechaActualizacion(Instant.now());
         this.suscripciones.save(suscripcion);

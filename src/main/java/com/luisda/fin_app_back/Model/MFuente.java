@@ -20,6 +20,9 @@ import java.util.List;
 @Table(name = "fuente")
 public class MFuente {
 
+    /** Permiso de Gmail que autoriza modificar el correo (mover/restaurar) (RF-23/RF-24). */
+    public static final String ALCANCE_GMAIL_MODIFICAR = "https://www.googleapis.com/auth/gmail.modify";
+
     @Id
     @Column(length = 36, nullable = false)
     private String idFuente;
@@ -66,6 +69,11 @@ public class MFuente {
     @JsonIgnore
     @Column(name = "gmail_sincronizado_en")
     private Instant gmailSincronizadoEn;
+
+    /** Permiso (scope) realmente concedido por Google al conectar la cuenta Gmail (RF-24). */
+    @JsonIgnore
+    @Column(name = "gmail_scope_concedido", length = 1000)
+    private String gmailScopeConcedido;
 
     @JsonIgnore
     @OneToMany(mappedBy = "cuenta", cascade = CascadeType.REMOVE, orphanRemoval = true)
@@ -152,6 +160,14 @@ public class MFuente {
     public void setGmailWatchExpiraEn(Instant gmailWatchExpiraEn) { this.gmailWatchExpiraEn = gmailWatchExpiraEn; }
     public Instant getGmailSincronizadoEn() { return gmailSincronizadoEn; }
     public void setGmailSincronizadoEn(Instant gmailSincronizadoEn) { this.gmailSincronizadoEn = gmailSincronizadoEn; }
+    public String getGmailScopeConcedido() { return gmailScopeConcedido; }
+    public void setGmailScopeConcedido(String gmailScopeConcedido) { this.gmailScopeConcedido = gmailScopeConcedido; }
+
+    /** Indica si Google concedió el permiso ampliado (`gmail.modify`) al conectar la cuenta (RF-24). */
+    @JsonIgnore
+    public boolean tienePermisoModificarGmail() {
+        return gmailScopeConcedido != null && gmailScopeConcedido.contains(ALCANCE_GMAIL_MODIFICAR);
+    }
     public void desconectarGmail() {
         accessTokenCifrado = null;
         refreshTokenCifrado = null;

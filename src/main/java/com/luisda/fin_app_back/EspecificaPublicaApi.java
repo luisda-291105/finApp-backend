@@ -21,9 +21,13 @@ public class EspecificaPublicaApi {
     /** Especificación mínima que se entrega a quien no tiene sesión activa. */
     public Map<String, Object> construir() {
         Map<String, Object> paths = new LinkedHashMap<>();
+        paths.put("/usuario/hay-registrados", ruta("get", "Indica si ya hay al menos una cuenta registrada.",
+                null,
+                respuestas("200", "Estado del registro consultado.")));
         paths.put("/usuario/login", ruta("post", "Inicia sesión con usuario y contraseña.",
                 cuerpoCredenciales("usuario"),
-                respuestas("200", "Sesión iniciada.", "401", "Credenciales incorrectas.")));
+                respuestas("200", "Sesión iniciada.", "401",
+                        "Sin cuentas registradas o credenciales incorrectas.")));
         paths.put("/usuario/admin-login", ruta("post", "Inicia sesión administrativa para operación y pruebas.",
                 cuerpoCredenciales("admin"),
                 respuestas("200", "Sesión administrativa iniciada.",
@@ -63,6 +67,7 @@ public class EspecificaPublicaApi {
     /** Rutas públicas declaradas en la especificación reducida. */
     public List<String> rutasPublicas() {
         List<String> rutas = new ArrayList<>();
+        rutas.add("/usuario/hay-registrados");
         rutas.add("/usuario/login");
         rutas.add("/usuario/admin-login");
         rutas.add("/usuario");

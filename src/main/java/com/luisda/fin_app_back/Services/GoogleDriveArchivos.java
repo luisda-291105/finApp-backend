@@ -6,7 +6,6 @@ import com.luisda.fin_app_back.DTO.AlmacenamientoArchivoDTO;
 import com.luisda.fin_app_back.DTO.AlmacenamientoPermisoDTO;
 import com.luisda.fin_app_back.Model.MAlmacenamientoConexion;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
@@ -166,7 +165,7 @@ public class GoogleDriveArchivos implements SAlmacenamientoArchivos {
         partes.part("archivo", new ByteArrayResource(contenido) {
             @Override public String getFilename() { return nombreArchivo; }
         }).contentType(mime == null || mime.isBlank() ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(mime));
-        JsonNode respuesta = ejecutarMultipart(conexion, destino, (MultiValueMap<String, org.springframework.http.HttpEntity<?>>) partes.build());
+        JsonNode respuesta = ejecutarMultipart(conexion, destino, partes.build());
         cache.invalidar(conexion);
         return aDto(respuesta);
     }

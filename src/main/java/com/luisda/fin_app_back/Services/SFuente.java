@@ -90,10 +90,7 @@ public class SFuente {
         return this.IFuentes.findByUsuario_IdUsuario(idUsuario);
     }
 
-    /**
-     * Consulta todas las fuentes (uso administrativo).
-     */
-    /** Consulta una fuente por tipo */
+    /** Consulta las fuentes por tipo. */
     public List<MFuente> buscarPorTipo(String tipo) throws Exception{
         try {
             return this.IFuentes.buscarPorTipo(tipo);

@@ -60,7 +60,6 @@ public class SAlmacenamientoConexiones {
     private static final String SCOPE_GOOGLE = "https://www.googleapis.com/auth/drive openid email profile";
     private static final String SCOPE_MICROSOFT = "openid profile email offline_access User.Read";
     private static final long VIDA_STATE_SEGUNDOS = 600;
-    private static final long MARGEN_RENOVACION_SEGUNDOS = 60;
     private static final long DURACION_TOKEN_SEGUNDOS_POR_DEFECTO = 3600;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SAlmacenamientoConexiones.class);
@@ -68,10 +67,14 @@ public class SAlmacenamientoConexiones {
     public record ConexionNextcloud(String urlServidor, String usuario, String credencial) { }
 
     public static class EstadoInvalidoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public EstadoInvalidoException(String mensaje) { super(mensaje); }
     }
 
     public static class ProveedorNoSoportadoException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public ProveedorNoSoportadoException(String mensaje) { super(mensaje); }
     }
 

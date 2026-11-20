@@ -91,7 +91,7 @@ class ParserMovimientoBancolombiaTest {
                 "Bancolombia: Transferiste $1,000,000 desde tu cuenta *5201 a la cuenta *25310487123 el 16/11/2026 a las 16:03. ¿Dudas? Llamanos al 018000931987. Estamos cerca.");
 
         assertTrue(resultado.isPresent());
-        assertEquals("GASTO", resultado.get().tipo());
+        assertEquals("TRANSFERENCIA", resultado.get().tipo());
         assertEquals(new BigDecimal("1000000.00"), resultado.get().monto());
         assertEquals("Pagos con tarjetas", resultado.get().categoria());
         assertEquals("5201", resultado.get().cuentaOrigen());
@@ -103,7 +103,7 @@ class ParserMovimientoBancolombiaTest {
                 "Transferiste $50.000 desde tu cuenta *4471 a la cuenta *99887766 el 17/11/2026 a las 08:12.");
 
         assertTrue(resultado.isPresent());
-        assertEquals("GASTO", resultado.get().tipo());
+        assertEquals("TRANSFERENCIA", resultado.get().tipo());
         assertEquals(new BigDecimal("50000.00"), resultado.get().monto());
         assertEquals("4471", resultado.get().cuentaOrigen());
     }

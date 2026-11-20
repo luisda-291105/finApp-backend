@@ -62,7 +62,7 @@ class SMovimientoContableTest {
     }
 
     @Test
-    void conDosBolsillosGastoActivosGuardaGlobalConfirmado() {
+    void conDosBolsillosGastoActivosUsaElFijoGastos() {
         MBolsillo gasto1 = bolsillo("gasto-1", "Compras", "GASTO", true);
         MBolsillo gasto2 = bolsillo("gasto-2", "Hogar", "GASTO", true);
         prepararBolsillosClasificables(List.of(gasto1, gasto2));
@@ -71,9 +71,9 @@ class SMovimientoContableTest {
 
         ArgumentCaptor<MMovimientoContable> captor = ArgumentCaptor.forClass(MMovimientoContable.class);
         verify(movimientos).save(captor.capture());
-        assertEquals(null, resultado.idBolsillo());
+        assertEquals("fijo-gasto", resultado.idBolsillo());
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, captor.getValue().getEstadoRevision());
-        assertEquals(null, captor.getValue().getBolsillo());
+        assertEquals("fijo-gasto", captor.getValue().getBolsillo().getIdBolsillo());
         assertEquals(USUARIO, captor.getValue().getIdUsuario());
         verify(servicioBolsillo, never()).obtenerOCrearPorRevisar(USUARIO);
     }
@@ -94,7 +94,7 @@ class SMovimientoContableTest {
     }
 
     @Test
-    void unBolsilloGastoInactivoNoSeUsaYSeGuardaGlobalConfirmado() {
+    void unBolsilloGastoInactivoNoSeUsaYSeAsignaAlFijoGastos() {
         MBolsillo gastoInactivo = bolsillo("gasto-inactivo", "Compras", "GASTO", false);
         prepararBolsillosClasificables(List.of(gastoInactivo));
 
@@ -102,23 +102,23 @@ class SMovimientoContableTest {
 
         ArgumentCaptor<MMovimientoContable> captor = ArgumentCaptor.forClass(MMovimientoContable.class);
         verify(movimientos).save(captor.capture());
-        assertEquals(null, resultado.idBolsillo());
+        assertEquals("fijo-gasto", resultado.idBolsillo());
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, captor.getValue().getEstadoRevision());
-        assertEquals(null, captor.getValue().getBolsillo());
+        assertEquals("fijo-gasto", captor.getValue().getBolsillo().getIdBolsillo());
         verify(servicioBolsillo, never()).obtenerOCrearPorRevisar(USUARIO);
     }
 
     @Test
-    void sinBolsillosGastoCompatiblesSeGuardaGlobalConfirmado() {
+    void sinBolsillosGastoCompatiblesSeAsignaAlFijoGastos() {
         prepararBolsillosClasificables(List.of());
 
         MovimientoContableDTO resultado = importarConClasificacionConfiable();
 
         ArgumentCaptor<MMovimientoContable> captor = ArgumentCaptor.forClass(MMovimientoContable.class);
         verify(movimientos).save(captor.capture());
-        assertEquals(null, resultado.idBolsillo());
+        assertEquals("fijo-gasto", resultado.idBolsillo());
         assertEquals(EstadoRevisionMovimiento.CONFIRMADO, captor.getValue().getEstadoRevision());
-        assertEquals(null, captor.getValue().getBolsillo());
+        assertEquals("fijo-gasto", captor.getValue().getBolsillo().getIdBolsillo());
         verify(servicioBolsillo, never()).obtenerOCrearPorRevisar(USUARIO);
     }
 
@@ -262,6 +262,8 @@ class SMovimientoContableTest {
         when(bolsillos.findByIdUsuarioOrderByFechaCreacionDesc(USUARIO)).thenReturn(propios);
         propios.forEach(bolsillo -> when(bolsillos.findByIdBolsilloAndIdUsuario(bolsillo.getIdBolsillo(), USUARIO))
                 .thenReturn(Optional.of(bolsillo)));
+        MBolsillo fijoGasto = bolsillo("fijo-gasto", "Gastos", "GASTO", true);
+        when(servicioBolsillo.listar(USUARIO)).thenReturn(List.of(fijoGasto));
     }
 
     private static MTarjeta tarjetaPropia(String numero) {

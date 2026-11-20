@@ -128,7 +128,10 @@ public class SPapeleraGmail {
             }
         }
         String siguiente = pagina == null ? "" : pagina.path("nextPageToken").asText("");
-        return new GmailPapeleraDTO(cuenta.getIdFuente(), correos, correos.size(),
+        // `messages.list` de Gmail expone una estimación global del resultado; si no viene, se
+        // mantiene el tamaño de la página para no romper respuestas sin ese campo.
+        int total = pagina == null ? correos.size() : pagina.path("resultSizeEstimate").asInt(correos.size());
+        return new GmailPapeleraDTO(cuenta.getIdFuente(), correos, total,
                 siguiente.isBlank() ? null : siguiente);
     }
 
@@ -388,19 +391,27 @@ public class SPapeleraGmail {
         return ejecutarConReintentos(() -> clienteHttp.get().uri(uri).headers(h -> h.setBearerAuth(token)));
     }
 
-    /** Reintenta con espera progresiva ante cuota de Gmail (`429`/`403`), como el resto del flujo. */
+    /** Reintenta con espera progresiva ante cuota (`429`) y errores del proveedor (`5xx`), no ante `403`. */
     private JsonNode ejecutarConReintentos(Supplier<RestClient.RequestHeadersSpec<?>> solicitud) throws IOException {
         for (int intento = 0; intento < INTENTOS_GMAIL; intento++) {
             try {
                 return respuestaJson(solicitud.get(), JsonNode.class);
             } catch (HttpStatusCodeException error) {
                 int estado = error.getStatusCode().value();
-                if (estado != 429 && estado != 403) throw error;
+                if (!esReintentable(estado)) throw error;
                 if (intento == INTENTOS_GMAIL - 1) throw error;
                 dormir(PAUSA_BASE_REINTENTO_GMAIL_MS * (1L << intento));
             }
         }
         throw new RestClientException("No se pudo consultar la papelera de Gmail tras agotar los reintentos.");
+    }
+
+    /**
+     * Estados de Gmail ante los que se reintenta con backoff: cuota (`429`) y errores del proveedor
+     * (`5xx`). El `403` no se reintenta porque también significa permiso insuficiente.
+     */
+    private static boolean esReintentable(int estado) {
+        return estado == 429 || (estado >= 500 && estado <= 599);
     }
 
     private void dormir(long milisegundos) {

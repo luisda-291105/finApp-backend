@@ -14,6 +14,7 @@ import com.luisda.fin_app_back.Services.SUsuarioActivo;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -39,9 +40,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 /**
  * RF-23/RF-24/RF-25/RF-26 — el callback persiste el permiso realmente concedido por Google:
- * un consentimiento con `gmail.modify` autoriza la cuenta; uno parcial responde
- * `409 requires_scope_authorization` sin marcarla autorizada y sin activar nada; una conexión
- * revocada/expirada sigue respondiendo `409 requires_reconnect`.
+ * un consentimiento con `gmail.modify` autoriza la cuenta; uno parcial en la autorización explícita
+ * (`expected_account_id`) responde `409 requires_scope_authorization` sin marcarla autorizada ni
+ * activar nada; una conexión inicial sin `expected_account_id` se guarda y responde 200 aunque solo
+ * tenga `gmail.readonly`; una conexión revocada/expirada sigue respondiendo `409 requires_reconnect`.
  */
 class CGmailCallbackScopeTest {
 
@@ -139,6 +141,36 @@ class CGmailCallbackScopeTest {
         verify(mensajes, never()).save(any());
         verify(entradas, never()).encolarNotificacion(any(), any());
         verify(entradas, never()).encolarMensaje(any(), any());
+        servidor.verify();
+    }
+
+    @Test
+    void unaConexionInicialConSoloLecturaResponde200YPersisteElAlcance() throws Exception {
+        servidor.expect(requestTo(URL_TOKEN)).andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{\"access_token\":\"token-google\",\"refresh_token\":\"refresh-google\","
+                        + "\"expires_in\":3600,\"scope\":\"openid " + ALCANCE_LECTURA + "\"}",
+                        MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(URL_PERFIL)).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"emailAddress\":\"usuario@gmail.com\"}", MediaType.APPLICATION_JSON));
+
+        ResponseEntity<?> respuesta = gmail.canjearCodigo(
+                new CGmail.SolicitudCodigo("codigo", null),
+                "http://localhost:5173", "XmlHttpRequest", mock(HttpServletRequest.class));
+
+        assertEquals(200, respuesta.getStatusCode().value());
+        Map<?, ?> cuerpo = (Map<?, ?>) respuesta.getBody();
+        assertEquals("usuario@gmail.com", cuerpo.get("email"));
+        assertFalse(cuerpo.containsKey("requires_scope_authorization"));
+
+        // Sin expected_account_id es una conexión nueva: se guarda el scope concedido y se devuelve
+        // la cuenta, aunque Google solo haya concedido gmail.readonly (el ampliado se pide después).
+        ArgumentCaptor<MFuente> captor = ArgumentCaptor.forClass(MFuente.class);
+        verify(fuentes).save(captor.capture());
+        MFuente guardada = captor.getValue();
+        assertEquals("usuario@gmail.com", guardada.getContenido());
+        assertTrue(guardada.getGmailScopeConcedido().contains(ALCANCE_LECTURA));
+        assertFalse(guardada.tienePermisoModificarGmail());
+        assertEquals(guardada.getIdFuente(), cuerpo.get("account_id"));
         servidor.verify();
     }
 

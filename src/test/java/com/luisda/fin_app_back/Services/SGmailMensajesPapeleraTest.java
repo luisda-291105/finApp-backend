@@ -31,9 +31,9 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * RF-27/RF-28/RF-29 — un correo en el TRASH de Gmail no se vuelve a guardar ni reaparece en la
- * bandeja, y el descarte de la alerta de movimiento es persistente sin tocar los movimientos
- * contables ya registrados.
+ * RF-27/RF-28/RF-29/RF-40 — un correo en el TRASH de Gmail no se vuelve a guardar ni reaparece en
+ * la bandeja, conserva los marcadores de la regla si ya tenía fila local, y el descarte de la alerta
+ * de movimiento es persistente sin tocar los movimientos contables ya registrados.
  */
 class SGmailMensajesPapeleraTest {
 
@@ -65,15 +65,41 @@ class SGmailMensajesPapeleraTest {
     }
 
     @Test
-    void unCorreoEnTrashNoSeGuardaYSeEliminaDeLaCache() throws Exception {
+    void unCorreoEnTrashSinFilaPreviaNoCreaFila() throws Exception {
+        servidor.expect(requestTo(containsString("/messages/m1"))).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(mensaje("m1", Instant.now().toEpochMilli(), "[\"IMPORTANT\",\"TRASH\"]"),
+                        MediaType.APPLICATION_JSON));
+        when(mensajes.findByCuenta_IdFuenteAndGoogleMessageId("cuenta-1", "m1")).thenReturn(Optional.empty());
+
+        servicio.guardarMensaje(cuenta, "token", "m1");
+
+        verify(mensajes, never()).save(any(MGmailMensaje.class));
+        verify(mensajes, never()).deleteByCuenta_IdFuenteAndGoogleMessageId("cuenta-1", "m1");
+        servidor.verify();
+    }
+
+    @Test
+    void resincronizarUnCorreoEnTrashConservaLosMarcadoresAutomaticos() throws Exception {
+        MGmailMensaje local = new MGmailMensaje("fila-1", cuenta, "m1", Instant.now());
+        local.setAsunto("Asunto local original");
+        local.setPapeleraEstado("EN_PAPELERA");
+        local.setPapeleraMovidoAutomaticamente(true);
+        local.setPapeleraMotivo("CATEGORY_PROMOTIONS");
+        local.setPapeleraCategoria("CATEGORY_PROMOTIONS");
+        when(mensajes.findByCuenta_IdFuenteAndGoogleMessageId("cuenta-1", "m1")).thenReturn(Optional.of(local));
         servidor.expect(requestTo(containsString("/messages/m1"))).andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(mensaje("m1", Instant.now().toEpochMilli(), "[\"IMPORTANT\",\"TRASH\"]"),
                         MediaType.APPLICATION_JSON));
 
         servicio.guardarMensaje(cuenta, "token", "m1");
 
-        verify(mensajes, never()).save(any(MGmailMensaje.class));
-        verify(mensajes).deleteByCuenta_IdFuenteAndGoogleMessageId("cuenta-1", "m1");
+        verify(mensajes, never()).deleteByCuenta_IdFuenteAndGoogleMessageId("cuenta-1", "m1");
+        verify(mensajes).save(local);
+        assertEquals("EN_PAPELERA", local.getPapeleraEstado());
+        assertTrue(local.isPapeleraMovidoAutomaticamente());
+        assertEquals("CATEGORY_PROMOTIONS", local.getPapeleraMotivo());
+        assertEquals("CATEGORY_PROMOTIONS", local.getPapeleraCategoria());
+        assertEquals("Asunto local original", local.getAsunto());
         servidor.verify();
     }
 

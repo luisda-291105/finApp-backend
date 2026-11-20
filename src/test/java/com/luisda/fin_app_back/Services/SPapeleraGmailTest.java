@@ -12,8 +12,10 @@ import com.luisda.fin_app_back.Repository.IGmailPapeleraListaBlanca;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
@@ -24,6 +26,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -32,6 +35,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -120,6 +124,33 @@ class SPapeleraGmailTest {
         assertFalse(segundo.movidoAutomaticamente());
         assertNull(segundo.motivoAutomatico());
         assertNull(segundo.categoria());
+        servidor.verify();
+    }
+
+    @Test
+    void elTotalEsLaEstimacionDeGmailConFallbackAlTamanoDeLaPagina() throws Exception {
+        servidor.expect(requestTo(containsString("/messages?"))).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"messages\":[{\"id\":\"m1\"}],\"resultSizeEstimate\":12}",
+                        MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(containsString("/messages/m1?")))
+                .andRespond(withSuccess(metadata("m1", Instant.now().toEpochMilli(), "[\"TRASH\"]",
+                        "promo@tienda.com", "Oferta"), MediaType.APPLICATION_JSON));
+
+        GmailPapeleraDTO resultado = papelera.listar(cuenta, null);
+
+        assertEquals(12, resultado.total());
+        assertEquals(1, resultado.correos().size());
+        servidor.verify();
+    }
+
+    @Test
+    void un403NoSeReintentaComoSiFueraCuota() throws Exception {
+        servidor.expect(requestTo(containsString("/messages?"))).andExpect(method(HttpMethod.GET))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN));
+
+        assertThrows(HttpClientErrorException.class, () -> papelera.listar(cuenta, null));
+
+        // Una sola petición: si se reintentara, el servidor simulado no tendría segunda expectativa.
         servidor.verify();
     }
 

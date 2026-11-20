@@ -704,9 +704,12 @@ public class SReglaPapeleraGmail {
         }
     }
 
-    /** Estados de Gmail ante los que se reintenta con backoff (cuota y errores del proveedor). */
+    /**
+     * Estados de Gmail ante los que se reintenta con backoff: cuota (`429`) y errores del proveedor
+     * (`5xx`). El `403` no se reintenta porque también significa permiso insuficiente.
+     */
     private static boolean esReintentable(int estado) {
-        return estado == 429 || estado == 403 || (estado >= 500 && estado <= 599);
+        return estado == 429 || (estado >= 500 && estado <= 599);
     }
 
     /** Espera entre reintentos; sobrescribible en pruebas para no dormir de verdad. */

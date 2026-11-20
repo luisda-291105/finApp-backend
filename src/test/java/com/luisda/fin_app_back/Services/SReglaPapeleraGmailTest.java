@@ -18,6 +18,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -32,6 +33,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -443,6 +445,26 @@ class SReglaPapeleraGmailTest {
         SReglaPapeleraGmail.ResultadoEjecucion resultado = regla.ejecutarCuenta(cuenta);
 
         assertEquals(1, resultado.movidos());
+        servidor.verify();
+    }
+
+    @Test
+    void un403DeBatchModifyNoSeReintentaComoSiFueraCuota() throws Exception {
+        when(categorias.findByFuente_IdFuente("cuenta-1"))
+                .thenReturn(List.of(activa("CATEGORY_PROMOTIONS", Instant.now().minus(Duration.ofDays(30)))));
+        long fecha = Instant.now().minus(Duration.ofDays(10)).toEpochMilli();
+        servidor.expect(requestTo(containsString("/messages?")))
+                .andRespond(withSuccess(lista("m1"), MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(containsString("/messages/m1?")))
+                .andRespond(withSuccess(metadata("m1", fecha, "[\"INBOX\",\"CATEGORY_PROMOTIONS\"]", "promo@tienda.com"),
+                        MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(containsString("/messages/batchModify"))).andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN));
+
+        assertThrows(HttpClientErrorException.class, () -> regla.ejecutarCuenta(cuenta));
+
+        // Sin reintento y sin marcar como movido un correo que Gmail rechazó por permiso insuficiente.
+        verify(mensajes, never()).save(any());
         servidor.verify();
     }
 

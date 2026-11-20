@@ -220,7 +220,12 @@ public class CGmail {
             fuente.setGmailScopeConcedido(respuesta.scope());
             fuente = fuentes.save(fuente);
 
-            if (!fuente.tienePermisoModificarGmail()) return respuestaScopeNoAutorizado();
+            // RF-24: el 409 requires_scope_authorization solo aplica cuando el cliente pide
+            // explícitamente el permiso ampliado de una cuenta ya existente (expected_account_id).
+            // En una conexión inicial sin ese campo se persiste el scope concedido (aunque sea solo
+            // gmail.readonly) y se responde 200; el permiso ampliado se autoriza después.
+            if (solicitud.expectedAccountId() != null && !solicitud.expectedAccountId().isBlank()
+                    && !fuente.tienePermisoModificarGmail()) return respuestaScopeNoAutorizado();
 
             Map<String, Object> respuestaConexion = new LinkedHashMap<>();
             respuestaConexion.put("email", correo);

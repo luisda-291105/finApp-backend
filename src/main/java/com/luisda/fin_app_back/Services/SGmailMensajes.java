@@ -62,6 +62,8 @@ public class SGmailMensajes {
     private static final int LARGO_CONTENIDO_MAXIMO = 12000;
     /** Etiqueta de Gmail que marca un correo en la papelera (RF-29). */
     private static final String ETIQUETA_PAPELERA = "TRASH";
+    /** Estado local que refleja el TRASH de Gmail sin perder los marcadores de la regla (RF-40). */
+    private static final String ESTADO_PAPELERA = "EN_PAPELERA";
     // private static final Logger LOGGER = LoggerFactory.getLogger(SGmailMensajes.class);
 
     private volatile RestClient clienteHttp;
@@ -209,9 +211,17 @@ public class SGmailMensajes {
         if (mensaje == null || mensaje.path("id").asText("").isBlank()) return;
         String mensajeId = mensaje.path("id").asText("");
         // Un correo que Gmail tiene en la papelera no se guarda ni reaparece en la bandeja (RF-29):
-        // el punto único de escritura elimina la fila local y omite el guardado.
+        // no se crea una fila nueva. Si ya existía, solo se actualiza su estado para conservar los
+        // marcadores de la regla automática (movido, motivo y categoría) tras una re-sincronización
+        // (RF-40); la bandeja ya excluye las filas EN_PAPELERA.
         if (etiquetasContienen(mensaje.path("labelIds"), ETIQUETA_PAPELERA)) {
-            mensajes.deleteByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId);
+            MGmailMensaje enPapelera = mensajes
+                    .findByCuenta_IdFuenteAndGoogleMessageId(cuenta.getIdFuente(), mensajeId)
+                    .orElse(null);
+            if (enPapelera != null) {
+                enPapelera.setPapeleraEstado(ESTADO_PAPELERA);
+                mensajes.save(enPapelera);
+            }
             return;
         }
         if (!fuentes.existsById(cuenta.getIdFuente())) {
